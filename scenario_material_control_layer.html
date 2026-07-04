@@ -16592,7 +16592,7 @@
       const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v20' });
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v21' });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -16859,10 +16859,11 @@
     }
 
     function isCurrentPdfCoordinateSource(source) {
-      // v20 = fragment horizontal-centering fix (× / …… / lone glyph boxes were a half-glyph too
-      // far left). v19 rects are intentionally treated as stale so they recompute on next render
-      // and pick up the fix without a reimport. Manual rects are preserved elsewhere.
-      return source === 'rendered-pdfjs-v20' || source === 'rendered-line-union-v20' || source === 'pdf-logical-fallback';
+      // v21 = margin-note stripping (blue-ink pre-filter + memo-band run cut) so wrapped
+      // body sentences match contiguously in comment-version scripts. v20 rects are treated
+      // as stale so pages recompute with the clean pool without a reimport. Manual rects
+      // are preserved elsewhere.
+      return source === 'rendered-pdfjs-v21' || source === 'rendered-line-union-v21' || source === 'pdf-logical-fallback';
     }
 
     async function renderPdfJsPageForActiveBodyPreview(doc, pageNo) {
@@ -16967,13 +16968,13 @@
           inferred: true,
           manual: false
         }));
-        nextRect.coordinateSource = 'rendered-line-union-v20';
+        nextRect.coordinateSource = 'rendered-line-union-v21';
         const clippedBase = clipOverlayRectToPdfBodyBounds(nextRect, doc, targetPageNo) || nextRect;
         const clipped = Object.assign({}, clippedBase, {
           vertical: true,
           inferred: true,
           manual: false,
-          coordinateSource: 'rendered-line-union-v20'
+          coordinateSource: 'rendered-line-union-v21'
         });
         if (pdfOverlayRectsEquivalent(current, clipped)) return;
         const savedRect = setBlockOverlayRectForPage(block, targetPageNo, clipped);
@@ -17770,7 +17771,7 @@
       const source = Array.isArray(items) ? items : [];
       if (source.pdfFallbackSource === 'pdf-logical-fallback') return 'pdf-logical-fallback';
       if (source.some(item => item && item.coordinateSource === 'pdf-logical-fallback')) return 'pdf-logical-fallback';
-      return 'rendered-pdfjs-v20';
+      return 'rendered-pdfjs-v21';
     }
 
     function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
@@ -17785,14 +17786,77 @@
     }
 
     function pdfLayoutGuideItemsForOverlayMatching(doc, pageNo, items) {
-      const source = (items || []).filter(item => item && item.text);
+      const all = (items || []).filter(item => item && item.text);
+      // Comment-version scripts: margin notes pollute the reading-order char stream and
+      // break match contiguity for wrapped body sentences. Blue-ink notes are dropped by
+      // color BEFORE line grouping (the guide-line union both merges note glyphs into body
+      // lines and hard-marks every pooled item pdfScriptBodyColorProtected, which used to
+      // neutralise the later blue filter). Majority-blue pages keep everything (body
+      // printed blue). Black-ink notes are handled after grouping by the note-band strip.
+      const blueItems = all.filter(item => isPdfJsBlueTextItem(item));
+      const source = blueItems.length && blueItems.length < all.length * 0.5
+        ? all.filter(item => !isPdfJsBlueTextItem(item))
+        : all;
       const groups = pdfLayoutGuideLineGroupsForPage(doc, source, pageNo, pdfBodyRangeForPage(doc, pageNo));
-      const lines = groups.bodyLines || [];
+      const lines = stripPdfMarginNoteRunsFromGuideLines(groups.bodyLines || []);
       const guideItems = pdfOverlayMatchingItemsFromGuideLines(lines);
       if (guideItems.length) return pdfScriptBodyItemsForOverlayMatching(guideItems, doc, pageNo);
       const orderedItems = orderedPdfItemsForMatching(source, pageNo);
       if (orderedItems.length) return pdfScriptBodyItemsForOverlayMatching(orderedItems, doc, pageNo);
       return [];
+    }
+
+    // Margin notes in the bottom memo band of conte-style script pages (black ink, so the
+    // colour filter can't catch them) either form their own half-pitch columns or get
+    // line-unioned onto the bottom of a body column after a vertical gap. Split each
+    // vertical line into contiguous glyph runs; when two or more lines share a common
+    // "second run" start Y (the memo band's top edge), cut every run at/below that band.
+    // Without a consistent band, only huge single-column gaps (4+ glyphs) are cut.
+    function stripPdfMarginNoteRunsFromGuideLines(lines) {
+      const sourceLines = (lines || []).filter(Boolean);
+      if (sourceLines.length < 2) return sourceLines;
+      const glyphH = 1.8;
+      const lineRuns = sourceLines.map((line) => {
+        const its = (line.items || []).slice().sort((a, b) => (Number(a.topPct) || 0) - (Number(b.topPct) || 0));
+        const runs = [];
+        let cur = null;
+        its.forEach((item) => {
+          const top = Number(item.topPct) || 0;
+          const h = Number(item.heightPct) || glyphH;
+          if (cur && top - cur.end <= glyphH * 1.5) {
+            cur.items.push(item);
+            cur.end = Math.max(cur.end, top + h);
+          } else {
+            cur = { start: top, end: top + h, items: [item] };
+            runs.push(cur);
+          }
+        });
+        return runs;
+      });
+      if (!lineRuns.some(runs => runs.length > 1)) return sourceLines;
+      const startCounts = {};
+      lineRuns.forEach(runs => runs.slice(1).forEach((run) => {
+        const key = Math.round(run.start);
+        startCounts[key] = (startCounts[key] || 0) + 1;
+      }));
+      const bandKeys = Object.entries(startCounts).filter(([, count]) => count >= 2).map(([key]) => Number(key));
+      const noteBand = bandKeys.length ? Math.min(...bandKeys) : null;
+      const kept = [];
+      sourceLines.forEach((line, index) => {
+        const runs = lineRuns[index];
+        const keptRuns = noteBand != null
+          ? runs.filter(run => run.start < noteBand - 0.5)
+          : runs.filter((run, i) => i === 0 || run.start - runs[i - 1].end <= glyphH * 4);
+        if (!keptRuns.length) return; // the whole line lives in the memo band
+        const items = keptRuns.flatMap(run => run.items);
+        if (items.length === (line.items || []).length) { kept.push(line); return; }
+        const text = items.map(item => item.text).join('');
+        const top = Math.min.apply(null, keptRuns.map(run => run.start));
+        const bottom = Math.max.apply(null, keptRuns.map(run => run.end));
+        const rect = Object.assign({}, line.compactOverlayRect || line.overlayRect, { top, height: bottom - top });
+        kept.push(Object.assign({}, line, { items, text, compactOverlayRect: rect, overlayRect: rect }));
+      });
+      return kept;
     }
 
     function pdfScriptBodyItemsForOverlayMatching(items, doc, pageNo) {
