@@ -2565,7 +2565,6 @@
           <button type="button" class="panel-collapse" data-collapse-panel="left" title="접기">⟨</button>
         </div>
         <div class="pane-body stack">
-          <div id="documentVersionPanel" class="document-version-panel"></div>
           <div id="documentPanel" class="entity-card">
         <div class="card-head">
           <div>
@@ -3082,7 +3081,8 @@
         savedToast: '復元ポイントを保存しました',
         savedToastFail: '変更がないためスキップ',
         restoredToast: '復元しました',
-        exportedToast: 'ファイルに書き出しました',
+        exportedToast: '設定ファイルを保存しました',
+        exportFail: '書き出し失敗（データ過大）',
         importedToast: '読み込みました',
         paneSourceBlocks: '作品・原文',
         paneNotesShare: '注釈・共有',
@@ -3385,7 +3385,8 @@
         savedToast: '복원 지점을 저장했습니다',
         savedToastFail: '변경이 없어 저장을 건너뜀',
         restoredToast: '복원했습니다',
-        exportedToast: '파일로 내보냈습니다',
+        exportedToast: '설정 파일을 저장했습니다',
+        exportFail: '내보내기 실패(데이터 과대)',
         importedToast: '불러왔습니다',
         paneSourceBlocks: '작품 · 원문',
         paneNotesShare: '주석 · 공유',
@@ -3687,7 +3688,8 @@
         savedToast: 'Restore point saved',
         savedToastFail: 'No changes — save skipped',
         restoredToast: 'Restored',
-        exportedToast: 'Exported to file',
+        exportedToast: 'Settings file saved',
+        exportFail: 'Export failed (data too large)',
         importedToast: 'Imported',
         paneSourceBlocks: 'Work · Source',
         paneNotesShare: 'Notes · Share',
@@ -5055,11 +5057,12 @@
       const doc = activeDocument();
       saveActiveInputToDocument();
       doc.lastSavedAt = nowIso();
-      const created = await pushProjectRestorePoint('manual', { force: true });
+      await pushProjectRestorePoint('manual', { force: true });
       await putSettingsAutosaveSnapshot('manual_save').catch(err => console.warn('settings autosave failed', err));
       lastAutosaveAt = Date.now();
       updateSaveStatus();
-      toast(created ? t('savedToast') : t('savedToastFail'));
+      // 저장 = keep a restore point AND write the settings JSON file to disk (toast from export).
+      exportSettingsJsonFile();
       syncAll(false);
     }
 
@@ -16192,40 +16195,45 @@
       return Array.from(pageNos).sort((a, b) => a - b);
     }
 
+    // LLM-facing debug copy: only the readable page content (text + structured blocks).
+    // Coordinates, rects, render internals and the full JSON dump are dropped — an LLM
+    // reading/correcting the script never needs them.
+    function pageDebugBlockLines(doc, pageNo) {
+      return sortedDocumentBlocks(doc)
+        .filter(block => blockHasOverlayPage(block, pageNo) || Number(block.pageNo || 0) === Number(pageNo))
+        .filter(isScriptPreviewBlock)
+        .map((b) => {
+          const speaker = b.speaker || b.characterName || '';
+          const body = String(b.text || b.rawText || '').trim();
+          if (!body) return '';
+          const kind = b.type === 'dialog' || speaker ? '' : (b.type === 'scene_heading' ? '◇ ' : b.type === 'action' ? '· ' : '');
+          return (speaker ? speaker + '「' + body + '」' : kind + body);
+        })
+        .filter(Boolean);
+    }
+
     function buildActivePageDebugText() {
-      const dump = buildActivePageDebugDump();
+      const doc = activeDocument();
+      const pageNo = state.activeScriptPageNo;
+      const page = pdfLogicalPageForDocument(doc, pageNo);
+      const text = page ? (page.bodyReviewText || page.logicalText || page.text || '') : '';
+      const blockLines = pageDebugBlockLines(doc, pageNo);
       return [
-        '# Scenario Material Control Layer PDF Page Debug',
-        'generatedAt: ' + dump.generatedAt,
-        'appVersion: ' + dump.appVersion,
-        'document: ' + (dump.document ? `${dump.document.title || dump.document.id} / ${dump.document.importedFileName || ''}` : 'none'),
-        'page: ' + dump.activePage.pageNo,
+        `# ${doc && (doc.title || doc.id) || ''} — p.${pageNo}`,
         '',
-        '## Pipeline Path',
-        dump.pipelinePath.map((step, index) => `${index + 1}. ${step}`).join('\n'),
-        '',
-        '## Logical Text',
-        dump.logicalText.bodyReviewText || dump.logicalText.text || dump.logicalText.logicalText || dump.logicalText.rawLogicalText || '',
-        '',
-        '## Page Debug JSON',
-        JSON.stringify(dump, null, 2)
-      ].join('\n');
+        text,
+        blockLines.length ? '\n---\n' + blockLines.join('\n') : ''
+      ].filter(Boolean).join('\n');
     }
 
     function buildAllPagesDebugText(allDump) {
-      return [
-        '# Scenario Material Control Layer PDF All Pages Debug',
-        'generatedAt: ' + allDump.generatedAt,
-        'appVersion: ' + allDump.appVersion,
-        'document: ' + (allDump.document ? `${allDump.document.title || allDump.document.id} / ${allDump.document.importedFileName || ''}` : 'none'),
-        'pages: ' + (allDump.pages || []).length,
-        '',
-        '## Pipeline Path',
-        (allDump.pipelinePath || []).map((step, index) => `${index + 1}. ${step}`).join('\n'),
-        '',
-        '## All Pages Debug JSON',
-        JSON.stringify(allDump, null, 2)
-      ].join('\n');
+      const lines = [`# ${allDump.document ? (allDump.document.title || allDump.document.id) : ''} — all pages`, ''];
+      (allDump.pages || []).forEach((p) => {
+        lines.push(`## p.${p.pageNo}`);
+        if (p.text) lines.push(p.text);
+        lines.push('');
+      });
+      return lines.join('\n');
     }
 
     function copyActivePageDebugText() {
@@ -19264,6 +19272,41 @@
       return settings;
     }
 
+    // Heavy fields that are fully re-derivable from the cached source PDF / original text.
+    // Stripping them at the storage boundary keeps autosave, restore slots and JSON export
+    // light (a project balloons to ~100MB/work otherwise — mostly triplicated draftPages).
+    const STORAGE_HEAVY_DOC_FIELDS = new Set(['draftPages', 'reviewItems', 'reviewBlocks', 'pageMetadata']);
+    const STORAGE_HEAVY_VERSION_FIELDS = new Set(['draftPages', 'reviewItems', 'reviewBlocks', 'pageMetadata']);
+    // shallow-copy omitting heavy keys — never JSON.stringify a full work (can exceed limits)
+    function compactObjectOmitting(obj, heavySet) {
+      const out = {};
+      for (const k in obj) { if (heavySet.has(k)) continue; out[k] = obj[k]; }
+      return out;
+    }
+    function compactDocumentForStorage(doc) {
+      const out = compactObjectOmitting(doc, STORAGE_HEAVY_DOC_FIELDS);
+      if (Array.isArray(doc.versions)) out.versions = doc.versions.map(v => compactObjectOmitting(v, STORAGE_HEAVY_VERSION_FIELDS));
+      return out;
+    }
+    function compactWorkForStorage(work) {
+      const out = {};
+      for (const k in work) {
+        if (k === 'documents') { out.documents = (work.documents || []).map(compactDocumentForStorage); continue; }
+        if (k === 'sourceDocument') { out.sourceDocument = {}; continue; } // legacy mirror, rebuilt on load
+        out[k] = work[k];
+      }
+      return out;
+    }
+    function compactSettingsForStorage(settings) {
+      const s = settings || {};
+      return {
+        schemaVersion: s.schemaVersion,
+        generator: s.generator,
+        activeWorkId: s.activeWorkId,
+        works: (s.works || []).map(compactWorkForStorage)
+      };
+    }
+
     const SETTINGS_AUTOSAVE_DB = 'scenario_material_control_settings_autosave_v1';
     const SETTINGS_AUTOSAVE_DB_VERSION = 3;
     const SETTINGS_AUTOSAVE_STORE = 'snapshots';
@@ -19381,7 +19424,7 @@
 
     async function putSettingsAutosaveSnapshot(reason) {
       if (!settingsAutosaveSupported()) return false;
-      const snapshot = ensureSettingsShape(settingsSnapshot());
+      const snapshot = compactSettingsForStorage(ensureSettingsShape(settingsSnapshot()));
       if (!snapshot.works.length) return false;
       const db = await openSettingsAutosaveDb();
       await new Promise((resolve, reject) => {
@@ -19679,7 +19722,7 @@
     function bindGlobalFileDrop() {
       const overlay = $('globalDropOverlay');
       const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
-      const ownZone = (e) => e.target && e.target.closest && e.target.closest('#dropZone, #documentVersionPanel');
+      const ownZone = (e) => e.target && e.target.closest && e.target.closest('#dropZone');
       let dragDepth = 0;
       window.addEventListener('dragenter', (e) => { if (!hasFiles(e) || ownZone(e)) return; dragDepth += 1; if (overlay) overlay.classList.add('show'); });
       window.addEventListener('dragover', (e) => { if (!hasFiles(e) || ownZone(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
@@ -19722,7 +19765,6 @@
       const materials = $('materialTabPanel');
       if (script) script.classList.toggle('hidden', state.activeMiddleTab !== 'script');
       if (materials) materials.classList.toggle('hidden', !['episodeMaterials', 'commonMaterials'].includes(state.activeMiddleTab));
-      renderDocumentVersionPanel();
       renderMaterialTypeTabs();
     }
 
@@ -20286,7 +20328,9 @@
       if (!workspaceReady(state.project)) return null;
       syncActiveWorkToSettings();
       const work = ensureProjectShape(state.project);
-      try { return JSON.parse(JSON.stringify(work)); } catch (e) { return null; }
+      // Compact first (strips the huge re-derivable fields) THEN clone — a full work can
+      // exceed JSON.stringify's string-length limit, which is what made slots slow/fail.
+      try { return JSON.parse(JSON.stringify(compactWorkForStorage(work))); } catch (e) { return null; }
     }
 
     function projectSlotSummary(work) {
@@ -20467,8 +20511,14 @@
       saveActiveInputToDocument();
       syncActiveWorkToSettings();
       state.settings.generator.generatedAt = nowIso();
-      downloadBlob(JSON.stringify(state.settings, null, 2), projectJsonFilename(), 'application/json;charset=utf-8');
+      // Export the compacted settings (heavy re-derivable fields stripped) so the file is
+      // small and JSON.stringify actually succeeds on large projects.
+      let text;
+      try { text = JSON.stringify(compactSettingsForStorage(ensureSettingsShape(state.settings)), null, 2); }
+      catch (e) { toast(t('exportFail')); console.warn('settings export failed', e); return false; }
+      downloadBlob(text, projectJsonFilename(), 'application/json;charset=utf-8');
       toast(t('exportedToast'));
+      return true;
     }
 
     function downloadStructuredText() {
