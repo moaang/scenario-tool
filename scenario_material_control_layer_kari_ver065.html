@@ -7754,7 +7754,7 @@
         : Math.max(measuredGlyphWidth, Math.min(rawWidth, rawHeight * 0.82));
       const width = Math.min(rawWidth, widthHint * (rotatedLatin ? 1.04 : 1.02));
       const runXShift = pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight);
-      const bottomPad = pdfVerticalRunBottomPadPct(item, rawHeight);
+      const bottomPad = pdfVerticalRunBottomPadPct(item, rawHeight, vertical);
       const centeredLeft = left + (rawWidth - width) / 2 - runXShift;
       return {
         left: Math.max(0, Math.min(99, centeredLeft)),
@@ -7782,21 +7782,30 @@
       return Math.max(0, (Number(rawWidth) || Number(width) || 0) / 2);
     }
 
-    function pdfVerticalRunBottomPadPct(item, rawHeight) {
+    function pdfVerticalRunBottomPadPct(item, rawHeight, vertical) {
       // pdf.js item.height is the glyph ADVANCE box, but the actual rendered ink of the bottom glyph
-      // descends ~0.6 of a glyph below it (pixel-scanned from a rasterized render: cast columns sat
-      // 0.6-0.7% above the ink, the ××× marker column 1.1% above). So the box needs ~0.8*pitch of
-      // bottom pad (~0.6 to reach the ink + ~0.2 margin). This is true for multi-glyph runs AND for
-      // lone stacked glyphs (× / ○ / 決), so gate on vertical-ness, not on the expanded-run heuristic.
+      // descends ~0.6 of a glyph below it (pixel-scanned from rasterized renders: kamiina cast columns
+      // sat 0.6-0.7% above the ink, the ××× marker column 1.1% above, and チェンソーマン dialogue /
+      // ×××× the same). So the box needs ~0.8*pitch of bottom pad (~0.6 to reach the ink + ~0.2 margin).
+      // This holds for measured multi-glyph runs, lone stacked glyphs (× / ○ / 決), AND ltr-sourced
+      // glyphs that were grouped into a vertical column (チェンソーマン emits one ltr glyph per cell, so
+      // the trailing 」 / ×××× are ltr yet still need the pad). Hence: any item inside a vertical line
+      // qualifies, not just ones self-flagged vertical. Rotated-latin runs (e.g. a 2024 date) are exempt.
       if (!item || item.rotatedLatinRun) return 0;
-      if (!item.verticalTextItem && !item.verticalRunExpanded) return 0;
+      if (!item.verticalTextItem && !item.verticalRunExpanded && !vertical) return 0;
       const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text) || 1;
       const height = Number(rawHeight) || Number(item.heightPct) || 0;
       if (!height) return 0;
       const pitch = height / Math.max(1, glyphCount);
       if (item.verticalRunExpanded && item.verticalRunMeasured) return Math.min(1.9, Math.max(0.9, pitch * 0.8));
       if (item.verticalRunExpanded) return Math.min(2.2, Math.max(0.55, pitch * 0.68));
-      return Math.min(1.9, Math.max(0.6, pitch * 0.8)); // lone (non-expanded) vertical glyph, e.g. ×××, 決
+      // Lone glyph (× / 決 / a single stacked kana / a trailing bracket). Content glyphs fill their cell
+      // and their ink descends ~0.6 below the advance box, so they need the pad (verified: ×××× ink sat
+      // 0.9% below its box). But high-sitting punctuation — 」』）…。 — draws in the TOP of its cell
+      // (measured: a trailing 」 ink ended 1.5% ABOVE its advance-box bottom), so padding it only bloats
+      // the box downward into empty space. Exempt pure-punctuation fragments.
+      if (isPdfVerticalPunctuationFragment(item.text || item.str || '')) return 0;
+      return Math.min(1.9, Math.max(0.6, pitch * 0.8));
     }
 
     function normalizeCompactOverlayRect(rect, minWidth, minHeight) {
@@ -14510,7 +14519,7 @@
         verticalRunExpanded: Boolean(item && item.verticalRunExpanded),
         verticalGlyphCount: Number(item && item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item && item.text),
         verticalRunXShiftPct: roundDebugNumber(pdfVerticalRunXShiftPct(item || {}, rawWidth, compactWidth, rawHeight)),
-        verticalRunBottomPadPct: roundDebugNumber(pdfVerticalRunBottomPadPct(item || {}, rawHeight)),
+        verticalRunBottomPadPct: roundDebugNumber(pdfVerticalRunBottomPadPct(item || {}, rawHeight, vertical)),
         rawHeight: roundDebugNumber(item && item.rawHeight),
         rotatedLatinRun: Boolean(item && item.rotatedLatinRun),
         punctuationFragment: isPdfVerticalPunctuationFragment(item && (item.text || item.str) || ''),
@@ -15307,7 +15316,7 @@
       const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v17' });
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v18' });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -15574,7 +15583,7 @@
     }
 
     function isCurrentPdfCoordinateSource(source) {
-      return source === 'rendered-pdfjs-v17' || source === 'rendered-line-union-v17' || source === 'pdf-logical-fallback';
+      return source === 'rendered-pdfjs-v18' || source === 'rendered-line-union-v18' || source === 'pdf-logical-fallback';
     }
 
     async function renderPdfJsPageForActiveBodyPreview(doc, pageNo) {
@@ -15674,13 +15683,13 @@
           inferred: true,
           manual: false
         }));
-        nextRect.coordinateSource = 'rendered-line-union-v17';
+        nextRect.coordinateSource = 'rendered-line-union-v18';
         const clippedBase = clipOverlayRectToPdfBodyBounds(nextRect, doc, targetPageNo) || nextRect;
         const clipped = Object.assign({}, clippedBase, {
           vertical: true,
           inferred: true,
           manual: false,
-          coordinateSource: 'rendered-line-union-v17'
+          coordinateSource: 'rendered-line-union-v18'
         });
         if (pdfOverlayRectsEquivalent(current, clipped)) return;
         const savedRect = setBlockOverlayRectForPage(block, targetPageNo, clipped);
@@ -16477,7 +16486,7 @@
       const source = Array.isArray(items) ? items : [];
       if (source.pdfFallbackSource === 'pdf-logical-fallback') return 'pdf-logical-fallback';
       if (source.some(item => item && item.coordinateSource === 'pdf-logical-fallback')) return 'pdf-logical-fallback';
-      return 'rendered-pdfjs-v17';
+      return 'rendered-pdfjs-v18';
     }
 
     function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
