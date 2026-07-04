@@ -7343,7 +7343,10 @@
         page.bodyCutLineTrigger = stableCut == null ? '' : 'annotation_layout_stable';
         page.bodyTopLinePct = pageTopLine;
         page.bodyTopLineTrigger = pageTopLine == null ? '' : 'layout_divider_stable';
-        const bodyReviewText = pdfBodyReviewTextFromLines(bodyLines);
+        // Clipping to the body top-line drops the top-margin scene number (e.g. NGOD's "１" above
+        // "ライブ会場・全景（夜）"); restore it from the content-order logical stream so numbered
+        // scene headings survive into classification.
+        const bodyReviewText = restorePdfSceneHeadingNumbersFromLogical(pdfBodyReviewTextFromLines(bodyLines), page.rawLogicalText);
         page.bodyReviewText = bodyReviewText;
         page.text = bodyReviewText || normalizePdfLogicalPageText(page.logicalText) || bodyLines.map(line => line.text).filter(Boolean).join('\n');
         delete page.bodySourceLines;
@@ -7359,6 +7362,35 @@
       return normalizePdfSceneHeadingDashLeaderReviewLines(reviewLines)
         .join('\n')
         .trim();
+    }
+
+    // NGOD/numbered-scene scripts print the scene NUMBER in the top margin (above the body band),
+    // so the geometry-grouped body line keeps only the location (e.g. "ライブ会場・全景（夜）").
+    // The content-order logical channel still has the number attached ("１ライブ会場・全景（夜）").
+    // Restore that leading number onto the matching body line so it classifies as a scene heading —
+    // only when the number provably precedes the same location text in the logical stream.
+    function restorePdfSceneHeadingNumbersFromLogical(reviewText, logicalText) {
+      const body = String(reviewText || '');
+      if (!body) return body;
+      const numberByLocation = new Map();
+      normalizePdfLogicalPageText(logicalText).split(/\n+/).forEach((line) => {
+        const match = String(line || '').trim().match(/^([0-9０-９]{1,3})[\s　]*(\S.*)$/);
+        if (!match) return;
+        const rest = norm(match[2]);
+        if (!rest || charLen(rest) > 40) return;
+        if (/^[○●◯〇◎□■△▲▽▼]/.test(rest)) return;
+        if (/[。！？!?「」『』]/.test(rest)) return;
+        if (!hasLocationSignal(rest)) return;
+        const key = normalizePdfLogicalLineGuideMatchText(rest);
+        if (key && !numberByLocation.has(key)) numberByLocation.set(key, norm(match[1]));
+      });
+      if (!numberByLocation.size) return body;
+      return body.split('\n').map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || /^[0-9０-９]/.test(trimmed)) return line;
+        const num = numberByLocation.get(normalizePdfLogicalLineGuideMatchText(trimmed));
+        return num ? num + trimmed : line;
+      }).join('\n');
     }
 
     function normalizePdfSceneHeadingDashLeaderReviewLines(lines) {
