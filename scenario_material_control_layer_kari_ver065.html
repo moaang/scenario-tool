@@ -6345,30 +6345,6 @@
       return '';
     }
 
-    function shouldSkipPdfLogicalTailExpansionForPage(logicalText) {
-      const logicalSourceText = Array.isArray(logicalText) ? logicalText.join('\n') : logicalText;
-      const logicalLines = normalizePdfLogicalPageText(logicalSourceText)
-        .split(/\n+/)
-        .map(line => line.trim())
-        .filter(Boolean);
-      if (!logicalLines.length) return false;
-      let afterCastSection = false;
-      const postCastLines = [];
-      logicalLines.forEach((line) => {
-        if (isCastSectionLine(line)) {
-          afterCastSection = true;
-          return;
-        }
-        if (afterCastSection) postCastLines.push(line);
-      });
-      if (!afterCastSection) return false;
-      const hasPostCastBodySignal = postCastLines.some((line) => {
-        if (!line) return false;
-        return Boolean(parseDialog(line, null) || isSceneHeading(line, null) || isStrongBodyStart(line, null) || isEndMarkerLine(line));
-      });
-      return !hasPostCastBodySignal;
-    }
-
     function isPdfLogicalDashLeaderText(text) {
       const compact = String(text || '').normalize('NFKC').replace(/\s+/g, '');
       return Boolean(compact && /^[\u2010-\u2015\u2212\u2500-\u257f－-]+$/u.test(compact));
@@ -6384,7 +6360,9 @@
 
     function expandPdfOverlayLineBoundsForMissingLogicalTails(lines, logicalText, options) {
       if (options && options.skipLogicalTailExpansion) return lines || [];
-      if (shouldSkipPdfLogicalTailExpansionForPage(logicalText)) return lines || [];
+      // (No page-level skip: title/cast pages used to be excluded wholesale because tail matching
+      // corrupted cast entries, but the same-tail agreement rule below blocks that class per line — a
+      // cast entry always matches its own complete logical line too, whose empty tail disagrees.)
       const logicalSourceText = Array.isArray(logicalText) ? logicalText.join('\n') : logicalText;
       const logicalLines = normalizePdfLogicalPageText(logicalSourceText)
         .split(/\n+/)
@@ -6410,27 +6388,34 @@
         // would duplicate it rather than recover something pdf.js actually dropped.
         const nextLineText = normalizePdfLogicalLineGuideMatchText((lines[lineIndex + 1] && lines[lineIndex + 1].text) || '');
         // If this line's own text shows up in more than one place in the page's logical text
-        // (a short phrase, a stock line ending, a repeated word), there is no way to tell which
-        // occurrence's continuation is the real one — guessing has produced exactly this class of
-        // duplicate-tail corruption. Only trust the match when it is unambiguous.
-        const matchingLogicalLineCount = logicalLines.reduce((count, logicalLine) => count + (logicalLine.includes(compact) ? 1 : 0), 0);
+        // (a short phrase, a stock line ending, a repeated word), we can't tell which occurrence's
+        // continuation is the real one — UNLESS every occurrence continues with the exact same tail,
+        // in which case the ambiguity is harmless (e.g. 米内山 appears in both the horizontal header
+        // and the vertical column, and both continue with 陽子 — the tail pdf.js drops from the
+        // vertical run). Occurrences with no tail count as a distinct (empty) candidate, so a line
+        // that is already complete somewhere in the logical text still blocks recovery.
+        const tailKeys = new Set();
         let extraGlyphs = 0;
         let extraText = '';
-        if (matchingLogicalLineCount <= 1) {
-          logicalLines.forEach((logicalLine) => {
-            let extra = pdfLogicalTailFromMatchedLine(compact, logicalLine);
-            if (!extra) return;
-            extra = extra.replace(/[0-9０-９]+$/u, '');
-            if (shouldSkipPdfLogicalTailForOverlayLine(line, extra)) return;
-            if (!isPdfLogicalVerticalTailCandidate(extra)) return;
-            const extraKey = normalizePdfLogicalLineGuideMatchText(extra);
-            if (extraKey && nextLineText && nextLineText.startsWith(extraKey)) return;
-            const glyphs = pdfVerticalRunGlyphCount(extra);
-            if (glyphs > extraGlyphs) {
-              extraGlyphs = glyphs;
-              extraText = extra;
-            }
-          });
+        logicalLines.forEach((logicalLine) => {
+          if (!logicalLine.includes(compact)) return;
+          let extra = pdfLogicalTailFromMatchedLine(compact, logicalLine);
+          extra = String(extra || '').replace(/[0-9０-９]+$/u, '');
+          tailKeys.add(normalizePdfLogicalLineGuideMatchText(extra));
+          if (!extra) return;
+          if (shouldSkipPdfLogicalTailForOverlayLine(line, extra)) return;
+          if (!isPdfLogicalVerticalTailCandidate(extra)) return;
+          const extraKey = normalizePdfLogicalLineGuideMatchText(extra);
+          if (extraKey && nextLineText && nextLineText.startsWith(extraKey)) return;
+          const glyphs = pdfVerticalRunGlyphCount(extra);
+          if (glyphs > extraGlyphs) {
+            extraGlyphs = glyphs;
+            extraText = extra;
+          }
+        });
+        if (tailKeys.size !== 1) {
+          extraGlyphs = 0;
+          extraText = '';
         }
         const rect = normalizeCompactOverlayRect(rawRect, 0.24, 0.75);
         const pitch = pdfVerticalLinePitchPct(line, rect, currentGlyphs);
@@ -15316,7 +15301,7 @@
       const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v18' });
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v19' });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -15583,7 +15568,7 @@
     }
 
     function isCurrentPdfCoordinateSource(source) {
-      return source === 'rendered-pdfjs-v18' || source === 'rendered-line-union-v18' || source === 'pdf-logical-fallback';
+      return source === 'rendered-pdfjs-v19' || source === 'rendered-line-union-v19' || source === 'pdf-logical-fallback';
     }
 
     async function renderPdfJsPageForActiveBodyPreview(doc, pageNo) {
@@ -15683,13 +15668,13 @@
           inferred: true,
           manual: false
         }));
-        nextRect.coordinateSource = 'rendered-line-union-v18';
+        nextRect.coordinateSource = 'rendered-line-union-v19';
         const clippedBase = clipOverlayRectToPdfBodyBounds(nextRect, doc, targetPageNo) || nextRect;
         const clipped = Object.assign({}, clippedBase, {
           vertical: true,
           inferred: true,
           manual: false,
-          coordinateSource: 'rendered-line-union-v18'
+          coordinateSource: 'rendered-line-union-v19'
         });
         if (pdfOverlayRectsEquivalent(current, clipped)) return;
         const savedRect = setBlockOverlayRectForPage(block, targetPageNo, clipped);
@@ -16486,7 +16471,7 @@
       const source = Array.isArray(items) ? items : [];
       if (source.pdfFallbackSource === 'pdf-logical-fallback') return 'pdf-logical-fallback';
       if (source.some(item => item && item.coordinateSource === 'pdf-logical-fallback')) return 'pdf-logical-fallback';
-      return 'rendered-pdfjs-v18';
+      return 'rendered-pdfjs-v19';
     }
 
     function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
