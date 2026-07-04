@@ -285,6 +285,10 @@
     .rs-meta { font-size: 9.5px; color: var(--muted); font-weight: 600; }
     .restore-foot { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line-soft); }
     .restore-foot .small { flex: 1; }
+    .restore-foot-col { display: grid; gap: 6px; padding: 8px; border-top: 1px solid var(--line-soft); }
+    .restore-foot-col .restore-foot { padding: 0; border-top: 0; }
+    #restoreChangeDirBtn { justify-content: flex-start; }
+    #restoreChangeDirBtn .rs-dir { color: var(--muted); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* Global file-drop overlay (drop a settings .json or a document anywhere) */
     #globalDropOverlay {
       position: fixed; inset: 0; z-index: 70;
@@ -2057,7 +2061,7 @@
       animation: modalPop .16s cubic-bezier(.2,.8,.3,1);
     }
     @keyframes modalPop { from { transform: translateY(8px) scale(.99); opacity: .6; } to { transform: none; opacity: 1; } }
-    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 13px 14px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(#fcfbf6, #f7f6f0); }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); background: var(--panel); }
     .modal-body { padding: 14px; display: grid; gap: 11px; }
     .modal.source-review-modal {
       width: min(1280px, calc(100vw - 24px));
@@ -2069,37 +2073,50 @@
     .modal.source-review-modal .modal-body {
       min-height: 0;
       overflow: auto;
+      padding: 0;
     }
-    .source-review-editor { display: grid; gap: 10px; }
+    .source-review-editor { display: grid; gap: 0; }
+    /* Toolbar hugs the modal header (no gap) and is a solid full-bleed sticky bar so
+       content scrolls cleanly under it. */
     .source-review-toolbar {
       position: sticky;
       top: 0;
-      z-index: 2;
+      z-index: 3;
       display: flex;
       justify-content: space-between;
-      gap: 8px;
-      align-items: flex-start;
-      padding: 0 0 9px;
-      border-bottom: 1px solid #e1e1d6;
-      background: #fff;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      background: var(--panel);
     }
+    .srt-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .source-review-content { display: grid; gap: 10px; padding: 12px 14px; }
+    .srt-hint { color: var(--muted); font-size: 10.5px; font-weight: 600; line-height: 1.45; }
     .source-review-options {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-top: 6px;
     }
     .source-review-mode-tabs {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-top: 7px;
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      background: var(--chip);
+      border-radius: 999px;
     }
     .source-review-mode-tabs .tab {
-      min-height: 26px;
-      padding: 4px 10px;
+      min-height: 24px;
+      padding: 4px 14px;
       font-size: 11px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      border-radius: 999px;
+      color: var(--muted);
+      font-weight: 700;
     }
+    .source-review-mode-tabs .tab.active { background: var(--ink); color: #fff; }
     .source-review-material-panel {
       display: grid;
       gap: 10px;
@@ -2242,7 +2259,9 @@
       align-items: start;
     }
     .source-review-raw {
-      min-height: 420px;
+      min-height: 200px;
+      max-height: 520px;
+      overflow: auto;
       resize: vertical;
       font-family: var(--mono);
       font-size: 12px;
@@ -2263,40 +2282,43 @@
     .review-scene-group {
       display: grid;
       gap: 7px;
-      padding: 7px;
-      border: 2px solid #123d6b;
-      border-radius: 8px;
-      background: #eaf3ff;
-      box-shadow: inset 0 0 0 1px rgba(18,61,107,.08);
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fafbfc;
     }
     .review-scene-group-title {
       display: flex;
       justify-content: space-between;
       gap: 8px;
       align-items: center;
-      padding: 7px 9px;
-      border-radius: 6px;
-      background: #123d6b;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 1000;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--ink-soft);
+      font-size: 10.5px;
+      font-weight: 800;
       font-family: var(--mono);
+      width: max-content;
+      max-width: 100%;
     }
     .review-front-group {
       display: grid;
       gap: 7px;
-      padding: 7px;
-      border: 1px solid #d8d2bf;
-      border-radius: 8px;
-      background: #fffdf6;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fafbfc;
     }
     .review-front-group-title {
-      padding: 2px 2px 5px;
-      border-bottom: 1px solid #e4ddca;
-      color: #665224;
-      font-size: 11px;
-      font-weight: 1000;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--ink-soft);
+      font-size: 10.5px;
+      font-weight: 800;
       font-family: var(--mono);
+      width: max-content;
     }
     .review-block {
       display: grid;
@@ -2327,9 +2349,9 @@
       font-size: 9px;
     }
     .review-block.scene {
-      border: 2px solid #123d6b;
-      border-left-width: 8px;
-      background: #f3f8ff;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--info);
+      background: #fafbfc;
     }
     .review-block.action { border-left: 4px solid #2e7653; background: #fbfff9; }
     .review-block.end {
@@ -3082,6 +3104,8 @@
         restoredToast: '復元しました',
         exportedToast: '設定ファイルを保存しました',
         exportFail: '書き出し失敗（データ過大）',
+        savedToDirToast: '{name} に保存しました',
+        changeSaveDir: '保存先フォルダを変更',
         importedToast: '読み込みました',
         paneSourceBlocks: '作品・原文',
         paneNotesShare: '注釈・共有',
@@ -3386,6 +3410,8 @@
         restoredToast: '복원했습니다',
         exportedToast: '설정 파일을 저장했습니다',
         exportFail: '내보내기 실패(데이터 과대)',
+        savedToDirToast: '{name}에 저장했습니다',
+        changeSaveDir: '저장 폴더 변경',
         importedToast: '불러왔습니다',
         paneSourceBlocks: '작품 · 원문',
         paneNotesShare: '주석 · 공유',
@@ -3689,6 +3715,8 @@
         restoredToast: 'Restored',
         exportedToast: 'Settings file saved',
         exportFail: 'Export failed (data too large)',
+        savedToDirToast: 'Saved to {name}',
+        changeSaveDir: 'Change save folder',
         importedToast: 'Imported',
         paneSourceBlocks: 'Work · Source',
         paneNotesShare: 'Notes · Share',
@@ -5060,8 +5088,9 @@
       await putSettingsAutosaveSnapshot('manual_save').catch(err => console.warn('settings autosave failed', err));
       lastAutosaveAt = Date.now();
       updateSaveStatus();
-      // 저장 = keep a restore point AND write the settings JSON file to disk (toast from export).
-      exportSettingsJsonFile();
+      // 저장 = keep a restore point AND write the settings JSON to the remembered directory
+      // (asks once for a folder, then reuses it silently on later saves).
+      await saveSettingsToDirectory(false);
       syncAll(false);
     }
 
@@ -14172,26 +14201,28 @@
       const pageEntries = sourceReviewPageEntries(draft);
       const activePanel = draft.activePanel || 'script';
       const pdfReadOnly = isPdfSourceReviewReadOnly(draft, doc);
+      const options = renderSourceReviewOptionControls(draft, pdfReadOnly);
       $('modalBody').innerHTML = `
         <div class="source-review-editor">
           <div class="source-review-toolbar">
-            <div>
-              <div class="note"><strong>${esc(t('openSourceReview'))}:</strong> ${esc(t('sourceReviewInstruction'))}</div>
-              ${renderSourceReviewOptionControls(draft, pdfReadOnly)}
+            <div class="srt-tabs">
               <div class="source-review-mode-tabs">
                 <button type="button" class="tab ${activePanel === 'script' ? 'active' : ''}" data-source-review-panel="script">${esc(t('sourceReviewScriptTab'))}</button>
                 <button type="button" class="tab ${activePanel === 'materials' ? 'active' : ''}" data-source-review-panel="materials">${esc(t('sourceReviewMaterialsTab'))}</button>
               </div>
+              ${options}
             </div>
-            <div class="row">
+            <div class="row srt-actions">
               <button id="saveSourceReviewDraftBtn" class="small">${esc(t('saveReviewDraft'))}</button>
               <button id="confirmSourceReviewDraftBtn" class="primary">${esc(t('confirmReviewDraft'))}</button>
             </div>
           </div>
-          ${activePanel === 'materials'
-            ? renderSourceReviewMaterialPanel(draft, doc)
-            : `<div class="source-review-pages">${pageEntries.map(page => renderSourceReviewPage(page.pageNo, page.items, page.text, pdfReadOnly)).join('')}</div>`}
-          <div class="note">${esc(t('sourceReviewTarget'))}: ${esc(doc.title || doc.id)} ・ ${esc(draft.sourceFileName || t('directInput'))}</div>
+          <div class="source-review-content">
+            ${activePanel === 'materials'
+              ? renderSourceReviewMaterialPanel(draft, doc)
+              : `<div class="source-review-pages">${pageEntries.map(page => renderSourceReviewPage(page.pageNo, page.items, page.text, pdfReadOnly)).join('')}</div>`}
+            <div class="srt-hint">${esc(t('sourceReviewInstruction'))} · ${esc(t('sourceReviewTarget'))}: ${esc(doc.title || doc.id)} ・ ${esc(draft.sourceFileName || t('directInput'))}</div>
+          </div>
         </div>
       `;
       bindSourceReviewModal();
@@ -20450,12 +20481,16 @@
           </span>
         </button>`;
       }).join('') || `<div class="restore-empty">${esc(t('restoreEmpty'))}</div>`;
+      const savedDirName = (() => { try { return localStorage.getItem('scenarioSaveDirName') || ''; } catch (e) { return ''; } })();
       pop.innerHTML = `
         <div class="restore-head">${esc(t('restorePoints'))}</div>
         <div class="restore-list">${rows}</div>
-        <div class="restore-foot">
-          <button type="button" class="small" id="restoreExportBtn">${esc(t('exportJson'))}</button>
-          <button type="button" class="small" id="restoreImportBtn">${esc(t('importJson'))}</button>
+        <div class="restore-foot restore-foot-col">
+          ${fsAccessSupported() ? `<button type="button" class="small" id="restoreChangeDirBtn">${esc(t('changeSaveDir'))}${savedDirName ? ` <span class="rs-dir">· ${esc(savedDirName)}</span>` : ''}</button>` : ''}
+          <div class="restore-foot">
+            <button type="button" class="small" id="restoreExportBtn">${esc(t('exportJson'))}</button>
+            <button type="button" class="small" id="restoreImportBtn">${esc(t('importJson'))}</button>
+          </div>
         </div>`;
       pop.querySelectorAll('[data-restore-slot]').forEach(btn => btn.addEventListener('click', async () => {
         const slotId = btn.getAttribute('data-restore-slot');
@@ -20463,6 +20498,8 @@
         const ok = await restoreProjectSlot(slotId);
         if (ok) toast(t('restoredToast'));
       }));
+      const changeDir = $('restoreChangeDirBtn');
+      if (changeDir) changeDir.addEventListener('click', () => { closeRestorePopover(); saveSettingsToDirectory(true); });
       $('restoreExportBtn').addEventListener('click', () => { closeRestorePopover(); exportSettingsJsonFile(); });
       $('restoreImportBtn').addEventListener('click', () => { closeRestorePopover(); $('projectFileInput').click(); });
     }
@@ -20505,15 +20542,88 @@
       return baseName + '_settings.json';
     }
 
-    function exportSettingsJsonFile() {
+    // Build the compact settings JSON text (heavy re-derivable fields stripped so it fits).
+    function buildSettingsJsonText() {
       saveActiveInputToDocument();
       syncActiveWorkToSettings();
       state.settings.generator.generatedAt = nowIso();
-      // Export the compacted settings (heavy re-derivable fields stripped) so the file is
-      // small and JSON.stringify actually succeeds on large projects.
-      let text;
-      try { text = JSON.stringify(compactSettingsForStorage(ensureSettingsShape(state.settings)), null, 2); }
-      catch (e) { toast(t('exportFail')); console.warn('settings export failed', e); return false; }
+      try { return JSON.stringify(compactSettingsForStorage(ensureSettingsShape(state.settings)), null, 2); }
+      catch (e) { console.warn('settings serialize failed', e); return null; }
+    }
+
+    // ---- Save to a chosen directory (File System Access) with a remembered location ----
+    const SAVE_DIR_DB = 'scenario_material_control_save_dir_v1';
+    const SAVE_DIR_STORE = 'handles';
+    const SAVE_DIR_KEY = 'dir';
+    let savedDirHandle = null;
+
+    function fsAccessSupported() { return typeof window.showDirectoryPicker === 'function' && !!window.indexedDB; }
+
+    function openSaveDirDb() {
+      return new Promise((resolve, reject) => {
+        const req = window.indexedDB.open(SAVE_DIR_DB, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(SAVE_DIR_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function putSavedDirHandle(handle) {
+      const db = await openSaveDirDb();
+      await new Promise((res, rej) => { const tx = db.transaction(SAVE_DIR_STORE, 'readwrite'); tx.objectStore(SAVE_DIR_STORE).put(handle, SAVE_DIR_KEY); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+      db.close();
+    }
+    async function getSavedDirHandle() {
+      const db = await openSaveDirDb();
+      const h = await new Promise((res, rej) => { const tx = db.transaction(SAVE_DIR_STORE, 'readonly'); const rq = tx.objectStore(SAVE_DIR_STORE).get(SAVE_DIR_KEY); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => rej(rq.error); });
+      db.close();
+      return h;
+    }
+    async function verifyDirPermission(handle, request) {
+      if (!handle || !handle.queryPermission) return true;
+      const opts = { mode: 'readwrite' };
+      if ((await handle.queryPermission(opts)) === 'granted') return true;
+      if (request && handle.requestPermission) return (await handle.requestPermission(opts)) === 'granted';
+      return false;
+    }
+    async function ensureSaveDirHandle(forcePick) {
+      if (!fsAccessSupported()) return null;
+      if (!forcePick) {
+        if (!savedDirHandle) { try { savedDirHandle = await getSavedDirHandle(); } catch (e) { savedDirHandle = null; } }
+        if (savedDirHandle && await verifyDirPermission(savedDirHandle, true)) return savedDirHandle;
+      }
+      try {
+        const picked = await window.showDirectoryPicker({ id: 'scenario-save-dir', mode: 'readwrite', startIn: savedDirHandle || undefined });
+        if (!(await verifyDirPermission(picked, true))) return null;
+        savedDirHandle = picked;
+        await putSavedDirHandle(picked).catch(() => {});
+        try { localStorage.setItem('scenarioSaveDirName', picked.name || ''); } catch (e) {}
+        return picked;
+      } catch (e) { return null; } // AbortError: user cancelled the picker
+    }
+    async function writeSettingsToDir(dir, text) {
+      const fileHandle = await dir.getFileHandle(projectJsonFilename(), { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(text);
+      await writable.close();
+    }
+
+    // Save to the remembered directory (or download as a fallback). forcePick=true always asks.
+    async function saveSettingsToDirectory(forcePick) {
+      const text = buildSettingsJsonText();
+      if (text == null) { toast(t('exportFail')); return false; }
+      if (!fsAccessSupported()) { downloadBlob(text, projectJsonFilename(), 'application/json;charset=utf-8'); toast(t('exportedToast')); return true; }
+      const dir = await ensureSaveDirHandle(forcePick);
+      if (!dir) return false; // cancelled / permission denied
+      try { await writeSettingsToDir(dir, text); }
+      catch (e) { console.warn('write settings failed', e); toast(t('exportFail')); return false; }
+      toast(t('savedToDirToast', { name: dir.name || '' }));
+      return true;
+    }
+
+    // Kept for the restore popover's explicit "download file" action.
+    function exportSettingsJsonFile() {
+      const text = buildSettingsJsonText();
+      if (text == null) { toast(t('exportFail')); return false; }
       downloadBlob(text, projectJsonFilename(), 'application/json;charset=utf-8');
       toast(t('exportedToast'));
       return true;
