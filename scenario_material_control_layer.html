@@ -172,10 +172,6 @@
       color: var(--muted); font-size: 13px; font-weight: 800;
     }
     .panel-collapse:hover { background: #f2f2ef; border-color: transparent; color: var(--ink); }
-    .save-folder-label {
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      color: var(--muted); font-size: 10.5px; font-weight: 650;
-    }
     .work-select { min-height: 28px; padding: 3px 7px; font-size: 12px; }
 
     /* Rails: collapsed panels floating at the sides */
@@ -224,10 +220,6 @@
     #appTopbar button.small { min-height: 24px; padding: 2px 8px; font-size: 10.5px; box-shadow: none; }
     #appTopbar .work-select { width: 132px; min-height: 26px; padding: 2px 6px; font-size: 11.5px; }
     #appTopbar .language-select { width: 82px; min-height: 24px; padding: 1px 6px; font-size: 10.5px; }
-    #appTopbar .save-folder-label {
-      max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      color: var(--faint); font-size: 9.5px; font-weight: 650;
-    }
     /* id selectors: must beat the generic .tabs grid (declared later in this sheet) */
     #middleTabs.mode-pill {
       display: flex; gap: 2px; padding: 2px;
@@ -255,6 +247,55 @@
       background: var(--chip);
       color: var(--muted); font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
     }
+    /* Save / restore-point slots */
+    .restore-wrap { position: relative; display: inline-flex; }
+    .restore-popover {
+      position: absolute; top: calc(100% + 8px); right: 0;
+      z-index: 40;
+      width: 288px;
+      display: grid; gap: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .restore-popover.hidden { display: none; }
+    .restore-head { padding: 10px 12px 8px; font-size: 11px; font-weight: 750; color: var(--ink); border-bottom: 1px solid var(--line-soft); }
+    .restore-list { display: grid; gap: 4px; padding: 6px; max-height: 320px; overflow: auto; }
+    .restore-empty { padding: 18px 12px; text-align: center; color: var(--muted); font-size: 11px; }
+    .restore-slot {
+      display: flex; align-items: flex-start; gap: 8px;
+      width: 100%; padding: 8px 9px; min-height: 0;
+      border: 1px solid transparent; border-radius: 9px;
+      background: transparent; box-shadow: none; text-align: left; cursor: pointer;
+    }
+    .restore-slot:hover { background: #f6f6f3; border-color: var(--line-soft); }
+    .rs-reason {
+      flex: none; margin-top: 1px; padding: 2px 7px; border-radius: 999px;
+      font-size: 8.5px; font-weight: 800; letter-spacing: .02em;
+      background: var(--chip); color: var(--ink-soft);
+    }
+    .rs-reason.rs-manual { background: var(--focus-tint); color: var(--focus); }
+    .rs-reason.rs-before_restore { background: var(--retake-tint); color: var(--retake); }
+    .rs-main { min-width: 0; display: grid; gap: 1px; }
+    .rs-title { font-size: 11.5px; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rs-meta { font-size: 9.5px; color: var(--muted); font-weight: 600; }
+    .restore-foot { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line-soft); }
+    .restore-foot .small { flex: 1; }
+    /* Toast */
+    .app-toast {
+      position: fixed; left: 50%; bottom: 58px; transform: translateX(-50%) translateY(6px);
+      z-index: 60;
+      padding: 8px 16px; border-radius: 999px;
+      background: var(--ink); color: #fff;
+      font-size: 11.5px; font-weight: 650;
+      box-shadow: var(--shadow-lg);
+      opacity: 0; pointer-events: none;
+      transition: opacity .16s ease, transform .16s ease;
+    }
+    .app-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
     /* Floating scene info (page title + character tags) just under the topbar */
     #sceneInfoBar {
       top: 52px; left: 50%; transform: translateX(-50%);
@@ -1493,9 +1534,9 @@
     }
     .middle-tab-panel { display: grid; gap: 10px; }
 
-    /* ===== ver074 canvas scenes ===== */
-    body[data-pdf-debug="on"] .script-page-nav { display: flex; }
+    /* ===== canvas scenes ===== */
     .pane-center .pdf-preview-stage {
+      position: relative;
       min-height: 0;
       border: 0;
       border-radius: 0;
@@ -1508,7 +1549,7 @@
       padding: 0;
       contain: none;
     }
-    /* Seamless scene — no container card, page edges fade into the canvas */
+    /* Seamless scene — no container card; page dissolves into the canvas, faint corner marks only */
     .pane-center .script-page {
       border: 0;
       background: transparent;
@@ -1516,19 +1557,37 @@
     }
     .pane-center .script-page > .card-head { display: none; }
     .pane-center .pdf-page-surface {
+      min-height: 0;
       background: transparent;
       box-shadow: none;
     }
     .pane-center .pdf-page-canvas {
+      --edge: 66px;
       -webkit-mask-image:
-        linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%),
-        linear-gradient(to bottom, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+        linear-gradient(to right, transparent 0, #000 var(--edge), #000 calc(100% - var(--edge)), transparent 100%),
+        linear-gradient(to bottom, transparent 0, #000 var(--edge), #000 calc(100% - var(--edge)), transparent 100%);
       -webkit-mask-composite: source-in;
       mask-image:
-        linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%),
-        linear-gradient(to bottom, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+        linear-gradient(to right, transparent 0, #000 var(--edge), #000 calc(100% - var(--edge)), transparent 100%),
+        linear-gradient(to bottom, transparent 0, #000 var(--edge), #000 calc(100% - var(--edge)), transparent 100%);
       mask-composite: intersect;
     }
+    /* faint crop-mark corners framing the edgeless page (clean mode only) */
+    .scene-corner {
+      position: absolute; z-index: 1;
+      width: 18px; height: 18px;
+      border: 1.5px solid #d5d5ce;
+      pointer-events: none;
+    }
+    .scene-corner.tl { top: -11px; left: -11px; border-right: 0; border-bottom: 0; border-radius: 4px 0 0 0; }
+    .scene-corner.tr { top: -11px; right: -11px; border-left: 0; border-bottom: 0; border-radius: 0 4px 0 0; }
+    .scene-corner.bl { bottom: -11px; left: -11px; border-right: 0; border-top: 0; border-radius: 0 0 0 4px; }
+    .scene-corner.br { bottom: -11px; right: -11px; border-left: 0; border-top: 0; border-radius: 0 0 4px 0; }
+    body[data-pdf-debug="on"] .scene-corner { display: none; }
+    /* debug-only tools, placed BELOW the page */
+    .pdf-debug-tools { display: grid; gap: 8px; margin-top: 14px; }
+    .body-preview-workspace:not(.debug-mode) .pdf-debug-tools { display: none; }
+    .pdf-debug-tools .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .pane-center .pdf-js-status,
     .pane-center .pdf-preview-mode-note { display: none; }
     body[data-pdf-debug="on"] .pane-center .pdf-js-status { display: block; }
@@ -2815,10 +2874,11 @@
       </div>
       <div class="topbar-zone topbar-right">
         <input id="projectFileInput" type="file" accept=".json" hidden="">
-        <button id="selectSettingsFolderBtn" class="small" data-i18n="selectSaveFolder">저장 폴더 지정</button>
-        <button id="saveSettingsBtn" class="small" data-requires-project="" data-i18n="saveSettings">저장</button>
-        <button id="loadSettingsBtn" class="small" data-i18n="loadSettings">불러오기</button>
-        <span id="saveFolderLabel" class="save-folder-label" title="저장 위치: #scenario">저장 위치: #scenario</span>
+        <button id="saveSettingsBtn" class="small" data-requires-project="" data-i18n="saveSnapshot">저장</button>
+        <div class="restore-wrap">
+          <button id="restoreBtn" class="small" data-requires-project="" data-i18n="restorePoints">복원</button>
+          <div id="restorePopover" class="restore-popover hidden"></div>
+        </div>
         <select id="languageSelect" class="language-select" aria-label="Language">
           <option value="ja">日本語</option>
           <option value="ko">한국어</option>
@@ -2827,6 +2887,7 @@
         <button id="resetBtn" class="danger small" data-i18n="reset">초기화</button>
       </div>
     </div>
+    <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
 
     <div id="sceneInfoBar" class="canvas-chrome hidden"></div>
 
@@ -2915,13 +2976,24 @@
         languageKo: '\ud55c\uad6d\uc5b4',
         languageEn: 'English',
         canvasHint: 'Space+ドラッグ＝移動 ・ Ctrl+ホイール＝ズーム ・ 素材カードはホイール移動可',
-        selectSaveFolder: '保存先指定',
-        saveSettings: '保存',
         loadSettings: '読込',
         addWork: '作品を追加',
         reset: '初期化',
-        saveFolderPrefix: '保存先',
-        saveFolderUnset: '未指定',
+        saveSnapshot: '保存',
+        restorePoints: '復元',
+        restoreEmpty: '保存された復元ポイントがありません',
+        slotMeta: 'ブロック {blocks} ・ 注釈 {notes}',
+        restoreReasonManual: '手動',
+        restoreReasonAuto: '自動',
+        restoreReasonLoad: '読込',
+        restoreReasonBeforeRestore: '復元前',
+        exportJson: 'ファイル書き出し',
+        importJson: 'ファイル読込',
+        savedToast: '復元ポイントを保存しました',
+        savedToastFail: '変更がないためスキップ',
+        restoredToast: '復元しました',
+        exportedToast: 'ファイルに書き出しました',
+        importedToast: '読み込みました',
         paneSourceBlocks: '作品・原文',
         paneNotesShare: '注釈・共有',
         sourcePlaceholder: 'シナリオ / プロット / キャラクター設定 / 場所設定の原文',
@@ -2969,9 +3041,8 @@
         documentStatusReview: '原文確認中',
         documentStatusEditing: '編集中',
         documentStatusEmpty: '未入力',
-        saveStatusChanged: '変更あり: 設定保存が必要',
-        saveStatusWaiting: '手動保存待ち',
-        saveStatusSaved: '保存済み: {time}',
+        saveStatusWaiting: '自動保存待ち',
+        saveStatusSaved: '自動保存済み: {time}',
         projectGate: '先に作品を追加すると文書作業を開始できます。',
         workDocuments: '作品文書',
         addDocument: '+ 文書を追加',
@@ -3200,13 +3271,24 @@
         languageKo: '한국어',
         languageEn: 'English',
         canvasHint: 'Space+드래그 = 이동 · Ctrl+휠 = 줌 · 소재카드는 휠 이동 가능',
-        selectSaveFolder: '저장 폴더 지정',
-        saveSettings: '저장',
         loadSettings: '불러오기',
         addWork: '작품 추가',
         reset: '초기화',
-        saveFolderPrefix: '저장 위치',
-        saveFolderUnset: '미지정',
+        saveSnapshot: '저장',
+        restorePoints: '복원',
+        restoreEmpty: '저장된 복원 지점이 없습니다',
+        slotMeta: '블록 {blocks} · 주석 {notes}',
+        restoreReasonManual: '수동',
+        restoreReasonAuto: '자동',
+        restoreReasonLoad: '불러옴',
+        restoreReasonBeforeRestore: '복원 전',
+        exportJson: '파일로 내보내기',
+        importJson: '파일에서 불러오기',
+        savedToast: '복원 지점을 저장했습니다',
+        savedToastFail: '변경이 없어 저장을 건너뜀',
+        restoredToast: '복원했습니다',
+        exportedToast: '파일로 내보냈습니다',
+        importedToast: '불러왔습니다',
         paneSourceBlocks: '작품 · 원문',
         paneNotesShare: '주석 · 공유',
         sourcePlaceholder: '시나리오 / 플롯 / 캐릭터 설정 / 장소 설정 원문',
@@ -3254,9 +3336,8 @@
         documentStatusReview: '원문 확인중',
         documentStatusEditing: '수정중',
         documentStatusEmpty: '비어있음',
-        saveStatusChanged: '변경됨: 설정 저장 필요',
-        saveStatusWaiting: '수동 저장 대기',
-        saveStatusSaved: '저장됨: {time}',
+        saveStatusWaiting: '자동 저장 대기',
+        saveStatusSaved: '자동 저장됨: {time}',
         projectGate: '먼저 작품을 추가하면 문서 작업을 시작할 수 있음.',
         workDocuments: '작품 문서',
         addDocument: '+ 문서 추가',
@@ -3484,13 +3565,24 @@
         languageKo: 'Korean',
         languageEn: 'English',
         canvasHint: 'Space+drag = pan · Ctrl+wheel = zoom · wheel pans in card view',
-        selectSaveFolder: 'Save Folder',
-        saveSettings: 'Save',
         loadSettings: 'Load',
         addWork: 'Add Work',
         reset: 'Reset',
-        saveFolderPrefix: 'Save folder',
-        saveFolderUnset: 'Not set',
+        saveSnapshot: 'Save',
+        restorePoints: 'Restore',
+        restoreEmpty: 'No restore points saved yet',
+        slotMeta: 'Blocks {blocks} · Notes {notes}',
+        restoreReasonManual: 'Manual',
+        restoreReasonAuto: 'Auto',
+        restoreReasonLoad: 'Loaded',
+        restoreReasonBeforeRestore: 'Pre-restore',
+        exportJson: 'Export file',
+        importJson: 'Import file',
+        savedToast: 'Restore point saved',
+        savedToastFail: 'No changes — save skipped',
+        restoredToast: 'Restored',
+        exportedToast: 'Exported to file',
+        importedToast: 'Imported',
         paneSourceBlocks: 'Work · Source',
         paneNotesShare: 'Notes · Share',
         sourcePlaceholder: 'Scenario / plot / character settings / location settings source text',
@@ -3538,9 +3630,8 @@
         documentStatusReview: 'Reviewing source',
         documentStatusEditing: 'Editing',
         documentStatusEmpty: 'Empty',
-        saveStatusChanged: 'Changed: settings save needed',
-        saveStatusWaiting: 'Waiting for manual save',
-        saveStatusSaved: 'Saved: {time}',
+        saveStatusWaiting: 'Waiting for autosave',
+        saveStatusSaved: 'Autosaved: {time}',
         projectGate: 'Add a work first to start document work.',
         workDocuments: 'Work Documents',
         addDocument: '+ Add Document',
@@ -3920,8 +4011,6 @@
       lastMaterialTab: 'episodeMaterials',
       shareOutputDirty: true,
       jsonOutputDirty: true,
-      settingsDirectoryHandle: null,
-      settingsDirectoryName: localStorage.getItem('scenarioMaterialSettingsDirectoryName') || '',
       settings: blankSettings(),
       project: blankProject()
     };
@@ -4848,20 +4937,26 @@
     }
 
     async function manualSaveProject() {
+      if (!workspaceReady()) return;
       const doc = activeDocument();
       saveActiveInputToDocument();
       doc.lastSavedAt = nowIso();
-      await saveProjectJsonToWorkspace({ reason: 'manual' });
+      const created = await pushProjectRestorePoint('manual', { force: true });
+      await putSettingsAutosaveSnapshot('manual_save').catch(err => console.warn('settings autosave failed', err));
+      lastAutosaveAt = Date.now();
+      updateSaveStatus();
+      toast(created ? t('savedToast') : t('savedToastFail'));
       syncAll(false);
     }
 
+    let lastAutosaveAt = 0;
     function updateSaveStatus(message) {
       const el = $('saveStatus');
       if (!el) return;
-      const doc = activeDocument();
-      el.textContent = message || (state.project.workspace && state.project.workspace.hasUnsavedChanges
-        ? t('saveStatusChanged')
-        : (doc.lastSavedAt ? t('saveStatusSaved', { time: new Date(doc.lastSavedAt).toLocaleTimeString() }) : t('saveStatusWaiting')));
+      if (message) { el.textContent = message; return; }
+      el.textContent = lastAutosaveAt
+        ? t('saveStatusSaved', { time: new Date(lastAutosaveAt).toLocaleTimeString() })
+        : t('saveStatusWaiting');
     }
 
     function workspaceReady(project) {
@@ -15095,20 +15190,10 @@
       }
       const debugMode = Boolean(state.pdfOverlayDebugMode);
       el.innerHTML = `
-        <div class="script-page-nav">
+        <div class="script-page-nav" aria-hidden="true">
           <button class="small" data-script-page-go="prev" ${currentIndex <= 0 ? 'disabled' : ''}>Prev</button>
-          <div class="row">
-            <span class="card-title">Page ${esc(pageNo)}</span>
-            <span class="card-sub">${currentIndex + 1} / ${pageEntries.length}</span>
-            <select id="scriptPageSelect" style="width:110px">${pageNos.map(no => `<option value="${esc(no)}" ${Number(no) === Number(pageNo) ? 'selected' : ''}>Page ${esc(no)}</option>`).join('')}</select>
-            ${debugMode ? `<button type="button" class="small" id="copyPageDebugTextBtn">${esc(t('copyPageDebugText'))}</button>
-            <button type="button" class="small" id="copyAllPageDebugTextBtn">${esc(t('copyAllPageDebugText'))}</button>`
-            : `<span class="pdf-feedback-hint">${esc(t('pdfFeedbackHint'))}</span>`}
-          </div>
-          <div class="row">
-            <button type="button" class="small pdf-debug-toggle ${debugMode ? 'on' : ''}" id="pdfDebugToggleBtn" aria-pressed="${debugMode}"><span class="dot"></span>${esc(t('pdfDebugOverlayToggle'))}</button>
-            <button class="small" data-script-page-go="next" ${currentIndex >= pageEntries.length - 1 ? 'disabled' : ''}>Next</button>
-          </div>
+          <select id="scriptPageSelect" style="width:110px">${pageNos.map(no => `<option value="${esc(no)}" ${Number(no) === Number(pageNo) ? 'selected' : ''}>Page ${esc(no)}</option>`).join('')}</select>
+          <button class="small" data-script-page-go="next" ${currentIndex >= pageEntries.length - 1 ? 'disabled' : ''}>Next</button>
         </div>
         ${renderBodyOverlayPreview(doc, pageNo, pageBlocks, overlayBlocks)}
       `;
@@ -15129,7 +15214,6 @@
       document.querySelectorAll('[data-script-note]').forEach(btn => btn.addEventListener('click', () => openAddBlockNote(btn.getAttribute('data-script-note'), 'retake')));
       document.querySelectorAll('[data-script-rewrite]').forEach(btn => btn.addEventListener('click', () => openAddBlockNote(btn.getAttribute('data-script-rewrite'), 'direct_rewrite')));
       document.querySelectorAll('[data-overlay-detail]').forEach(btn => btn.addEventListener('click', () => openBlockReferenceModal(btn.getAttribute('data-overlay-detail'))));
-      if ($('pdfDebugToggleBtn')) $('pdfDebugToggleBtn').addEventListener('click', togglePdfOverlayDebugMode);
       if ($('copyPageDebugTextBtn')) $('copyPageDebugTextBtn').addEventListener('click', copyActivePageDebugText);
       if ($('copyAllPageDebugTextBtn')) $('copyAllPageDebugTextBtn').addEventListener('click', () => copyAllPagesDebugText().catch(error => console.warn('copy all page debug failed', error)));
       if ($('pdfExtractSelectedBtn')) $('pdfExtractSelectedBtn').addEventListener('click', () => updatePdfRangeExtractionFromSelection(true));
@@ -15207,26 +15291,10 @@
       const debugMode = Boolean(state.pdfOverlayDebugMode);
       const modeClass = debugMode ? ' debug-mode' : '';
       return `<div class="body-preview-workspace${modeClass}">
-        <div class="pdf-range-test-panel">
-          <div class="row">
-            <strong>${esc(t('pdfRangeTest'))}</strong>
-            <label>${esc(t('pdfExtractMode'))}</label>
-            <select id="pdfExtractModeSelect">
-              <option value="auto">${esc(t('pdfExtractAuto'))}</option>
-              <option value="horizontal">${esc(t('pdfExtractHorizontal'))}</option>
-              <option value="vertical">${esc(t('pdfExtractVertical'))}</option>
-            </select>
-            <button type="button" class="small" id="pdfExtractSelectedBtn">${esc(t('pdfExtractSelected'))}</button>
-            <button type="button" class="small" id="pdfRecomputeOverlayRectsBtn">${esc(t('pdfRecomputeOverlayRects'))}</button>
-            <button type="button" class="small" id="pdfApplyBodyBoundsBtn">${esc(t('pdfBodyBoundsApply'))}</button>
-            <button type="button" class="small" id="pdfClearBodyBoundsBtn">${esc(t('pdfBodyBoundsClear'))}</button>
-            <span class="chip" id="pdfBodyBoundsStatus">${esc(pdfBodyBoundsStatusLabel(doc))}</span>
-          </div>
-          <textarea id="pdfRangeOutput" class="pdf-range-output" readonly></textarea>
-        </div>
         <div class="script-page">
           <div class="card-head"><div class="card-title">${esc(t('tabScript'))} ・ Page ${esc(pageNo)}</div><div class="chips">${renderPageTags(pageBlocks)}</div></div>
           <div class="pdf-preview-stage" data-page-no="${esc(pageNo)}">
+            <span class="scene-corner tl"></span><span class="scene-corner tr"></span><span class="scene-corner bl"></span><span class="scene-corner br"></span>
             <div class="pdf-page-scroll">
               <div id="pdfPageSurface" class="pdf-page-surface${modeClass}" data-pdf-overlay-stage data-page-no="${esc(pageNo)}">
                 ${background}
@@ -15241,6 +15309,29 @@
               </div>
             </div>
             <div class="pdf-preview-mode-note">${esc(hasPdfFile ? t('pdfPreviewNative') : t('pdfPreviewFallback'))}</div>
+          </div>
+        </div>
+        <div class="pdf-debug-tools">
+          <div class="row">
+            <button type="button" class="small" id="copyPageDebugTextBtn">${esc(t('copyPageDebugText'))}</button>
+            <button type="button" class="small" id="copyAllPageDebugTextBtn">${esc(t('copyAllPageDebugText'))}</button>
+          </div>
+          <div class="pdf-range-test-panel">
+            <div class="row">
+              <strong>${esc(t('pdfRangeTest'))}</strong>
+              <label>${esc(t('pdfExtractMode'))}</label>
+              <select id="pdfExtractModeSelect">
+                <option value="auto">${esc(t('pdfExtractAuto'))}</option>
+                <option value="horizontal">${esc(t('pdfExtractHorizontal'))}</option>
+                <option value="vertical">${esc(t('pdfExtractVertical'))}</option>
+              </select>
+              <button type="button" class="small" id="pdfExtractSelectedBtn">${esc(t('pdfExtractSelected'))}</button>
+              <button type="button" class="small" id="pdfRecomputeOverlayRectsBtn">${esc(t('pdfRecomputeOverlayRects'))}</button>
+              <button type="button" class="small" id="pdfApplyBodyBoundsBtn">${esc(t('pdfBodyBoundsApply'))}</button>
+              <button type="button" class="small" id="pdfClearBodyBoundsBtn">${esc(t('pdfBodyBoundsClear'))}</button>
+              <span class="chip" id="pdfBodyBoundsStatus">${esc(pdfBodyBoundsStatusLabel(doc))}</span>
+            </div>
+            <textarea id="pdfRangeOutput" class="pdf-range-output" readonly></textarea>
           </div>
         </div>
       </div>`;
@@ -18818,7 +18909,7 @@
     }
 
     const SETTINGS_AUTOSAVE_DB = 'scenario_material_control_settings_autosave_v1';
-    const SETTINGS_AUTOSAVE_DB_VERSION = 2;
+    const SETTINGS_AUTOSAVE_DB_VERSION = 3;
     const SETTINGS_AUTOSAVE_STORE = 'snapshots';
     const SETTINGS_PDF_STORE = 'pdfFiles';
     const SETTINGS_AUTOSAVE_KEY = 'last-settings';
@@ -18835,6 +18926,7 @@
           const db = req.result;
           if (!db.objectStoreNames.contains(SETTINGS_AUTOSAVE_STORE)) db.createObjectStore(SETTINGS_AUTOSAVE_STORE);
           if (!db.objectStoreNames.contains(SETTINGS_PDF_STORE)) db.createObjectStore(SETTINGS_PDF_STORE);
+          if (!db.objectStoreNames.contains('projectSlots')) db.createObjectStore('projectSlots');
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -18955,7 +19047,13 @@
       if (!settingsAutosaveSupported()) return;
       window.clearTimeout(settingsAutosaveTimer);
       settingsAutosaveTimer = window.setTimeout(() => {
-        putSettingsAutosaveSnapshot(reason || 'edit').catch(err => console.warn('settings autosave failed', err));
+        putSettingsAutosaveSnapshot(reason || 'edit')
+          .then(() => { lastAutosaveAt = Date.now(); updateSaveStatus(); })
+          .catch(err => console.warn('settings autosave failed', err));
+        // Coarse rolling restore points: at most one automatic slot per interval.
+        if (Date.now() - lastAutoSlotAt > AUTO_SLOT_INTERVAL_MS) {
+          pushProjectRestorePoint('auto').catch(err => console.warn('auto restore point failed', err));
+        }
       }, 450);
     }
 
@@ -19028,7 +19126,6 @@
       renderShareOutput(false);
       renderJson(false);
       applyWorkspaceLock();
-      renderSaveFolderLabel();
       renderStaticI18n();
     }
 
@@ -19771,195 +19868,203 @@
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
     }
 
-    const SETTINGS_FOLDER_DB = 'scenario_material_control_settings_folder_v1';
-    const SETTINGS_FOLDER_STORE = 'handles';
-    const SETTINGS_FOLDER_KEY = 'settings-folder';
+    // ===== Restore-point slots (IndexedDB, per work) — replaces folder-based file save =====
+    const PROJECT_SLOTS_STORE = 'projectSlots';
+    const MAX_PROJECT_SLOTS = 5;
+    const AUTO_SLOT_INTERVAL_MS = 5 * 60 * 1000;
+    let lastAutoSlotAt = 0;
 
-    function folderSaveSupported() {
-      return Boolean(window.showDirectoryPicker && window.indexedDB);
+    function activeWorkId() {
+      return state.project && state.project.workspace && state.project.workspace.workId || '';
     }
 
-    function renderSaveFolderLabel() {
-      const el = $('saveFolderLabel');
-      if (!el) return;
-      const name = state.settingsDirectoryName || (state.settingsDirectoryHandle && state.settingsDirectoryHandle.name) || '';
-      const prefix = t('saveFolderPrefix');
-      const unset = t('saveFolderUnset');
-      el.textContent = name ? `${prefix}: ${name}` : `${prefix}: ${unset}`;
-      el.title = name ? `${prefix}: ${name}` : `${prefix}: ${unset}`;
+    function activeWorkSnapshotClone() {
+      if (!workspaceReady(state.project)) return null;
+      syncActiveWorkToSettings();
+      const work = ensureProjectShape(state.project);
+      try { return JSON.parse(JSON.stringify(work)); } catch (e) { return null; }
     }
 
-    function openSettingsFolderDb() {
-      return new Promise((resolve, reject) => {
-        const req = window.indexedDB.open(SETTINGS_FOLDER_DB, 1);
-        req.onupgradeneeded = () => {
-          req.result.createObjectStore(SETTINGS_FOLDER_STORE);
-        };
-        req.onsuccess = () => resolve(req.result);
+    function projectSlotSummary(work) {
+      const p = (work && work.project) || {};
+      const title = (work && work.workspace && work.workspace.title) || p.savedProjectTitle || p.title || t('untitledProject');
+      const blocks = (work && work.sourceBlocks || []).length;
+      const notes = (work && work.revisionNotes || []).length;
+      const entities = (work && work.entities || []).length;
+      return { title, blocks, notes, entities };
+    }
+
+    function slotSignature(summary, work) {
+      return [summary.blocks, summary.notes, summary.entities, work && work.workspace && work.workspace.updatedAt || ''].join('|');
+    }
+
+    async function getProjectSlotsRecord(workId) {
+      if (!settingsAutosaveSupported() || !workId) return { workId: workId || '', slots: [] };
+      const db = await openSettingsAutosaveDb();
+      const rec = await new Promise((resolve, reject) => {
+        const tx = db.transaction(PROJECT_SLOTS_STORE, 'readonly');
+        const req = tx.objectStore(PROJECT_SLOTS_STORE).get(workId);
+        req.onsuccess = () => resolve(req.result || { workId, slots: [] });
         req.onerror = () => reject(req.error);
       });
+      db.close();
+      if (!Array.isArray(rec.slots)) rec.slots = [];
+      return rec;
     }
 
-    async function putSettingsFolderHandle(handle) {
-      if (!folderSaveSupported() || !handle) return;
-      const db = await openSettingsFolderDb();
+    async function putProjectSlotsRecord(rec) {
+      const db = await openSettingsAutosaveDb();
       await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_FOLDER_STORE, 'readwrite');
-        tx.objectStore(SETTINGS_FOLDER_STORE).put(handle, SETTINGS_FOLDER_KEY);
+        const tx = db.transaction(PROJECT_SLOTS_STORE, 'readwrite');
+        tx.objectStore(PROJECT_SLOTS_STORE).put(rec, rec.workId);
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
       db.close();
     }
 
-    async function getSettingsFolderHandle() {
-      if (!folderSaveSupported()) return null;
-      const db = await openSettingsFolderDb();
-      const handle = await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_FOLDER_STORE, 'readonly');
-        const req = tx.objectStore(SETTINGS_FOLDER_STORE).get(SETTINGS_FOLDER_KEY);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error);
+    // Capture the active project as a restore point (rolling, newest-first, capped at 5).
+    async function pushProjectRestorePoint(reason, opts) {
+      if (!settingsAutosaveSupported()) return false;
+      const workId = activeWorkId();
+      if (!workId) return false;
+      const work = activeWorkSnapshotClone();
+      if (!work) return false;
+      const summary = projectSlotSummary(work);
+      const sig = slotSignature(summary, work);
+      const rec = await getProjectSlotsRecord(workId);
+      const top = rec.slots[0];
+      if (top && top.sig === sig && !(opts && opts.force)) { lastAutoSlotAt = Date.now(); return false; }
+      rec.slots.unshift({
+        id: stableId('slot', workId + (reason || '') + sig + Date.now()),
+        savedAt: nowIso(),
+        reason: reason || 'manual',
+        sig, summary, work
       });
-      db.close();
-      return handle;
-    }
-
-    async function restoreSettingsFolderHandle() {
-      if (state.settingsDirectoryHandle) {
-        renderSaveFolderLabel();
-        return state.settingsDirectoryHandle;
-      }
-      try {
-        const handle = await getSettingsFolderHandle();
-        if (handle) {
-          state.settingsDirectoryHandle = handle;
-          state.settingsDirectoryName = handle.name || state.settingsDirectoryName || '';
-          if (state.settingsDirectoryName) localStorage.setItem('scenarioMaterialSettingsDirectoryName', state.settingsDirectoryName);
-        }
-      } catch (err) {
-        console.warn('settings folder restore failed', err);
-      }
-      renderSaveFolderLabel();
-      return state.settingsDirectoryHandle;
-    }
-
-    async function requestSettingsFolderPermission(handle) {
-      if (!handle) return false;
-      const options = { mode: 'readwrite' };
-      if (handle.queryPermission) {
-        const current = await handle.queryPermission(options);
-        if (current === 'granted') return true;
-      }
-      if (handle.requestPermission) {
-        const next = await handle.requestPermission(options);
-        return next === 'granted';
-      }
+      if (rec.slots.length > MAX_PROJECT_SLOTS) rec.slots.length = MAX_PROJECT_SLOTS;
+      try { await putProjectSlotsRecord(rec); }
+      catch (e) { console.warn('restore point save failed', e); return false; }
+      lastAutoSlotAt = Date.now();
       return true;
     }
 
-    async function selectSettingsFolder() {
-      if (!folderSaveSupported()) {
-        alert('保存先フォルダ機能はこのブラウザでは使えません。Chrome/Edgeで http://127.0.0.1 から開いてください。');
-        return null;
-      }
-      try {
-        const handle = await window.showDirectoryPicker({ id: 'scenario-material-settings', mode: 'readwrite' });
-        const granted = await requestSettingsFolderPermission(handle);
-        if (!granted) {
-          alert('保存先の権限を取得できませんでした。');
-          return null;
-        }
-        state.settingsDirectoryHandle = handle;
-        state.settingsDirectoryName = handle.name || '';
-        if (state.settingsDirectoryName) localStorage.setItem('scenarioMaterialSettingsDirectoryName', state.settingsDirectoryName);
-        await putSettingsFolderHandle(handle);
-        renderSaveFolderLabel();
-        updateSaveStatus(t('selectSaveFolder') + ': ' + (state.settingsDirectoryName || 'folder'));
-        return handle;
-      } catch (err) {
-        if (err && err.name === 'AbortError') return null;
-        alert('保存先指定 エラー: ' + (err && err.message ? err.message : err));
-        return null;
-      }
-    }
-
-    async function ensureSettingsFolderHandle() {
-      let handle = await restoreSettingsFolderHandle();
-      if (!handle) handle = await selectSettingsFolder();
-      if (!handle) return null;
-      const granted = await requestSettingsFolderPermission(handle);
-      if (!granted) {
-        alert('保存先の権限を取得できませんでした。もう一度 保存先指定 を実行してください。');
-        return null;
-      }
-      return handle;
-    }
-
-    async function writeSettingsJsonToFolder(text, filename) {
-      const handle = await ensureSettingsFolderHandle();
-      if (!handle) return false;
-      const fileHandle = await handle.getFileHandle(filename, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(text);
-      await writable.close();
-      state.settingsDirectoryHandle = handle;
-      state.settingsDirectoryName = handle.name || state.settingsDirectoryName || '';
-      renderSaveFolderLabel();
+    async function restoreProjectSlot(slotId) {
+      const workId = activeWorkId();
+      if (!workId) return false;
+      const rec = await getProjectSlotsRecord(workId);
+      const slot = (rec.slots || []).find(s => s.id === slotId);
+      if (!slot || !slot.work) return false;
+      // Safety point so a restore is itself undoable.
+      await pushProjectRestorePoint('before_restore', { force: true });
+      const work = ensureProjectShape(JSON.parse(JSON.stringify(slot.work)));
+      const idx = (state.settings.works || []).findIndex(w => w.workspace && w.workspace.workId === workId);
+      if (idx >= 0) state.settings.works[idx] = work; else state.settings.works.push(work);
+      state.settings.activeWorkId = workId;
+      state.project = work;
+      syncLegacySourceDocument(state.project, activeDocument());
+      loadActiveDocumentToInput();
+      await restorePdfPreviewFilesForProject(state.project);
+      putSettingsAutosaveSnapshot('restore_slot').catch(err => console.warn('settings autosave failed', err));
+      syncAll(false);
       return true;
+    }
+
+    async function clearProjectSlots() {
+      if (!settingsAutosaveSupported()) return;
+      try {
+        const db = await openSettingsAutosaveDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(PROJECT_SLOTS_STORE, 'readwrite');
+          tx.objectStore(PROJECT_SLOTS_STORE).clear();
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      } catch (e) { console.warn('clear slots failed', e); }
+    }
+
+    function restoreReasonLabel(reason) {
+      const map = { manual: 'restoreReasonManual', auto: 'restoreReasonAuto', load: 'restoreReasonLoad', before_restore: 'restoreReasonBeforeRestore' };
+      return t(map[reason] || 'restoreReasonAuto');
+    }
+
+    async function renderRestorePopover() {
+      const pop = $('restorePopover');
+      if (!pop) return;
+      const rec = await getProjectSlotsRecord(activeWorkId());
+      const rows = (rec.slots || []).map((s) => {
+        const sm = s.summary || {};
+        let time = s.savedAt;
+        try { time = new Date(s.savedAt).toLocaleString(); } catch (e) {}
+        return `<button type="button" class="restore-slot" data-restore-slot="${esc(s.id)}">
+          <span class="rs-reason rs-${esc(s.reason)}">${esc(restoreReasonLabel(s.reason))}</span>
+          <span class="rs-main">
+            <span class="rs-title">${esc(sm.title || t('untitledProject'))}</span>
+            <span class="rs-meta">${esc(t('slotMeta', { blocks: sm.blocks || 0, notes: sm.notes || 0 }))} ・ ${esc(time)}</span>
+          </span>
+        </button>`;
+      }).join('') || `<div class="restore-empty">${esc(t('restoreEmpty'))}</div>`;
+      pop.innerHTML = `
+        <div class="restore-head">${esc(t('restorePoints'))}</div>
+        <div class="restore-list">${rows}</div>
+        <div class="restore-foot">
+          <button type="button" class="small" id="restoreExportBtn">${esc(t('exportJson'))}</button>
+          <button type="button" class="small" id="restoreImportBtn">${esc(t('importJson'))}</button>
+        </div>`;
+      pop.querySelectorAll('[data-restore-slot]').forEach(btn => btn.addEventListener('click', async () => {
+        const slotId = btn.getAttribute('data-restore-slot');
+        closeRestorePopover();
+        const ok = await restoreProjectSlot(slotId);
+        if (ok) toast(t('restoredToast'));
+      }));
+      $('restoreExportBtn').addEventListener('click', () => { closeRestorePopover(); exportSettingsJsonFile(); });
+      $('restoreImportBtn').addEventListener('click', () => { closeRestorePopover(); $('projectFileInput').click(); });
+    }
+
+    function openRestorePopover() {
+      const pop = $('restorePopover');
+      if (!pop) return;
+      renderRestorePopover().catch(err => console.warn('restore popover failed', err));
+      pop.classList.remove('hidden');
+      setTimeout(() => document.addEventListener('pointerdown', restorePopoverOutside, true), 0);
+    }
+    function closeRestorePopover() {
+      const pop = $('restorePopover');
+      if (pop) pop.classList.add('hidden');
+      document.removeEventListener('pointerdown', restorePopoverOutside, true);
+    }
+    function restorePopoverOutside(e) {
+      if (e.target.closest('#restorePopover') || e.target.closest('#restoreBtn')) return;
+      closeRestorePopover();
+    }
+    function toggleRestorePopover() {
+      const pop = $('restorePopover');
+      if (pop && pop.classList.contains('hidden')) openRestorePopover(); else closeRestorePopover();
+    }
+
+    let appToastTimer = 0;
+    function toast(message) {
+      const el = $('appToast');
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add('show');
+      window.clearTimeout(appToastTimer);
+      appToastTimer = window.setTimeout(() => el.classList.remove('show'), 1900);
     }
 
     function projectJsonFilename() {
       const works = state.settings && state.settings.works || [];
       const baseTitle = works.length === 1 ? workspaceTitle(works[0]) : 'scenario_material_control_settings';
       const baseName = (baseTitle || 'scenario_material_control_settings').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80);
-      return baseName + '_settings_kari_v0_1.json';
+      return baseName + '_settings.json';
     }
 
-    async function saveProjectJsonToWorkspace(options) {
+    function exportSettingsJsonFile() {
       saveActiveInputToDocument();
       syncActiveWorkToSettings();
-      const at = nowIso();
-      state.settings.generator.generatedAt = at;
-      const previousSaveStates = (state.settings.works || []).map((work) => ({
-        work,
-        hasUnsavedChanges: work.workspace.hasUnsavedChanges,
-        lastFileSavedAt: work.workspace.lastFileSavedAt,
-        lastSaveReason: work.workspace.lastSaveReason
-      }));
-      (state.settings.works || []).forEach((work) => {
-        work.generator.generatedAt = at;
-        work.workspace.updatedAt = at;
-        work.workspace.hasUnsavedChanges = false;
-        work.workspace.lastFileSavedAt = at;
-        work.workspace.lastSaveReason = options && options.reason || 'manual';
-      });
-      const filename = projectJsonFilename();
-      if (workspaceReady()) state.project.workspace.lastFileName = filename;
-      let ok = false;
-      try {
-        ok = await writeSettingsJsonToFolder(JSON.stringify(state.settings, null, 2), filename);
-      } catch (err) {
-        alert('設定保存 エラー: ' + (err && err.message ? err.message : err));
-      }
-      if (!ok) {
-        previousSaveStates.forEach((prev) => {
-          prev.work.workspace.hasUnsavedChanges = prev.hasUnsavedChanges;
-          prev.work.workspace.lastFileSavedAt = prev.lastFileSavedAt;
-          prev.work.workspace.lastSaveReason = prev.lastSaveReason;
-        });
-        updateSaveStatus(t('saveSettings') + ' canceled/failed');
-        return false;
-      }
-      if (workspaceReady()) {
-        state.project.workspace.hasUnsavedChanges = false;
-        state.project.workspace.lastFileSavedAt = at;
-        state.project.workspace.lastSaveReason = options && options.reason || 'manual';
-        activeDocument().lastSavedAt = at;
-      }
-      updateSaveStatus(t('saveSettings') + ': ' + (state.settingsDirectoryName ? state.settingsDirectoryName + '/' : '') + filename);
-      putSettingsAutosaveSnapshot('manual_save').catch(err => console.warn('settings autosave failed', err));
-      return true;
+      state.settings.generator.generatedAt = nowIso();
+      downloadBlob(JSON.stringify(state.settings, null, 2), projectJsonFilename(), 'application/json;charset=utf-8');
+      toast(t('exportedToast'));
     }
 
     function downloadStructuredText() {
@@ -19992,6 +20097,9 @@
         if (workspaceReady()) state.project.workspace.hasUnsavedChanges = false;
         syncAll(false);
         putSettingsAutosaveSnapshot('load_settings_file').catch(err => console.warn('settings autosave failed', err));
+        pushProjectRestorePoint('load', { force: true }).catch(err => console.warn('load restore point failed', err));
+        lastAutosaveAt = Date.now();
+        toast(t('importedToast'));
         const drop = $('dropZone');
         if (drop) drop.textContent = `${t('loadSettings')}: ${file.name}`;
       } catch (err) {
@@ -20408,12 +20516,11 @@ V（城島剛志）
     function wire() {
       $('languageSelect').addEventListener('change', () => setUiLanguage($('languageSelect').value));
       $('createProjectBtn').addEventListener('click', openCreateProjectModal);
-      $('selectSettingsFolderBtn').addEventListener('click', selectSettingsFolder);
       $('saveSettingsBtn').addEventListener('click', manualSaveProject);
-      $('loadSettingsBtn').addEventListener('click', () => $('projectFileInput').click());
+      $('restoreBtn').addEventListener('click', toggleRestorePopover);
       $('workSelect').addEventListener('change', () => setActiveWork($('workSelect').value));
       $('projectFileInput').addEventListener('change', (ev) => { const file = ev.target.files && ev.target.files[0]; if (file) loadProjectJsonFile(file); ev.target.value = ''; });
-      $('resetBtn').addEventListener('click', () => { state.settings = blankSettings(); state.project = blankProject(); state.sourceReviewDraft = null; clearSettingsAutosaveSnapshot().catch(err => console.warn('settings autosave clear failed', err)); clearPdfPreviewFileCache().catch(err => console.warn('pdf preview cache clear failed', err)); $('sourceInput').value = ''; $('sourceInput').classList.add('hidden'); if ($('dropZone')) $('dropZone').textContent = t('dropDefault'); syncAll(); });
+      $('resetBtn').addEventListener('click', () => { state.settings = blankSettings(); state.project = blankProject(); state.sourceReviewDraft = null; clearSettingsAutosaveSnapshot().catch(err => console.warn('settings autosave clear failed', err)); clearProjectSlots().catch(err => console.warn('clear slots failed', err)); clearPdfPreviewFileCache().catch(err => console.warn('pdf preview cache clear failed', err)); $('sourceInput').value = ''; $('sourceInput').classList.add('hidden'); if ($('dropZone')) $('dropZone').textContent = t('dropDefault'); syncAll(); });
       $('copyJsonBtn').addEventListener('click', () => copyText(renderJson(true)));
       $('copyShareBtnInline').addEventListener('click', () => copyText(renderShareOutput(true)));
       $('downloadTextBtn').addEventListener('click', downloadStructuredText);
@@ -20512,12 +20619,12 @@ V（城島剛志）
 
     async function initializeApp() {
       renderStaticI18n();
-      await restoreSettingsAutosaveSnapshot();
+      const restored = await restoreSettingsAutosaveSnapshot();
+      if (restored) lastAutosaveAt = Date.now();
       loadActiveDocumentToInput();
       await restorePdfPreviewFilesForProject(state.project);
       syncAll();
       initCanvasShell();
-      restoreSettingsFolderHandle();
     }
 
     wire();
