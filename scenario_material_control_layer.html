@@ -3,24 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Scenario Material Control Layer Kari 065</title>
+  <title>Scenario Material Control Layer</title>
   <style>
     :root {
-      --bg: #e8e8e1;
-      --panel: #f8f8f3;
+      /* Modern-minimal surface stack (canvas shell, ver074): neutral greys, single blue accent */
+      --bg: #f4f4f2;
+      --canvas: #f4f4f2;
+      --dot: #dededa;
+      --panel: #ffffff;
+      --raised: #fafaf8;
       --paper: #ffffff;
-      --ink: #141414;
-      --muted: #686860;
-      --line: #c9c9bd;
-      --line-strong: #98988c;
-      --focus: #2d6ea3;
-      --danger: #a34539;
-      --warn: #a26820;
-      --good: #356f47;
+      --ink: #191918;
+      --ink-soft: #4c4c47;
+      --muted: #8a8a82;
+      --faint: #adada4;
+      --line: #e6e6e1;
+      --line-soft: #eeeeea;
+      --line-strong: #d4d4cd;
+      --focus: #2f6fed;
+      --focus-tint: #e8f0fe;
+      --focus-line: #c3d7fb;
+      --danger: #d4493e;
+      --warn: #b97d1f;
+      --good: #2e8155;
       --info: #3a5f83;
-      --chip: #eeeee6;
-      --shadow: 0 10px 30px rgba(0,0,0,.12);
-      --radius: 10px;
+      --chip: #f1f1ed;
+      /* Feedback semantics (fact=green / retake=red / rewrite=amber) */
+      --fact: #2e8155;      --fact-tint: #e9f5ee;   --fact-line: #bfe0cd;
+      --retake: #d4493e;    --retake-tint: #fdeeec; --retake-line: #f0bfb9;
+      --rewrite: #b97d1f;   --rewrite-tint: #fbf3e2; --rewrite-line: #e9d3a3;
+      /* Depth: floating-window language */
+      --shadow-sm: 0 1px 2px rgba(25,25,24,.05);
+      --shadow-md: 0 1px 2px rgba(25,25,24,.05), 0 8px 28px rgba(25,25,24,.09);
+      --shadow-lg: 0 1px 2px rgba(25,25,24,.06), 0 14px 44px rgba(25,25,24,.14);
+      --shadow-chrome: 0 1px 2px rgba(25,25,24,.06), 0 6px 20px rgba(25,25,24,.10);
+      --shadow: var(--shadow-lg);
+      --ring: 0 0 0 3px var(--focus-line);
+      --radius: 13px;
+      --r-sm: 8px;
+      --r-md: 10px;
+      --r-lg: 14px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       --sans: "Pretendard", "Noto Sans KR", "Yu Gothic", "Meiryo", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     }
@@ -29,131 +51,252 @@
     html, body { height: 100%; }
     body {
       margin: 0;
+      overflow: hidden;
       background: var(--bg);
       color: var(--ink);
       font-family: var(--sans);
       font-size: 13px;
       line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
+
+    /* Scrollbars — slim, paper-tinted */
+    * { scrollbar-width: thin; scrollbar-color: #c8c7ba transparent; }
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-thumb { background: #cbcabd; border: 3px solid transparent; background-clip: padding-box; border-radius: 999px; }
+    *::-webkit-scrollbar-thumb:hover { background: #b3b2a4; border: 3px solid transparent; background-clip: padding-box; }
+    *::-webkit-scrollbar-track { background: transparent; }
 
     button, input, select, textarea { font: inherit; }
     button {
-      min-height: 31px;
-      padding: 5px 10px;
-      border: 1px solid #b9b9ad;
-      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-height: 32px;
+      padding: 5px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-md);
       color: var(--ink);
       background: #fff;
       cursor: pointer;
-      font-weight: 800;
+      font-weight: 650;
+      letter-spacing: -.005em;
+      box-shadow: var(--shadow-sm);
+      transition: border-color .13s ease, background .13s ease, box-shadow .13s ease, transform .04s ease;
     }
-    button:hover { border-color: #727269; }
-    button.primary { background: var(--focus); border-color: var(--focus); color: #fff; }
-    button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-    button.ghost { background: transparent; }
-    button.small { min-height: 25px; padding: 3px 7px; font-size: 11px; border-radius: 7px; }
-    button:disabled { opacity: .45; cursor: default; }
+    button:hover { border-color: #b9b9b0; background: #f8f8f6; }
+    button:active { transform: translateY(.5px); box-shadow: none; }
+    button:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--focus); }
+    button.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+    button.primary:hover { background: #33332f; border-color: #33332f; }
+    button.danger { background: #fff; border-color: var(--retake-line); color: var(--danger); }
+    button.danger:hover { background: var(--retake-tint); border-color: var(--danger); }
+    button.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-soft); }
+    button.ghost:hover { background: rgba(0,0,0,.045); border-color: transparent; }
+    button.small { min-height: 26px; padding: 3px 9px; font-size: 11.5px; border-radius: var(--r-sm); font-weight: 650; }
+    button:disabled { opacity: .42; cursor: default; box-shadow: none; }
+    button:disabled:hover { border-color: var(--line-strong); background: #fff; }
 
     input, select, textarea {
       width: 100%;
-      border: 1px solid #bebeb2;
-      border-radius: 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-md);
       background: #fff;
       color: var(--ink);
-      padding: 7px 8px;
+      padding: 7px 9px;
+      transition: border-color .13s ease, box-shadow .13s ease;
     }
+    input:hover, select:hover, textarea:hover { border-color: #9c9b8b; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--focus); box-shadow: var(--ring); }
+    select { cursor: pointer; }
     textarea { min-height: 96px; resize: vertical; line-height: 1.52; }
-    label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; font-weight: 900; }
+    label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+    ::placeholder { color: var(--faint); }
+    ::selection { background: #cfe2f1; }
 
-    .app { min-height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--line);
-      background: #f4f4ef;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-    .brand { display: grid; gap: 1px; min-width: 220px; }
-    .brand-title { font-size: 14px; font-weight: 1000; letter-spacing: -.01em; }
-    .brand-subtitle { color: var(--muted); font-size: 11px; font-weight: 800; }
-    .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-items: center; }
-    .settings-group {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 3px;
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      background: #fff;
-    }
-    .settings-label {
-      padding: 0 4px;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 1000;
-    }
-    .save-folder-label {
-      max-width: 190px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 900;
-    }
-    .work-select {
-      width: 170px;
-      min-height: 31px;
-      padding: 5px 7px;
-      font-size: 12px;
-    }
-    .language-select {
-      width: 106px;
-      min-height: 31px;
-      padding: 5px 7px;
-      font-size: 12px;
-    }
+    .app { height: 100%; }
 
+    /* ===== Canvas shell (ver074): the whole screen is a pannable/zoomable work surface ===== */
     .workspace {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: 360px minmax(520px, 1fr) 360px;
-      gap: 8px;
-      padding: 8px;
+      position: fixed; inset: 0;
+      overflow: hidden;
+      background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+      background-size: 26px 26px;
+      cursor: grab;
     }
-    @media (max-width: 1120px) {
-      .workspace { grid-template-columns: 1fr; }
-      .pane { min-height: 420px; }
+    .workspace.panning { cursor: grabbing; }
+
+    /* Center scene = the world; pan/zoom applied as a single transform (origin 0 0) */
+    .pane-center {
+      position: absolute; left: 0; top: 0;
+      width: 960px;
+      transform-origin: 0 0;
+      border: 0; background: transparent; box-shadow: none;
+      overflow: visible;
+      display: block;
+    }
+    .pane-center > .pane-body { overflow: visible; padding: 0; }
+
+    /* Side panels: floating, collapsible to rails */
+    .side-panel {
+      position: fixed; top: 56px;
+      z-index: 30;
+      width: 300px; max-height: calc(100vh - 118px);
+      display: flex; flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--panel);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .side-panel { cursor: auto; }
+    .side-panel-left { left: 14px; }
+    .side-panel-right { right: 14px; width: 322px; }
+    body[data-panel-left="closed"] #panelLeft { display: none; }
+    body[data-panel-right="closed"] #panelRight { display: none; }
+    body[data-panel-left="open"] #railLeft { display: none; }
+    body[data-panel-right="open"] #railRight { display: none; }
+    .side-panel-foot {
+      flex: none;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 8px 13px;
+      border-top: 1px solid var(--line-soft);
+      color: var(--muted); font-size: 10px; font-weight: 650;
+    }
+    .side-panel-foot .ver { font-family: var(--mono); font-size: 9.5px; }
+    .panel-collapse {
+      min-height: 24px; width: 26px; padding: 0;
+      border: 0; background: transparent; box-shadow: none;
+      color: var(--muted); font-size: 13px; font-weight: 800;
+    }
+    .panel-collapse:hover { background: #f2f2ef; border-color: transparent; color: var(--ink); }
+    .save-folder-label {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--muted); font-size: 10.5px; font-weight: 650;
+    }
+    .work-select { min-height: 28px; padding: 3px 7px; font-size: 12px; }
+
+    /* Rails: collapsed panels floating at the sides */
+    .side-rail {
+      position: fixed; top: 56px;
+      z-index: 30;
+      width: 46px; padding: 15px 0;
+      display: flex; flex-direction: column; align-items: center; gap: 11px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      box-shadow: var(--shadow-chrome);
+      cursor: pointer; user-select: none;
+    }
+    .side-rail:hover { box-shadow: var(--shadow-lg); }
+    .side-rail-left { left: 14px; }
+    .side-rail-right { right: 14px; }
+    .rail-ic { width: 17px; height: 17px; color: var(--ink-soft); }
+    .rail-label {
+      writing-mode: vertical-rl; letter-spacing: .16em;
+      font-size: 10.5px; font-weight: 700; color: var(--ink-soft); white-space: nowrap;
+    }
+    .rail-count {
+      min-width: 20px; height: 20px; padding: 0 5px;
+      display: grid; place-items: center;
+      border-radius: 999px;
+      background: var(--retake-tint); color: var(--retake);
+      font-size: 10px; font-weight: 800;
     }
 
-    .pane {
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+    /* Floating chrome: slim topbar (work/save/lang + centered mode pill) / bottom strip / hint */
+    .canvas-chrome { position: fixed; z-index: 32; }
+    #appTopbar {
+      top: 0; left: 0; right: 0;
+      height: 44px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 12px;
       background: var(--panel);
-      box-shadow: 0 1px 0 rgba(0,0,0,.02);
+      border-bottom: 1px solid var(--line-soft);
+      box-shadow: var(--shadow-sm);
+      z-index: 34;
     }
+    .topbar-zone { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .topbar-center { position: absolute; left: 50%; transform: translateX(-50%); gap: 8px; }
+    .topbar-right { margin-left: auto; }
+    #appTopbar button.small { min-height: 24px; padding: 2px 8px; font-size: 10.5px; box-shadow: none; }
+    #appTopbar .work-select { width: 132px; min-height: 26px; padding: 2px 6px; font-size: 11.5px; }
+    #appTopbar .language-select { width: 82px; min-height: 24px; padding: 1px 6px; font-size: 10.5px; }
+    #appTopbar .save-folder-label {
+      max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--faint); font-size: 9.5px; font-weight: 650;
+    }
+    /* id selectors: must beat the generic .tabs grid (declared later in this sheet) */
+    #middleTabs.mode-pill {
+      display: flex; gap: 2px; padding: 2px;
+      width: max-content;
+      border: 0; box-shadow: inset 0 0 0 1px var(--line-soft);
+      background: var(--chip); border-radius: 999px;
+    }
+    #middleTabs .tab {
+      border: 0; background: transparent; box-shadow: none;
+      border-radius: 999px; padding: 4px 16px; min-height: 24px;
+      font-size: 11.5px; font-weight: 700; color: var(--muted);
+    }
+    #middleTabs .tab:hover { background: rgba(255,255,255,.7); }
+    #middleTabs .tab.active { background: var(--ink); color: #fff; }
+    .page-arrow {
+      width: 26px; height: 26px; min-height: 0; padding: 0;
+      border: 0; border-radius: 50%;
+      background: transparent; color: var(--ink-soft);
+      box-shadow: none;
+      font-size: 14px; font-weight: 700;
+    }
+    .page-arrow:hover { color: var(--ink); background: var(--chip); border-color: transparent; }
+    .page-chip {
+      padding: 3px 9px; border-radius: 999px;
+      background: var(--chip);
+      color: var(--muted); font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    /* Floating scene info (page title + character tags) just under the topbar */
+    #sceneInfoBar {
+      top: 52px; left: 50%; transform: translateX(-50%);
+      z-index: 31;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+      max-width: min(940px, 86vw);
+      padding: 5px 12px;
+      background: var(--panel);
+      border: 1px solid var(--line-soft);
+      border-radius: 16px;
+      box-shadow: var(--shadow-chrome);
+    }
+    #sceneInfoBar .card-title { font-size: 11px; font-weight: 750; color: var(--ink-soft); white-space: nowrap; }
+    #sceneInfoBar .chips { justify-content: center; }
+    #bottomStrip {
+      bottom: 14px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 12px;
+      padding: 5px 8px 5px 14px;
+      background: var(--panel); border-radius: 999px; box-shadow: var(--shadow-chrome);
+    }
+    .strip-item { display: inline-flex; align-items: center; gap: 5px; }
+    .strip-k { color: var(--faint); font-size: 10px; font-weight: 750; }
+    .strip-mono { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); font-weight: 700; }
+    .strip-btn { min-height: 24px; padding: 2px 9px; border: 0; border-radius: 999px; background: transparent; box-shadow: none; gap: 5px; }
+    .strip-btn:hover { background: #f2f2ef; border-color: transparent; }
+    .strip-dot { width: 7px; height: 7px; border-radius: 50%; background: #d3d3cb; }
+    .strip-dot.on { background: var(--good); }
+    #bottomStrip .language-select { width: 92px; min-height: 24px; padding: 2px 6px; font-size: 11px; border-radius: 999px; border-color: var(--line); }
+    #panHint { bottom: 18px; left: 16px; z-index: 25; color: var(--faint); font-size: 10.5px; font-weight: 600; }
+
+    /* Pane primitives (side panels reuse these) */
+    .pane { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
     .pane-header {
       flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 8px 9px;
-      border-bottom: 1px solid #d6d6ca;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 11px 13px 9px;
+      border-bottom: 1px solid var(--line-soft);
       background: #fff;
     }
-    .pane-title { font-weight: 1000; font-size: 12px; white-space: nowrap; }
+    .pane-title { font-weight: 750; font-size: 12px; color: var(--ink); white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
     .pane-actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
-    .pane-body { min-height: 0; overflow: auto; padding: 10px; }
+    .pane-body { min-height: 0; overflow: auto; padding: 12px; }
 
     .stack { display: grid; gap: 10px; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -165,14 +308,16 @@
     .hidden { display: none !important; }
 
     .note {
-      padding: 8px 9px;
-      border: 1px solid #d7d7cd;
-      border-radius: 8px;
-      background: #fff;
-      color: #44443d;
+      padding: 9px 11px 9px 12px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--focus-line);
+      border-radius: var(--r-md);
+      background: linear-gradient(var(--focus-tint), #ffffff 70%);
+      color: var(--ink-soft);
       font-size: 11px;
+      line-height: 1.55;
     }
-    .note strong { color: #151515; }
+    .note strong { color: var(--ink); font-weight: 750; }
 
     .document-explorer {
       display: grid;
@@ -281,43 +426,65 @@
     .prompt-textarea { min-height: 220px; font-family: var(--mono); font-size: 11px; }
     .share-textarea { min-height: 360px; font-family: var(--mono); font-size: 11px; white-space: pre; }
 
-    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
     .stat-card {
       min-width: 0;
-      padding: 7px;
-      border: 1px solid #d3d3c7;
-      border-radius: 8px;
-      background: #fff;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: linear-gradient(#ffffff, #f9f8f2);
       text-align: left;
+      box-shadow: var(--shadow-sm);
+      transition: border-color .12s ease, box-shadow .12s ease, transform .06s ease;
     }
     button.stat-card { cursor: pointer; }
-    .stat-card.selected { border-color: var(--focus); background: #eef4f7; }
-    .stat-value { font-size: 18px; font-weight: 1000; line-height: 1.1; }
-    .stat-label { margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 900; }
+    button.stat-card:hover { border-color: var(--line-strong); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .stat-card.selected { border-color: var(--focus); background: var(--focus-tint); box-shadow: var(--ring); }
+    .stat-value { font-size: 19px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .stat-label { margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .01em; }
 
-    .tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 3px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: #ecebe1;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+    }
     .tab {
       min-height: 28px;
-      padding: 3px 6px;
-      border: 1px solid #cfcfc4;
-      background: #fff;
-      border-radius: 7px;
-      font-size: 11px;
-      font-weight: 900;
+      padding: 3px 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: var(--r-sm);
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--ink-soft);
+      box-shadow: none;
     }
-    .tab.active { color: #fff; background: var(--info); border-color: var(--info); }
+    .tab:hover { background: rgba(255,255,255,.6); border-color: transparent; }
+    .tab.active {
+      color: var(--ink);
+      background: linear-gradient(#ffffff, #f6f5ef);
+      border-color: var(--line-strong);
+      box-shadow: var(--shadow-sm);
+    }
+    .tab.active .chip { background: var(--focus); color: #fff; border-color: var(--focus); }
 
-    .block-list, .card-list, .conflict-list { display: grid; gap: 7px; }
+    .block-list, .card-list, .conflict-list { display: grid; gap: 9px; }
     .block-card, .entity-card, .rule-card, .conflict-card, .retake-card, .annotation-card {
       min-width: 0;
-      border: 1px solid #cfcfc3;
-      border-radius: 9px;
-      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--paper);
       overflow: hidden;
+      box-shadow: var(--shadow-sm);
     }
-    .block-card { cursor: pointer; }
-    .block-card:hover { border-color: #8d8d80; }
-    .block-card.selected { outline: 2px solid var(--focus); outline-offset: 1px; }
+    .block-card { cursor: pointer; transition: border-color .13s ease, box-shadow .13s ease, transform .06s ease; }
+    .block-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .block-card.selected { border-color: var(--focus); box-shadow: var(--ring), var(--shadow-md); }
     .block-add-card {
       min-height: 42px;
       border: 1px dashed #a9a99b;
@@ -338,14 +505,14 @@
       justify-content: space-between;
       align-items: flex-start;
       gap: 8px;
-      padding: 8px;
-      border-bottom: 1px solid #ededdf;
-      background: #fbfbf7;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line-soft);
+      background: linear-gradient(#fcfbf6, #f7f6f0);
     }
-    .card-title { min-width: 0; font-weight: 1000; }
-    .card-sub { color: var(--muted); font-size: 10px; font-weight: 800; }
-    .card-body { display: grid; gap: 7px; padding: 8px; }
-    .card-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 7px 8px; border-top: 1px solid #ededdf; background: #fafaf6; }
+    .card-title { min-width: 0; font-weight: 750; letter-spacing: -.005em; }
+    .card-sub { color: var(--muted); font-size: 10px; font-weight: 600; }
+    .card-body { display: grid; gap: 8px; padding: 10px; }
+    .card-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line-soft); background: #faf9f4; }
 
     .chips { display: flex; flex-wrap: wrap; gap: 4px; }
     .chip {
@@ -377,8 +544,8 @@
     .chip.gender-other { color: #433565; background: #eee9fb; border-color: #cbc0ec; }
     .chip.age { color: #4a3c11; background: #f8f1d7; border-color: #ded099; }
 
-    .block-meta { display: flex; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 900; }
-    .block-text { padding: 7px 8px 8px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+    .block-meta { display: flex; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 650; }
+    .block-text { padding: 9px 11px 10px; white-space: pre-wrap; word-break: break-word; font-size: 12.5px; line-height: 1.62; color: var(--ink); }
     .block-card.front_matter { border-left: 4px solid #87877b; }
     .block-card.cast_list, .block-card.cast { border-left: 4px solid #665f92; }
     .block-card.body { border-left: 4px solid #2e7653; }
@@ -399,19 +566,21 @@
     .conflict-problem { font-weight: 900; }
     .source-link { color: var(--focus); font-weight: 900; cursor: pointer; text-decoration: underline; }
     .dropzone {
-      min-height: 54px;
+      min-height: 56px;
       display: grid;
       place-items: center;
-      padding: 10px;
-      border: 1px dashed #a9a99d;
-      border-radius: 8px;
-      background: #fff;
+      padding: 11px;
+      border: 1.5px dashed var(--line-strong);
+      border-radius: var(--r-md);
+      background: linear-gradient(var(--raised), #ffffff);
       color: var(--muted);
       font-size: 11px;
-      font-weight: 900;
+      font-weight: 650;
       text-align: center;
+      transition: border-color .13s ease, background .13s ease, color .13s ease;
     }
-    .dropzone.dragover { border-color: var(--focus); background: #eef6fb; color: var(--focus); }
+    .dropzone:hover { border-color: var(--focus-line); }
+    .dropzone.dragover { border-color: var(--focus); background: var(--focus-tint); color: var(--focus); box-shadow: var(--ring); }
     .dropzone.disabled {
       opacity: .55;
       pointer-events: none;
@@ -590,7 +759,7 @@
     }
     .pdf-page-surface {
       position: relative;
-      width: min(900px, 100%);
+      width: min(1160px, 100%);
       min-height: 1120px;
       margin: 0 auto;
       overflow: hidden;
@@ -993,6 +1162,322 @@
       font-weight: 900;
       pointer-events: none;
     }
+
+    /* ============================================================
+       PDF FEEDBACK SURFACE — clean mode (default) vs debug mode
+       Clean: faint group outlines + tidy speaker tags, no drag,
+       click a block → inline feedback composer beside/below it.
+       Debug: legacy draggable boxes, guides, bounds, extraction.
+       ============================================================ */
+
+    /* Debug-only chrome: hidden in clean mode */
+    .pdf-page-surface:not(.debug-mode) .pdf-layout-guide-layer,
+    .pdf-page-surface:not(.debug-mode) .pdf-layout-body-cut-line,
+    .pdf-page-surface:not(.debug-mode) .pdf-body-boundary-line,
+    .pdf-page-surface:not(.debug-mode) .pdf-body-boundary-fill,
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-resize,
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-selection-toolbar { display: none !important; }
+    .body-preview-workspace:not(.debug-mode) .pdf-range-test-panel { display: none !important; }
+
+    /* Clean mode: overlay boxes become quiet click targets (no visible frame,
+       no move cursor, no drag). The feedback layer sits on top of them. */
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-box {
+      border-color: transparent;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background .12s ease, box-shadow .12s ease;
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-box:hover {
+      background: rgba(47,109,166,.09);
+      box-shadow: inset 0 0 0 1.5px rgba(47,109,166,.5);
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-box.has-feedback {
+      box-shadow: inset 0 0 0 1.5px rgba(176,69,58,.5);
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-box.compose-active {
+      background: rgba(47,109,166,.12);
+      box-shadow: inset 0 0 0 2px var(--focus);
+    }
+    /* Hide the debug tag/tools inside boxes in clean mode — tags are re-drawn cleanly below */
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-tools { display: none; }
+
+    /* Clean-mode group outline: soft, rounded, subtle tint by kind */
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-group-box {
+      border: 1px solid rgba(120,116,100,.32);
+      border-radius: 9px;
+      background: rgba(120,116,100,.03);
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-group-box.scene {
+      border-color: rgba(176,69,58,.30);
+      background: rgba(176,69,58,.028);
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-group-box.front {
+      border-color: rgba(95,85,137,.30);
+      background: rgba(95,85,137,.028);
+    }
+    /* Clean-mode group label: small pill, not a mono debug tag */
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-group-label {
+      bottom: auto;
+      top: -11px;
+      left: 8px;
+      max-width: calc(100% - 16px);
+      padding: 1px 8px;
+      border: 1px solid rgba(120,116,100,.34);
+      border-radius: 999px;
+      background: #fff;
+      color: #56544a;
+      font-family: var(--sans);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      text-overflow: ellipsis;
+      box-shadow: var(--shadow-sm);
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-group-box.scene .pdf-overlay-group-label {
+      color: #9c3e34; border-color: rgba(176,69,58,.34);
+    }
+    .pdf-page-surface:not(.debug-mode) .pdf-overlay-group-box.front .pdf-overlay-group-label {
+      color: #58507f; border-color: rgba(95,85,137,.34);
+    }
+
+    /* Pane 3: compact annotation rows (no ids / timestamps on screen) */
+    .conflict-list { display: grid; gap: 4px; }
+    .annotation-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      padding: 5px 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .annotation-row.done { opacity: .55; }
+    .annotation-row.done .annotation-row-text { text-decoration: line-through; }
+    .annotation-row-badge {
+      flex: none;
+      margin-top: 1px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--retake);
+      color: #fff;
+      font-size: 8.5px;
+      font-weight: 800;
+      letter-spacing: .03em;
+      white-space: nowrap;
+    }
+    .annotation-row.fact .annotation-row-badge { background: var(--fact); }
+    .annotation-row.direct_rewrite .annotation-row-badge { background: var(--rewrite); }
+    .annotation-row-main { min-width: 0; flex: 1; display: grid; gap: 2px; }
+    .annotation-row-text { white-space: pre-wrap; word-break: break-word; }
+    .annotation-row-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .annotation-row-target {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 650;
+    }
+    .annotation-row-target[data-jump-block] { cursor: pointer; text-decoration: underline dotted; }
+    .annotation-row-actions { flex: none; display: flex; gap: 2px; }
+    .annotation-row-actions button {
+      min-height: 18px;
+      width: 20px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--muted);
+      font-weight: 800;
+      cursor: pointer;
+      opacity: .6;
+    }
+    .annotation-row-actions button:hover { opacity: 1; }
+
+    /* Global density: internal-id sublines (mono) are debug info — keep them tiny */
+    .card-sub.mono {
+      font-size: 8.5px;
+      opacity: .55;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Feedback marker layer — sits above overlay boxes, draws note chips & composer */
+    .pdf-feedback-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 7;
+      pointer-events: none;
+    }
+    .pdf-page-surface.debug-mode .pdf-feedback-layer { display: none; }
+    /* Note stack: vertically-written (縦書き) capsules that read like extra script
+       columns. One line by default; long text wraps into 2-3 vertical lines so the
+       box grows sideways. Multiple notes on one block sit side by side, oldest on
+       the right (vertical JP reading order). */
+    .pdf-feedback-note-stack {
+      position: absolute;
+      display: flex;
+      flex-direction: row-reverse;
+      align-items: flex-start;
+      gap: 4px;
+    }
+    .pdf-feedback-note-stack.dragging { opacity: .82; }
+    .pdf-feedback-note-stack.dragging .pdf-feedback-note { box-shadow: var(--shadow-lg); }
+    .pdf-feedback-note-head { cursor: grab; touch-action: none; }
+    .pdf-feedback-note-stack.dragging .pdf-feedback-note-head { cursor: grabbing; }
+    .pdf-feedback-note-text { cursor: pointer; }
+    /* Leader lines: under the capsules, over the page */
+    .pdf-feedback-links {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+    .pdf-feedback-link path { fill: none; stroke: var(--retake); stroke-width: 1.1; opacity: .45; }
+    .pdf-feedback-link circle { fill: var(--retake); opacity: .55; }
+    .pdf-feedback-link.fact path { stroke: var(--fact); }
+    .pdf-feedback-link.fact circle { fill: var(--fact); }
+    .pdf-feedback-link.direct_rewrite path { stroke: var(--rewrite); }
+    .pdf-feedback-link.direct_rewrite circle { fill: var(--rewrite); }
+    .pdf-feedback-note {
+      position: relative;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 5px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: #fff;
+      color: #3d382f;
+      font-size: 10.5px;
+      line-height: 1.42;
+      box-shadow: var(--shadow-md);
+    }
+    .pdf-feedback-note-head {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 8.5px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      opacity: .9;
+    }
+    .pdf-feedback-note-badge {
+      padding: 5px 1.5px;
+      border-radius: 999px;
+      background: var(--retake);
+      color: #fff;
+      /* nowrap: without it the vertical badge wraps its last kanji into a second
+         column, which reads as the character drifting left */
+      white-space: nowrap;
+    }
+    .pdf-feedback-note.fact .pdf-feedback-note-badge { background: var(--fact); }
+    .pdf-feedback-note.direct_rewrite .pdf-feedback-note-badge { background: var(--rewrite); }
+    .pdf-feedback-note-del {
+      min-height: 14px; width: 14px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-weight: 800;
+      opacity: .5;
+      box-shadow: none;
+      cursor: pointer;
+    }
+    .pdf-feedback-note-del:hover { opacity: 1; }
+    .pdf-feedback-note-text {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      white-space: pre-wrap;
+      word-break: break-word;
+      letter-spacing: .04em;
+    }
+
+    /* Inline composer popover */
+    .pdf-feedback-composer {
+      position: absolute;
+      z-index: 9;
+      pointer-events: auto;
+      width: 248px;
+      max-width: 92%;
+      display: grid;
+      gap: 7px;
+      padding: 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-md);
+      background: var(--paper);
+      box-shadow: var(--shadow-lg);
+      animation: modalPop .13s cubic-bezier(.2,.8,.3,1);
+    }
+    .pdf-feedback-composer-type {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .pdf-feedback-composer-type button {
+      min-height: 26px;
+      padding: 3px 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+      border-radius: var(--r-sm);
+    }
+    .pdf-feedback-composer-type button.retake { color: var(--retake); border-color: var(--retake-line); }
+    .pdf-feedback-composer-type button.direct_rewrite { color: var(--rewrite); border-color: var(--rewrite-line); }
+    .pdf-feedback-composer-type button.fact { color: var(--fact); border-color: var(--fact-line); }
+    .pdf-feedback-composer-type button.active.retake { background: var(--retake); color: #fff; border-color: var(--retake); }
+    .pdf-feedback-composer-type button.active.direct_rewrite { background: var(--rewrite); color: #fff; border-color: var(--rewrite); }
+    .pdf-feedback-composer-type button.active.fact { background: var(--fact); color: #fff; border-color: var(--fact); }
+    .pdf-feedback-composer-target {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pdf-feedback-composer textarea {
+      min-height: 66px;
+      font-size: 12px;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    .pdf-feedback-composer-actions { display: flex; justify-content: flex-end; gap: 6px; }
+    .pdf-feedback-composer-actions .save { color: #fff; }
+    .pdf-feedback-composer-actions .save.retake { background: var(--retake); border-color: var(--retake); }
+    .pdf-feedback-composer-actions .save.direct_rewrite { background: var(--rewrite); border-color: var(--rewrite); }
+    .pdf-feedback-composer-actions .save.fact { background: var(--fact); border-color: var(--fact); }
+
+    /* Debug toggle in page nav */
+    .pdf-debug-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 650;
+      color: var(--muted);
+    }
+    .pdf-debug-toggle.on { color: var(--focus); border-color: var(--focus); background: var(--focus-tint); }
+    .pdf-debug-toggle .dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; opacity: .55; }
+    .pdf-debug-toggle.on .dot { opacity: 1; }
+    .pdf-feedback-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--faint);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
     .pdf-range-test-panel {
       display: grid;
       gap: 6px;
@@ -1007,25 +1492,242 @@
       font-size: 11px;
     }
     .middle-tab-panel { display: grid; gap: 10px; }
+
+    /* ===== ver074 canvas scenes ===== */
+    body[data-pdf-debug="on"] .script-page-nav { display: flex; }
+    .pane-center .pdf-preview-stage {
+      min-height: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      overflow: visible;
+    }
+    .pane-center .pdf-page-scroll {
+      position: static;
+      overflow: visible;
+      padding: 0;
+      contain: none;
+    }
+    /* Seamless scene — no container card, page edges fade into the canvas */
+    .pane-center .script-page {
+      border: 0;
+      background: transparent;
+      overflow: visible;
+    }
+    .pane-center .script-page > .card-head { display: none; }
+    .pane-center .pdf-page-surface {
+      background: transparent;
+      box-shadow: none;
+    }
+    .pane-center .pdf-page-canvas {
+      -webkit-mask-image:
+        linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%),
+        linear-gradient(to bottom, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+      -webkit-mask-composite: source-in;
+      mask-image:
+        linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%),
+        linear-gradient(to bottom, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+      mask-composite: intersect;
+    }
+    .pane-center .pdf-js-status,
+    .pane-center .pdf-preview-mode-note { display: none; }
+    body[data-pdf-debug="on"] .pane-center .pdf-js-status { display: block; }
+    body[data-pdf-debug="on"] .pane-center .pdf-preview-mode-note { display: block; }
+    body[data-pdf-debug="on"] .pane-center .pdf-page-surface { background: #f8f8f2; box-shadow: 0 0 0 1px var(--line); }
+    body[data-pdf-debug="on"] .pane-center .pdf-page-canvas { -webkit-mask-image: none; mask-image: none; }
+    .pane-center .material-toolbar {
+      width: max-content;
+      max-width: 100%;
+      margin: 0 auto;
+      border-radius: 999px;
+      border-color: var(--line);
+      box-shadow: var(--shadow-chrome);
+      padding: 6px 10px;
+    }
+    .pane-center #entityList {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      align-items: start;
+    }
+    .pane-center #entityList .empty { grid-column: 1 / -1; }
+    .entity-card { box-shadow: var(--shadow-md); border-color: var(--line); }
     .middle-tab-panel.hidden { display: none; }
     .material-toolbar {
-      display: grid;
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid #d6d6ca;
-      border-radius: 8px;
-      background: #fff;
-    }
-    .script-page-nav {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
       gap: 6px;
       padding: 7px 8px;
       border: 1px solid #d6d6ca;
       border-radius: 8px;
       background: #fff;
     }
+    .material-toolbar .tabs { gap: 4px; }
+    .seg {
+      display: inline-flex;
+      flex: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .seg-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 24px;
+      padding: 2px 10px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+    .seg-btn.active { background: var(--focus); color: #fff; }
+    .seg-count {
+      min-width: 16px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: #33332d;
+      font-size: 9.5px;
+      font-weight: 900;
+      text-align: center;
+    }
+    .seg-btn.active .seg-count { background: rgba(255, 255, 255, .28); color: #fff; }
+    .material-search {
+      flex: 1 1 110px;
+      min-width: 90px;
+      min-height: 24px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+
+    /* Material cards: compact head (no internal ids on screen), annotation rows, inline composer */
+    .material-card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 9px;
+      border-bottom: 1px solid var(--line-soft);
+      background: linear-gradient(#fcfbf6, #f7f6f0);
+    }
+    .material-card-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12.5px;
+      font-weight: 750;
+      letter-spacing: -.005em;
+    }
+    .material-card-spacer { flex: 1; }
+    .pill-select {
+      width: auto;
+      min-height: 20px;
+      padding: 1px 6px;
+      border: 1px solid #c9c9bd;
+      border-radius: 999px;
+      background: #fff;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .pill-select.authority-hard { color: #721f18; background: #f9e7e4; border-color: #e9b8b0; }
+    .pill-select.authority-soft { color: #684311; background: #fbf0d9; border-color: #e3c58b; }
+    .pill-select.authority-draft { color: #31596c; background: #e8f3f7; border-color: #b8d3df; }
+    .material-card-summary { padding: 7px 9px 0; font-size: 11.5px; line-height: 1.55; color: var(--ink); }
+    .material-card-tags { padding: 7px 9px 0; }
+    .material-card-rows { display: grid; gap: 4px; padding: 7px 9px 0; }
+    .material-card-rows .annotation-row-text[data-edit-entity-note] { cursor: pointer; }
+    .material-card-rows .annotation-row-text[data-edit-entity-note]:hover { text-decoration: underline dotted; }
+    .material-card-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 9px 8px;
+    }
+    .material-refs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 3px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    .ref-jump {
+      min-height: 18px;
+      width: 20px;
+      padding: 0;
+      border: 1px solid #c9c9bd;
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: none;
+      color: var(--focus);
+      font-size: 9.5px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .ref-jump:hover { border-color: var(--focus); }
+    .material-card.compose-active { border-color: var(--focus); box-shadow: var(--ring), var(--shadow-md); }
+    .material-composer {
+      display: grid;
+      gap: 6px;
+      margin: 8px 9px 9px;
+      padding: 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: #fff;
+      box-shadow: var(--shadow-md);
+    }
+    .material-composer-type { display: flex; flex-wrap: wrap; gap: 4px; }
+    .material-composer-type button {
+      min-height: 20px;
+      padding: 2px 9px;
+      border: 1px solid #c9c9bd;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: none;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .material-composer-type button.active.retake { background: var(--retake); border-color: var(--retake); color: #fff; }
+    .material-composer-type button.active.direct_rewrite { background: var(--rewrite); border-color: var(--rewrite); color: #fff; }
+    .material-composer-type button.active.fact { background: var(--fact); border-color: var(--fact); color: #fff; }
+    .material-composer-type button.active.setting { background: #5c6f7a; border-color: #5c6f7a; color: #fff; }
+    .material-composer-setting-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+    .material-composer-setting-fields.hidden { display: none; }
+    .material-composer-setting-fields select { width: auto; min-height: 22px; padding: 1px 6px; font-size: 10.5px; }
+    .material-composer textarea { min-height: 52px; font-size: 11.5px; }
+    .material-composer-actions { display: flex; justify-content: flex-end; gap: 6px; }
+    .material-composer-actions .save.retake { background: var(--retake); border-color: var(--retake); color: #fff; }
+    .material-composer-actions .save.direct_rewrite { background: var(--rewrite); border-color: var(--rewrite); color: #fff; }
+    .material-composer-actions .save.fact { background: var(--fact); border-color: var(--fact); color: #fff; }
+    .material-composer-actions .save.setting { background: #5c6f7a; border-color: #5c6f7a; color: #fff; }
+    /* ver074: page nav lives in the floating top chrome (proxy buttons); in-scene bar hidden */
+    .script-page-nav {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 3px 6px;
+      border: 1px solid #e2e1d5;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .script-page-nav .small { min-height: 22px; padding: 2px 8px; font-size: 10px; }
+    .script-page-nav select { min-height: 22px; padding: 1px 4px; font-size: 10.5px; }
+    .script-page-nav .card-title { font-size: 11px; }
     .tag-picker-row { display: grid; gap: 5px; }
     .tag-remove {
       min-height: 18px;
@@ -1036,53 +1738,106 @@
       color: inherit;
       font-size: 10px;
     }
-    .annotation-list { display: grid; gap: 5px; }
+    .annotation-list { display: grid; gap: 6px; }
+    /* Feedback annotation: retake(red) is the default; fact(green) & rewrite(amber) below.
+       Colored rail + type badge + hover-reveal delete for fast scanning. */
     .annotation {
       position: relative;
-      padding: 6px 7px;
-      padding-right: 30px;
-      border-left: 4px solid var(--danger);
-      background: #fff5f3;
-      color: #52150f;
-      font-size: 11px;
+      padding: 8px 34px 8px 11px;
+      border: 1px solid var(--retake-line);
+      border-left: 3px solid var(--retake);
+      border-radius: var(--r-sm);
+      background: var(--retake-tint);
+      color: #5a1a13;
+      font-size: 11.5px;
+      line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .annotation strong {
+      display: inline-flex;
+      align-items: center;
+      margin-right: 5px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--retake);
+      color: #fff;
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      vertical-align: 1px;
+    }
     .annotation-delete {
       position: absolute;
-      top: 4px;
-      right: 4px;
+      top: 6px;
+      right: 6px;
       min-height: 20px;
       width: 20px;
       padding: 0;
-      border-color: #d8aaa1;
-      background: rgba(255,255,255,.72);
-      color: var(--danger);
-      font-weight: 1000;
+      border-color: transparent;
+      background: rgba(255,255,255,.5);
+      color: var(--retake);
+      font-weight: 800;
       line-height: 1;
+      box-shadow: none;
+      opacity: 0;
+      transition: opacity .12s ease;
     }
+    .annotation:hover .annotation-delete,
+    .annotation-delete:focus-visible { opacity: 1; }
     .annotation.fact {
-      border-left-color: var(--good);
-      background: #f1f8f2;
-      color: #214c2d;
+      border-color: var(--fact-line);
+      border-left-color: var(--fact);
+      background: var(--fact-tint);
+      color: #1f4a2c;
     }
+    .annotation.fact strong { background: var(--fact); }
+    .annotation.fact .annotation-delete { color: var(--fact); }
     .annotation.direct_rewrite {
-      border-left-color: var(--warn);
-      background: #fff8ea;
-      color: #5b390b;
+      border-color: var(--rewrite-line);
+      border-left-color: var(--rewrite);
+      background: var(--rewrite-tint);
+      color: #59380a;
     }
+    .annotation.direct_rewrite strong { background: var(--rewrite); }
+    .annotation.direct_rewrite .annotation-delete { color: var(--rewrite); }
+    /* Feedback action buttons — color-coded so intent reads at a glance */
+    [data-add-block-note], [data-add-entity-note], [data-annotate-entity] {
+      color: var(--retake);
+      border-color: var(--retake-line);
+      background: linear-gradient(#fff, var(--retake-tint));
+    }
+    [data-add-block-note]:hover, [data-add-entity-note]:hover, [data-annotate-entity]:hover {
+      border-color: var(--retake); background: var(--retake-tint);
+    }
+    [data-add-block-rewrite] {
+      color: var(--rewrite);
+      border-color: var(--rewrite-line);
+      background: linear-gradient(#fff, var(--rewrite-tint));
+    }
+    [data-add-block-rewrite]:hover { border-color: var(--rewrite); background: var(--rewrite-tint); }
+    [data-add-fixed-fact], [data-add-entity-setting], [data-annotate-setting] {
+      color: var(--fact);
+      border-color: var(--fact-line);
+      background: linear-gradient(#fff, var(--fact-tint));
+    }
+    [data-add-fixed-fact]:hover, [data-add-entity-setting]:hover, [data-annotate-setting]:hover { border-color: var(--fact); background: var(--fact-tint); }
+
     .script-note-list {
       grid-column: 1 / -1;
       margin-top: 2px;
     }
     .document-version-panel {
       display: grid;
-      gap: 7px;
-      padding: 8px;
-      border: 1px solid #d6d6ca;
+      gap: 4px;
+      padding: 4px 8px;
+      border: 1px solid #e2e1d5;
       border-radius: 8px;
       background: #fff;
     }
+    .document-version-panel select { min-height: 22px; padding: 1px 4px; font-size: 10.5px; }
+    .document-version-panel .card-title { font-size: 11px; }
     .document-version-panel.dragover {
       border-color: var(--focus);
       background: #eef6fb;
@@ -1109,22 +1864,26 @@
     }
     .output-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
     @media print {
-      body { background: #fff; }
-      .topbar, .pane:first-child, .pane-actions, button, textarea, select, input { display: none !important; }
-      .workspace { display: block; padding: 0; }
+      body { background: #fff; overflow: visible; }
+      #panelLeft, .side-rail, .canvas-chrome, .pane-actions, button, textarea, select, input { display: none !important; }
+      .workspace { position: static; display: block; padding: 0; background-image: none; overflow: visible; cursor: auto; }
+      .pane-center { position: static; transform: none !important; width: auto; }
+      .side-panel { position: static; transform: none; display: flex !important; width: auto; max-height: none; }
+      #panelLeft { display: none !important; }
       .pane { border: 0; box-shadow: none; overflow: visible; }
       .pane-body { overflow: visible; }
       .annotation { color: #b00000; border-left-color: #b00000; }
     }
 
     .empty {
-      padding: 18px;
-      border: 1px dashed #b8b8ac;
-      border-radius: 9px;
-      background: #fff;
+      padding: 22px 18px;
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--r-lg);
+      background: repeating-linear-gradient(45deg, #fbfaf5, #fbfaf5 9px, #f6f5ef 9px, #f6f5ef 18px);
       color: var(--muted);
       text-align: center;
-      font-weight: 800;
+      font-weight: 650;
+      font-size: 11.5px;
     }
 
     .modal-backdrop {
@@ -1132,23 +1891,28 @@
       position: fixed;
       inset: 0;
       z-index: 50;
-      background: rgba(0,0,0,.35);
+      background: rgba(24,22,17,.42);
+      backdrop-filter: blur(2px);
       align-items: center;
       justify-content: center;
       padding: 18px;
+      animation: modalFade .14s ease;
     }
+    @keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
     .modal-backdrop.active { display: flex; }
     .modal {
       width: min(820px, 100%);
       max-height: min(760px, calc(100vh - 36px));
       overflow: auto;
-      background: #fff;
-      border: 1px solid #b8b8ac;
-      border-radius: 12px;
-      box-shadow: var(--shadow);
+      background: var(--paper);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-lg);
+      animation: modalPop .16s cubic-bezier(.2,.8,.3,1);
     }
-    .modal-head { display: flex; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid #e1e1d6; }
-    .modal-body { padding: 12px; display: grid; gap: 10px; }
+    @keyframes modalPop { from { transform: translateY(8px) scale(.99); opacity: .6; } to { transform: none; opacity: 1; } }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 13px 14px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(#fcfbf6, #f7f6f0); }
+    .modal-body { padding: 14px; display: grid; gap: 11px; }
     .modal.source-review-modal {
       width: min(1280px, calc(100vw - 24px));
       max-height: calc(100vh - 24px);
@@ -1646,40 +2410,16 @@
     }
   </style>
 </head>
-<body>
+<body data-panel-left="closed" data-panel-right="closed" data-center-mode="script" data-pdf-debug="off">
   <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-title">Scenario Material Control Layer / kari ver065</div>
-        <div class="brand-subtitle" data-i18n="brandSubtitle">원문 → 블록 분해 → 소재 DB → 확정정보/수정주석 → 공유 출력</div>
-      </div>
-      <div class="toolbar">
-        <input id="projectFileInput" type="file" accept=".json" hidden="">
-        <div class="settings-group">
-          <span class="settings-label" data-i18n="settings">설정</span>
-          <select id="languageSelect" class="language-select" aria-label="Language">
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
-          </select>
-          <button id="selectSettingsFolderBtn" class="small" data-i18n="selectSaveFolder">저장 폴더 지정</button>
-          <button id="saveSettingsBtn" class="small" data-requires-project="" data-i18n="saveSettings">저장</button>
-          <button id="loadSettingsBtn" class="small" data-i18n="loadSettings">불러오기</button>
-          <span id="saveFolderLabel" class="save-folder-label" title="저장 위치: #scenario">저장 위치: #scenario</span>
-        </div>
-        <select id="workSelect" class="work-select"><option value="work_px3w4" selected="">AMMI</option></select>
-        <button id="createProjectBtn" class="primary" data-i18n="addWork">작품 추가</button>
-        <button id="resetBtn" class="danger" data-i18n="reset">초기화</button>
-      </div>
-    </header>
-
-    <main class="workspace">
-      <section class="pane">
+    <main class="workspace" id="canvasRoot">
+      <section class="pane side-panel side-panel-left" id="panelLeft">
         <div class="pane-header">
-          <div class="pane-title" data-i18n="paneSourceBlocks">1. 원문 / 블록</div>
-          <div class="pane-actions"></div>
+          <div class="pane-title" data-i18n="paneSourceBlocks">작품 · 원문</div>
+          <button type="button" class="panel-collapse" data-collapse-panel="left" title="접기">⟨</button>
         </div>
         <div class="pane-body stack">
+          <div id="documentVersionPanel" class="document-version-panel"></div>
           <div id="documentPanel" class="entity-card">
         <div class="card-head">
           <div>
@@ -1728,24 +2468,11 @@
         <span class="card-sub">수동 소재/장면/대사 블록 생성</span>
       </button></div>
         </div>
+        <div class="side-panel-foot"><span>Scenario Material Control Layer</span></div>
       </section>
 
-      <section class="pane">
-        <div class="pane-header">
-          <div class="pane-title" data-i18n="paneScriptMaterials">2. 본문 / 소재카드</div>
-        </div>
+      <section class="pane pane-center" id="canvasScene">
         <div class="pane-body stack">
-          <div class="tabs" id="middleTabs">
-            <button class="tab active" data-middle-tab="script" data-i18n="tabScript">본문</button>
-            <button class="tab" data-middle-tab="episodeMaterials" data-i18n="tabEpisodeMaterials">화수 소재카드</button>
-            <button class="tab" data-middle-tab="commonMaterials" data-i18n="tabCommonMaterials">공용 소재카드</button>
-          </div>
-          <div id="documentVersionPanel" class="document-version-panel">
-        <div class="row">
-          <span class="card-title">버전</span>
-          <select id="activeDocumentVersionSelect"><option value="ver_oqyrcc">초고</option><option value="ver_1qvm9qm">2고</option><option value="ver_1qvmfco">3고</option><option value="ver_8be856">4고</option><option value="ver_uk0l61">5고</option><option value="ver_1deho1o">6고</option><option value="ver_15qu84u">7고</option><option value="ver_1eu7pgw">8고</option><option value="ver_9np5yi" selected="">9고 (최신)</option></select>
-        </div>
-      </div>
           <div id="scriptTabPanel" class="middle-tab-panel">
             <div id="scriptStructurePanel" class="script-structure-panel" data-render-key="doc-002-q90s#20#script#doc-002-q90s-b0381:dialog:まりな:森の中:20:381|doc-002-q90s-b0382:dialog:しずか:森の中:20:382|doc-002-q90s-b0383:action::森の中:20:383|doc-002-q90s-b0384:dialog:しずか:森の中:20:384|doc-002-q90s-b0385:action::森の中:20:385|doc-002-q90s-b0386:dialog:まりな:森の中:20:386|doc-002-q90s-b0387:action::森の中:20:387|doc-002-q90s-b0388:dialog:まりな:森の中:20:388|doc-002-q90s-b0389:action::森の中:20:389|doc-002-q90s-b0390:dialog:まりな:森の中:20:390|doc-002-q90s-b0391:action::森の中:20:391|doc-002-q90s-b0392:dialog:まりな:森の中:20:392|doc-002-q90s-b0393:action::森の中:20:393|doc-002-q90s-b0394:dialog:まりな:森の中:20:394|doc-002-q90s-b0395:action::森の中:20:395|doc-002-q90s-b0396:dialog:まりな:森の中:20:396|doc-002-q90s-b0397:action::森の中:20:397|doc-002-q90s-b0398:dialog:タコピーＭ:森の中:20:398|doc-002-q90s-b0399:action::森の中:20:399|doc-002-q90s-b0400:dialog:タコピーＭ:森の中:20:400|doc-002-q90s-b0401:action::森の中:20:401|doc-002-q90s-b0402:dialog:まりな:森の中:20:402|doc-002-q90s-b0403:action::森の中:20:403|doc-002-q90s-b0404:dialog:まりな:森の中:20:404|doc-002-q90s-b0405:action::森の中:20:405|doc-002-q90s-b0406:dialog:しずか:森の中:20:406|doc-002-q90s-b0407:dialog:まりな:森の中:20:407#doc-002-q90s-b0381:dialog:まりな:森の中:20:20:::0:70:920:881:286:20:203:0|doc-002-q90s-b0382:dialog:しずか:森の中:20:20:::0:70:920:861:286:20:365:0|doc-002-q90s-b0383:action::森の中:20:20:::0:70:920:821:346:36:365:0|doc-002-q90s-b0384:dialog:しずか:森の中:20:20:::0:70:920:782:286:36:440:0|doc-002-q90s-b0385:action::森の中:20:20:::0:70:920:742:346:36:365:0|doc-002-q90s-b0386:dialog:まりな:森の中:20:20:::0:70:920:722:286:20:344:0|doc-002-q90s-b0387:action::森の中:20:20:::0:70:920:702:346:20:244:0|doc-002-q90s-b0388:dialog:まりな:森の中:20:20:::0:70:920:662:286:36:431:0|doc-002-q90s-b0389:action::森の中:20:20:::0:70:920:642:346:20:304:0|doc-002-q90s-b0390:dialog:まりな:森の中:20:20:::0:70:920:622:286:20:304:0|doc-002-q90s-b0391:action::森の中:20:20:::0:70:920:602:346:20:163:0|doc-002-q90s-b0392:dialog:まりな:森の中:20:20:::0:70:920:543:286:56:431:0|doc-002-q90s-b0393:action::森の中:20:20:::0:70:920:523:346:20:324:0|doc-002-q90s-b0394:dialog:まりな:森の中:20:20:::0:70:920:503:286:20:163:0|doc-002-q90s-b0395:action::森の中:20:20:::0:70:920:483:346:20:344:0|doc-002-q90s-b0396:dialog:まりな:森の中:20:20:::0:70:920:463:286:20:244:0|doc-002-q90s-b0397:action::森の中:20:20:::0:70:920:443:346:20:344:0|doc-002-q90s-b0398:dialog:タコピーＭ:森の中:20:20:::0:70:920:423:286:20:284:0|doc-002-q90s-b0399:action::森の中:20:20:::0:70:920:384:346:36:365:0|doc-002-q90s-b0400:dialog:タコピーＭ:森の中:20:20:::0:70:920:344:286:36:431:0|doc-002-q90s-b0401:action::森の中:20:20:::0:70:920:304:346:36:375:0|doc-002-q90s-b0402:dialog:まりな:森の中:20:20:::0:70:920:264:286:36:431:0|doc-002-q90s-b0403:action::森の中:20:20:::0:70:920:224:346:36:365:0|doc-002-q90s-b0404:dialog:まりな:森の中:20:20:::0:70:920:185:286:36:431:0|doc-002-q90s-b0405:action::森の中:20:20:::0:70:920:165:346:20:284:0|doc-002-q90s-b0406:dialog:しずか:森の中:20:20:::0:70:920:145:286:20:203:0">
         <div class="script-page-nav">
@@ -2020,14 +2747,17 @@
       </div>
           </div>
           <div id="materialTabPanel" class="middle-tab-panel hidden">
-            <div class="note"><strong data-i18n="materialCardLabel">소재 카드:</strong> <span data-i18n="materialCardNote">추출 후보에 확정정보와 빨간 수정주석을 붙여 LLM/작업자가 판단할 단위로 정리한다.</span></div>
             <div class="material-toolbar">
+              <div class="seg" id="materialScopeTabs">
+                <button type="button" class="seg-btn active" data-material-scope="episodeMaterials">화수</button>
+                <button type="button" class="seg-btn" data-material-scope="commonMaterials">공용</button>
+              </div>
               <div class="tabs" id="materialTypeTabs">
-                <button class="tab" data-material-filter="all" data-i18n="filterAll">전체</button>
-                <button class="tab" data-material-filter="character" data-i18n="typeCharacter">캐릭터</button>
-                <button class="tab active" data-material-filter="organization" data-i18n="typeOrganization">조직</button>
-                <button class="tab" data-material-filter="place" data-i18n="typePlace">장소</button>
-                <button class="tab" data-material-filter="technology" data-i18n="typeTechnology">기술/개념</button>
+                <button class="tab" data-material-filter="all">전체</button>
+                <button class="tab" data-material-filter="character">캐릭터</button>
+                <button class="tab active" data-material-filter="organization">조직</button>
+                <button class="tab" data-material-filter="place">장소</button>
+                <button class="tab" data-material-filter="technology">기술/개념</button>
               </div>
               <select id="entityFilter" style="display:none" data-requires-project="" data-requires-confirmed-document="">
                 <option value="all" data-i18n="filterAllMaterials">전체 소재</option>
@@ -2036,47 +2766,21 @@
                 <option value="place" data-i18n="typePlace">장소</option>
                 <option value="technology" data-i18n="typeTechnology">기술/개념</option>
               </select>
-              <div class="row">
-                <button id="addEntityBtn" class="small" data-requires-project="" data-requires-confirmed-document="" data-i18n="addMaterial">소재 추가</button>
-              </div>
+              <input id="entitySearchInput" class="material-search" type="search" data-i18n-placeholder="materialSearchPlaceholder" placeholder="이름·별칭·태그 검색" data-requires-project="" />
+              <button id="addEntityBtn" class="small" data-requires-project="" data-requires-confirmed-document="" data-i18n="addMaterial">소재 추가</button>
             </div>
-            <div class="grid-3" id="entityCounts"><button type="button" class="stat-card " data-entity-count-filter="character"><div class="stat-value">53</div><div class="stat-label">캐릭터</div></button><button type="button" class="stat-card selected" data-entity-count-filter="organization"><div class="stat-value">1</div><div class="stat-label">조직</div></button><button type="button" class="stat-card " data-entity-count-filter="place"><div class="stat-value">10</div><div class="stat-label">장소</div></button><button type="button" class="stat-card " data-entity-count-filter="technology"><div class="stat-value">0</div><div class="stat-label">기술/개념</div></button></div>
-            <div id="entityList" class="card-list"><div class="entity-card">
-          <div class="card-head">
-            <div>
-              <div class="card-title">放課</div>
-              <div class="card-sub mono">orga_t2c0a1 ・ candidate ・ untitled_01</div>
-            </div>
-            <div class="chips"><span class="chip type-organization">조직</span><span class="chip">화수별</span><span class="chip soft">잠정</span></div>
-          </div>
-          <div class="card-body">
-            <div class="grid-2">
-              <div><label>소재 범위</label><select data-entity-field="scope" data-entity-id="orga_t2c0a1"><option value="project">공용</option><option value="document" selected="">화수별</option></select></div>
-              <div><label>확정도</label><select data-entity-field="authority" data-entity-id="orga_t2c0a1"><option value="hard">확정</option><option value="soft" selected="">잠정</option><option value="draft">초안</option></select></div>
-            </div>
-            
-            
-            
-          </div>
-          <div class="card-foot">
-            <span class="card-sub">Refs: <span class="source-link" data-jump-block="doc-002-q90s-b0306">doc-002-q90s-b0306</span> ・ 설정 0</span>
-            <div class="row">
-              <button class="small" data-add-entity-setting="orga_t2c0a1">+ 설정블록</button>
-              <button class="small" data-add-entity-note="orga_t2c0a1">수정주석</button>
-              <button class="small" data-edit-entity="orga_t2c0a1">상세</button>
-            </div>
-          </div>
-        </div></div>
+            <div id="entityList" class="card-list"></div>
           </div>
         </div>
       </section>
 
-      <section class="pane">
+      <section class="pane side-panel side-panel-right" id="panelRight">
         <div class="pane-header">
-          <div class="pane-title" data-i18n="paneNotesShare">3. 주석 / 공유 출력</div>
+          <div class="pane-title" data-i18n="paneNotesShare">주석 · 공유</div>
           <div class="pane-actions">
             <button id="copyJsonBtn" class="small" data-requires-project="" data-i18n="copyData">데이터 복사</button>
             <button id="printShareBtn" class="small" data-requires-project="" data-i18n="printPdf">인쇄/PDF</button>
+            <button type="button" class="panel-collapse" data-collapse-panel="right" title="접기">⟩</button>
           </div>
         </div>
         <div class="pane-body stack">
@@ -2094,6 +2798,55 @@
         </div>
       </section>
     </main>
+
+    <div id="appTopbar" class="canvas-chrome">
+      <div class="topbar-zone topbar-left">
+        <select id="workSelect" class="work-select"><option value="work_px3w4" selected="">AMMI</option></select>
+        <button id="createProjectBtn" class="primary small" data-i18n="addWork">작품 추가</button>
+      </div>
+      <div class="topbar-zone topbar-center">
+        <button type="button" id="pagePrevBtn" class="page-arrow hidden" title="Prev">&#8249;</button>
+        <div class="tabs mode-pill" id="middleTabs">
+          <button class="tab active" data-middle-tab="script" data-i18n="tabScript">본문</button>
+          <button class="tab" data-middle-tab="materials" data-i18n="tabMaterials">소재카드</button>
+        </div>
+        <span id="pageChip" class="page-chip hidden">&ndash;</span>
+        <button type="button" id="pageNextBtn" class="page-arrow hidden" title="Next">&#8250;</button>
+      </div>
+      <div class="topbar-zone topbar-right">
+        <input id="projectFileInput" type="file" accept=".json" hidden="">
+        <button id="selectSettingsFolderBtn" class="small" data-i18n="selectSaveFolder">저장 폴더 지정</button>
+        <button id="saveSettingsBtn" class="small" data-requires-project="" data-i18n="saveSettings">저장</button>
+        <button id="loadSettingsBtn" class="small" data-i18n="loadSettings">불러오기</button>
+        <span id="saveFolderLabel" class="save-folder-label" title="저장 위치: #scenario">저장 위치: #scenario</span>
+        <select id="languageSelect" class="language-select" aria-label="Language">
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+        </select>
+        <button id="resetBtn" class="danger small" data-i18n="reset">초기화</button>
+      </div>
+    </div>
+
+    <div id="sceneInfoBar" class="canvas-chrome hidden"></div>
+
+    <div id="railLeft" class="side-rail side-rail-left" role="button" tabindex="0" title="펼치기">
+      <svg class="rail-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h8L19 8.5V18.5a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 18.5z"/><path d="M13 4v5h6"/></svg>
+      <span class="rail-label" data-i18n="paneSourceBlocks">작품 · 원문</span>
+    </div>
+    <div id="railRight" class="side-rail side-rail-right" role="button" tabindex="0" title="펼치기">
+      <svg class="rail-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 0-3.1 6.3L20 20l-.9-3.4A7.96 7.96 0 0 0 20 12z"/></svg>
+      <span class="rail-label" data-i18n="paneNotesShare">주석 · 공유</span>
+      <span id="railNoteCount" class="rail-count hidden">0</span>
+    </div>
+
+    <div id="bottomStrip" class="canvas-chrome">
+      <span class="strip-item"><span class="strip-k">blocks</span><span id="stripBlocks" class="strip-mono">0</span></span>
+      <button type="button" id="stripDebugBtn" class="strip-btn" title="PDF 오버레이 디버그"><span class="strip-k" data-i18n="pdfDebugOverlayToggle">디버그</span><span id="stripDebugState" class="strip-dot"></span></button>
+      <button type="button" id="zoomResetBtn" class="strip-btn" title="100%"><span class="strip-k">zoom</span><span id="zoomLabel" class="strip-mono">100%</span></button>
+    </div>
+
+    <div id="panHint" class="canvas-chrome"><span data-i18n="canvasHint">Space+드래그 / 휠 이동 · Ctrl+휠 줌</span></div>
   </div>
 
   <div id="editModal" class="modal-backdrop" role="dialog" aria-modal="true">
@@ -2161,8 +2914,7 @@
         languageJa: '日本語',
         languageKo: '\ud55c\uad6d\uc5b4',
         languageEn: 'English',
-        brandSubtitle: '原文 → ブロック分解 → 素材DB → 確定情報/修正注釈 → 共有出力',
-        settings: '設定',
+        canvasHint: 'Space+ドラッグ＝移動 ・ Ctrl+ホイール＝ズーム ・ 素材カードはホイール移動可',
         selectSaveFolder: '保存先指定',
         saveSettings: '保存',
         loadSettings: '読込',
@@ -2170,9 +2922,8 @@
         reset: '初期化',
         saveFolderPrefix: '保存先',
         saveFolderUnset: '未指定',
-        paneSourceBlocks: '1. 原文 / ブロック',
-        paneScriptMaterials: '2. 本文 / 素材カード',
-        paneNotesShare: '3. 注釈 / 共有出力',
+        paneSourceBlocks: '作品・原文',
+        paneNotesShare: '注釈・共有',
         sourcePlaceholder: 'シナリオ / プロット / キャラクター設定 / 場所設定の原文',
         dropDefault: '文書ファイルまたは設定ファイルをドラッグ＆ドロップ',
         dropAddWorkFirst: '先に作品を追加すると文書を追加できます',
@@ -2186,10 +2937,15 @@
         tabLow: '低信頼',
         tabScript: '本文',
         tabMaterials: '素材カード',
-        tabEpisodeMaterials: '話数素材カード',
-        tabCommonMaterials: '共通素材カード',
-        materialCardLabel: '素材カード:',
-        materialCardNote: '抽出候補に確定情報と赤い修正注釈を付け、LLM/作業者が判断しやすい単位に整理します。',
+        materialScopeEpisode: '話数',
+        materialScopeCommon: '共通',
+        materialSearchPlaceholder: '名前・別名・タグを検索',
+        materialNoSearchHit: '検索に一致する素材がありません',
+        materialCommonEmpty: '共通素材はまだありません。カードの素材範囲を「共通」にするとここに集まります。',
+        materialAddNote: '+ 注釈',
+        materialNoteEditHint: 'クリックで編集',
+        materialSettingMode: '設定ブロック',
+        materialRefsLabel: '出典',
         filterAll: '全体',
         filterAllMaterials: '全素材',
         addMaterial: '素材追加',
@@ -2319,6 +3075,11 @@
         pdfPreviewNative: 'PDF原本プレビュー',
         pdfPreviewFallback: '抽出テキストプレビュー',
         copyPageDebugText: 'デバッグ用テキストをコピー',
+        pdfDebugOverlayToggle: 'デバッグ表示',
+        pdfFeedbackComposerPlaceholder: '修正案・フィードバックを入力…',
+        pdfFeedbackComposerSave: '追加',
+        pdfFeedbackComposerCancel: 'キャンセル',
+        pdfFeedbackHint: 'ブロックをクリックしてフィードバックを追加',
         copyAllPageDebugText: '全ページデバッグをコピー',
         copyAllPageDebugTextBusy: '全ページコピー中...',
         copyPageDebugTextDone: 'コピー済み',
@@ -2438,8 +3199,7 @@
         languageJa: '日本語',
         languageKo: '한국어',
         languageEn: 'English',
-        brandSubtitle: '원문 → 블록 분해 → 소재 DB → 확정정보/수정주석 → 공유 출력',
-        settings: '설정',
+        canvasHint: 'Space+드래그 = 이동 · Ctrl+휠 = 줌 · 소재카드는 휠 이동 가능',
         selectSaveFolder: '저장 폴더 지정',
         saveSettings: '저장',
         loadSettings: '불러오기',
@@ -2447,9 +3207,8 @@
         reset: '초기화',
         saveFolderPrefix: '저장 위치',
         saveFolderUnset: '미지정',
-        paneSourceBlocks: '1. 원문 / 블록',
-        paneScriptMaterials: '2. 본문 / 소재카드',
-        paneNotesShare: '3. 주석 / 공유 출력',
+        paneSourceBlocks: '작품 · 원문',
+        paneNotesShare: '주석 · 공유',
         sourcePlaceholder: '시나리오 / 플롯 / 캐릭터 설정 / 장소 설정 원문',
         dropDefault: '문서 파일 또는 설정 파일 드래그앤드롭',
         dropAddWorkFirst: '먼저 작품을 추가하면 문서를 추가할 수 있음',
@@ -2463,10 +3222,15 @@
         tabLow: '저신뢰',
         tabScript: '본문',
         tabMaterials: '소재카드',
-        tabEpisodeMaterials: '화수 소재카드',
-        tabCommonMaterials: '공용 소재카드',
-        materialCardLabel: '소재 카드:',
-        materialCardNote: '추출 후보에 확정정보와 빨간 수정주석을 붙여 LLM/작업자가 판단할 단위로 정리한다.',
+        materialScopeEpisode: '화수',
+        materialScopeCommon: '공용',
+        materialSearchPlaceholder: '이름·별칭·태그 검색',
+        materialNoSearchHit: '검색과 일치하는 소재가 없습니다',
+        materialCommonEmpty: '공용 소재가 아직 없습니다. 카드의 소재 범위를 "공용"으로 바꾸면 여기에 모입니다.',
+        materialAddNote: '+ 주석',
+        materialNoteEditHint: '클릭하여 편집',
+        materialSettingMode: '설정블록',
+        materialRefsLabel: '출처',
         filterAll: '전체',
         filterAllMaterials: '전체 소재',
         addMaterial: '소재 추가',
@@ -2596,6 +3360,11 @@
         pdfPreviewNative: 'PDF 원본 프리뷰',
         pdfPreviewFallback: '추출 텍스트 프리뷰',
         copyPageDebugText: '디버그용 텍스트 복사',
+        pdfDebugOverlayToggle: '디버그 표시',
+        pdfFeedbackComposerPlaceholder: '수정안/피드백 입력…',
+        pdfFeedbackComposerSave: '추가',
+        pdfFeedbackComposerCancel: '취소',
+        pdfFeedbackHint: '블록을 클릭하면 피드백을 달 수 있음',
         copyAllPageDebugText: '전체 페이지 디버그 복사',
         copyAllPageDebugTextBusy: '전체 페이지 복사중...',
         copyPageDebugTextDone: '복사됨',
@@ -2714,8 +3483,7 @@
         languageJa: 'Japanese',
         languageKo: 'Korean',
         languageEn: 'English',
-        brandSubtitle: 'Source → block parsing → material DB → fixed facts/retake notes → shared output',
-        settings: 'Settings',
+        canvasHint: 'Space+drag = pan · Ctrl+wheel = zoom · wheel pans in card view',
         selectSaveFolder: 'Save Folder',
         saveSettings: 'Save',
         loadSettings: 'Load',
@@ -2723,9 +3491,8 @@
         reset: 'Reset',
         saveFolderPrefix: 'Save folder',
         saveFolderUnset: 'Not set',
-        paneSourceBlocks: '1. Source / Blocks',
-        paneScriptMaterials: '2. Body / Material Cards',
-        paneNotesShare: '3. Notes / Shared Output',
+        paneSourceBlocks: 'Work · Source',
+        paneNotesShare: 'Notes · Share',
         sourcePlaceholder: 'Scenario / plot / character settings / location settings source text',
         dropDefault: 'Drag and drop a document file or settings file',
         dropAddWorkFirst: 'Add a work first to add documents',
@@ -2739,10 +3506,15 @@
         tabLow: 'Low confidence',
         tabScript: 'Body',
         tabMaterials: 'Material Cards',
-        tabEpisodeMaterials: 'Episode Materials',
-        tabCommonMaterials: 'Common Materials',
-        materialCardLabel: 'Material cards:',
-        materialCardNote: 'Attach fixed facts and red retake notes to extracted candidates so LLMs and workers can judge them as clear units.',
+        materialScopeEpisode: 'Episode',
+        materialScopeCommon: 'Common',
+        materialSearchPlaceholder: 'Search name / alias / tag',
+        materialNoSearchHit: 'No materials match the search',
+        materialCommonEmpty: 'No common materials yet. Set a card\'s material scope to Common to collect it here.',
+        materialAddNote: '+ Note',
+        materialNoteEditHint: 'Click to edit',
+        materialSettingMode: 'Setting Block',
+        materialRefsLabel: 'Refs',
         filterAll: 'All',
         filterAllMaterials: 'All materials',
         addMaterial: 'Add Material',
@@ -2872,6 +3644,11 @@
         pdfPreviewNative: 'PDF Original Preview',
         pdfPreviewFallback: 'Extracted Text Preview',
         copyPageDebugText: 'Copy Debug Text',
+        pdfDebugOverlayToggle: 'Debug overlays',
+        pdfFeedbackComposerPlaceholder: 'Type feedback / revision…',
+        pdfFeedbackComposerSave: 'Add',
+        pdfFeedbackComposerCancel: 'Cancel',
+        pdfFeedbackHint: 'Click a block to attach feedback',
         copyAllPageDebugText: 'Copy All Page Debug',
         copyAllPageDebugTextBusy: 'Copying All Pages...',
         copyPageDebugTextDone: 'Copied',
@@ -3133,6 +3910,14 @@
       pdfOverlayComputeKeys: Object.create(null),
       scriptStructureRenderKey: '',
       pdfRenderToken: 0,
+      // PDF preview feedback surface: clean mode is the default working view; debug overlays
+      // (draggable boxes, layout guides, extraction panel) are opt-in via toggle.
+      pdfOverlayDebugMode: localStorage.getItem('scenarioPdfOverlayDebugMode') === '1',
+      pdfFeedbackComposer: null,
+      materialComposer: null,
+      canvasView: { x: 0, y: 0, z: 1 },
+      entitySearch: '',
+      lastMaterialTab: 'episodeMaterials',
       shareOutputDirty: true,
       jsonOutputDirty: true,
       settingsDirectoryHandle: null,
@@ -3145,7 +3930,7 @@
       return {
         schemaVersion: 'scenario_material_control_settings_kari_v0_1',
         generator: {
-        name: 'Scenario Material Control Layer kari ver065',
+        name: 'Scenario Material Control Layer',
           generatedAt: new Date().toISOString()
         },
         activeWorkId: '',
@@ -3157,7 +3942,7 @@
       return {
         schemaVersion: 'scenario_material_control_kari_v0_1',
         generator: {
-        name: 'Scenario Material Control Layer kari ver065',
+        name: 'Scenario Material Control Layer',
           generatedAt: new Date().toISOString(),
           mode: 'classification_support'
         },
@@ -3964,13 +4749,17 @@
       return (entity.sourceRefs || []).some(id => docBlockIds.has(id));
     }
 
-    function entityVisibleInActiveMaterialTab(entity, project) {
+    function entityVisibleInMaterialTab(entity, tab, project) {
       const p = project || state.project;
       if (!entity || entity.type === 'unclassified') return false;
       const scope = entity.scope || ((entity.tags || []).includes('scope:project') ? 'project' : 'document');
-      if (state.activeMiddleTab === 'commonMaterials') return scope === 'project' || entity.sourceDocumentId === 'project-common';
-      if (state.activeMiddleTab === 'episodeMaterials') return scope !== 'project' && entityVisibleInActiveDocument(entity, p);
+      if (tab === 'commonMaterials') return scope === 'project' || entity.sourceDocumentId === 'project-common';
+      if (tab === 'episodeMaterials') return scope !== 'project' && entityVisibleInActiveDocument(entity, p);
       return entityVisibleInActiveDocument(entity, p);
+    }
+
+    function entityVisibleInActiveMaterialTab(entity, project) {
+      return entityVisibleInMaterialTab(entity, state.activeMiddleTab, project);
     }
 
     function materialWorkUnlocked() {
@@ -7740,7 +8529,18 @@
       const width = Math.min(rawWidth, widthHint * (rotatedLatin ? 1.04 : 1.02));
       const runXShift = pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight);
       const bottomPad = pdfVerticalRunBottomPadPct(item, rawHeight, vertical);
-      const centeredLeft = left + (rawWidth - width) / 2 - runXShift;
+      // Horizontal placement: center the box on the glyph's true ink center (item.centerXPct,
+      // pixel-verified against the rasterized render). For a measured multi-glyph run pdf.js
+      // reports leftPct AT the ink center, so the legacy leftPct-runXShift math already landed
+      // there (<=0.05% delta, a no-op). But a LONE vertical fragment (× / …… / a single stacked
+      // glyph) reports leftPct at its true LEFT edge, so the legacy math pulled the box a
+      // half-glyph (~0.63%) too far LEFT — visible on ×××× markers and wrapped 「……」 tails.
+      // Centering on centerXPct fixes the fragment case; rotated-latin runs keep the legacy path
+      // (their centerXPct is not a vertical-column center).
+      const centerX = Number(item && item.centerXPct);
+      const centeredLeft = (!rotatedLatin && Number.isFinite(centerX))
+        ? centerX - width / 2
+        : left + (rawWidth - width) / 2 - runXShift;
       return {
         left: Math.max(0, Math.min(99, centeredLeft)),
         top,
@@ -14290,19 +15090,25 @@
       if (el.dataset.renderKey === renderKey && $('pdfPageSurface') && pdfOverlayDomMatchesBlocks(doc, pageNo, overlayBlocks)) {
         syncBodyOverlaySelectionClasses();
         syncPdfOverlaySelectionToolbar();
+        renderPdfFeedbackLayer();
         return;
       }
+      const debugMode = Boolean(state.pdfOverlayDebugMode);
       el.innerHTML = `
         <div class="script-page-nav">
           <button class="small" data-script-page-go="prev" ${currentIndex <= 0 ? 'disabled' : ''}>Prev</button>
           <div class="row">
             <span class="card-title">Page ${esc(pageNo)}</span>
-            <button type="button" class="small" id="copyPageDebugTextBtn">${esc(t('copyPageDebugText'))}</button>
-            <button type="button" class="small" id="copyAllPageDebugTextBtn">${esc(t('copyAllPageDebugText'))}</button>
             <span class="card-sub">${currentIndex + 1} / ${pageEntries.length}</span>
             <select id="scriptPageSelect" style="width:110px">${pageNos.map(no => `<option value="${esc(no)}" ${Number(no) === Number(pageNo) ? 'selected' : ''}>Page ${esc(no)}</option>`).join('')}</select>
+            ${debugMode ? `<button type="button" class="small" id="copyPageDebugTextBtn">${esc(t('copyPageDebugText'))}</button>
+            <button type="button" class="small" id="copyAllPageDebugTextBtn">${esc(t('copyAllPageDebugText'))}</button>`
+            : `<span class="pdf-feedback-hint">${esc(t('pdfFeedbackHint'))}</span>`}
           </div>
-          <button class="small" data-script-page-go="next" ${currentIndex >= pageEntries.length - 1 ? 'disabled' : ''}>Next</button>
+          <div class="row">
+            <button type="button" class="small pdf-debug-toggle ${debugMode ? 'on' : ''}" id="pdfDebugToggleBtn" aria-pressed="${debugMode}"><span class="dot"></span>${esc(t('pdfDebugOverlayToggle'))}</button>
+            <button class="small" data-script-page-go="next" ${currentIndex >= pageEntries.length - 1 ? 'disabled' : ''}>Next</button>
+          </div>
         </div>
         ${renderBodyOverlayPreview(doc, pageNo, pageBlocks, overlayBlocks)}
       `;
@@ -14323,6 +15129,7 @@
       document.querySelectorAll('[data-script-note]').forEach(btn => btn.addEventListener('click', () => openAddBlockNote(btn.getAttribute('data-script-note'), 'retake')));
       document.querySelectorAll('[data-script-rewrite]').forEach(btn => btn.addEventListener('click', () => openAddBlockNote(btn.getAttribute('data-script-rewrite'), 'direct_rewrite')));
       document.querySelectorAll('[data-overlay-detail]').forEach(btn => btn.addEventListener('click', () => openBlockReferenceModal(btn.getAttribute('data-overlay-detail'))));
+      if ($('pdfDebugToggleBtn')) $('pdfDebugToggleBtn').addEventListener('click', togglePdfOverlayDebugMode);
       if ($('copyPageDebugTextBtn')) $('copyPageDebugTextBtn').addEventListener('click', copyActivePageDebugText);
       if ($('copyAllPageDebugTextBtn')) $('copyAllPageDebugTextBtn').addEventListener('click', () => copyAllPagesDebugText().catch(error => console.warn('copy all page debug failed', error)));
       if ($('pdfExtractSelectedBtn')) $('pdfExtractSelectedBtn').addEventListener('click', () => updatePdfRangeExtractionFromSelection(true));
@@ -14397,7 +15204,9 @@
       const background = hasPdfFile
         ? `<canvas id="pdfPageCanvas" class="pdf-page-canvas"></canvas><div id="pdfJsStatus" class="pdf-js-status">PDF.js...</div>`
         : `<div class="pdf-text-fallback"><pre>${esc(previewText)}</pre></div>`;
-      return `<div class="body-preview-workspace">
+      const debugMode = Boolean(state.pdfOverlayDebugMode);
+      const modeClass = debugMode ? ' debug-mode' : '';
+      return `<div class="body-preview-workspace${modeClass}">
         <div class="pdf-range-test-panel">
           <div class="row">
             <strong>${esc(t('pdfRangeTest'))}</strong>
@@ -14419,7 +15228,7 @@
           <div class="card-head"><div class="card-title">${esc(t('tabScript'))} ・ Page ${esc(pageNo)}</div><div class="chips">${renderPageTags(pageBlocks)}</div></div>
           <div class="pdf-preview-stage" data-page-no="${esc(pageNo)}">
             <div class="pdf-page-scroll">
-              <div id="pdfPageSurface" class="pdf-page-surface" data-pdf-overlay-stage data-page-no="${esc(pageNo)}">
+              <div id="pdfPageSurface" class="pdf-page-surface${modeClass}" data-pdf-overlay-stage data-page-no="${esc(pageNo)}">
                 ${background}
                 <div id="pdfLayoutGuideLayer" class="pdf-layout-guide-layer" data-pdf-layout-guide-layer></div>
                 <div id="pdfOverlayLayer" class="pdf-overlay-layer" data-pdf-overlay-layer>
@@ -14428,6 +15237,7 @@
                   ${overlayBlocks.map((block, index) => renderBodyOverlayBox(doc, block, index, overlayBlocks.length)).join('')}
                   <div id="pdfOverlaySelectionToolbar" class="pdf-overlay-selection-toolbar hidden"></div>
                 </div>
+                <div id="pdfFeedbackLayer" class="pdf-feedback-layer" data-pdf-feedback-layer></div>
               </div>
             </div>
             <div class="pdf-preview-mode-note">${esc(hasPdfFile ? t('pdfPreviewNative') : t('pdfPreviewFallback'))}</div>
@@ -14784,7 +15594,7 @@
         });
       const dump = {
         generatedAt: nowIso(),
-        appVersion: 'kari ver065',
+        appVersion: 'scenario-material-control-layer',
         document: doc ? {
           id: doc.id,
           title: doc.title,
@@ -15026,7 +15836,7 @@
         const pages = pageNos.map(pageNo => buildLightAllPagesPageSummary(doc, pageNo));
         const allDump = {
           generatedAt: nowIso(),
-          appVersion: 'kari ver065',
+          appVersion: 'scenario-material-control-layer',
           document: doc ? {
             id: doc.id,
             title: doc.title,
@@ -15301,7 +16111,7 @@
       const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v19' });
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v20' });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -15568,7 +16378,10 @@
     }
 
     function isCurrentPdfCoordinateSource(source) {
-      return source === 'rendered-pdfjs-v19' || source === 'rendered-line-union-v19' || source === 'pdf-logical-fallback';
+      // v20 = fragment horizontal-centering fix (× / …… / lone glyph boxes were a half-glyph too
+      // far left). v19 rects are intentionally treated as stale so they recompute on next render
+      // and pick up the fix without a reimport. Manual rects are preserved elsewhere.
+      return source === 'rendered-pdfjs-v20' || source === 'rendered-line-union-v20' || source === 'pdf-logical-fallback';
     }
 
     async function renderPdfJsPageForActiveBodyPreview(doc, pageNo) {
@@ -15590,8 +16403,10 @@
       const page = await pdf.getPage(Math.max(1, Math.min(Number(pageNo) || 1, pdf.numPages || 1)));
       const stage = surface.closest('.pdf-preview-stage');
       const baseViewport = page.getViewport({ scale: 1 });
-      const availableWidth = Math.max(420, (stage && stage.clientWidth || 920) - 80);
-      const scale = Math.max(0.65, Math.min(1.35, availableWidth / baseViewport.width));
+      const availableWidth = Math.max(420, (stage && stage.clientWidth || 920) - 48);
+      // Scale cap 2.6 (was 1.35): the preview is the primary feedback surface, so it
+      // should actually use the width the wider center pane now gives it.
+      const scale = Math.max(0.65, Math.min(2.6, availableWidth / baseViewport.width));
       const viewport = page.getViewport({ scale });
       const dpr = 1;
       const ctx = canvas.getContext('2d');
@@ -15668,13 +16483,13 @@
           inferred: true,
           manual: false
         }));
-        nextRect.coordinateSource = 'rendered-line-union-v19';
+        nextRect.coordinateSource = 'rendered-line-union-v20';
         const clippedBase = clipOverlayRectToPdfBodyBounds(nextRect, doc, targetPageNo) || nextRect;
         const clipped = Object.assign({}, clippedBase, {
           vertical: true,
           inferred: true,
           manual: false,
-          coordinateSource: 'rendered-line-union-v19'
+          coordinateSource: 'rendered-line-union-v20'
         });
         if (pdfOverlayRectsEquivalent(current, clipped)) return;
         const savedRect = setBlockOverlayRectForPage(block, targetPageNo, clipped);
@@ -16471,7 +17286,7 @@
       const source = Array.isArray(items) ? items : [];
       if (source.pdfFallbackSource === 'pdf-logical-fallback') return 'pdf-logical-fallback';
       if (source.some(item => item && item.coordinateSource === 'pdf-logical-fallback')) return 'pdf-logical-fallback';
-      return 'rendered-pdfjs-v19';
+      return 'rendered-pdfjs-v20';
     }
 
     function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
@@ -16768,13 +17583,19 @@
     }
 
     function bindBodyOverlayInteractions() {
+      const debugMode = Boolean(state.pdfOverlayDebugMode);
       document.querySelectorAll('[data-overlay-block]').forEach((box) => {
         if (box.dataset.boundOverlayBox === '1') return;
         box.dataset.boundOverlayBox = '1';
-        box.addEventListener('click', () => {
-          selectPdfOverlayBox(box);
+        box.addEventListener('click', (ev) => {
+          if (state.pdfOverlayDebugMode) { selectPdfOverlayBox(box); return; }
+          // Clean mode: click a block → open the inline feedback composer beside it.
+          ev.stopPropagation();
+          openPdfFeedbackComposer(box.getAttribute('data-overlay-block'));
         });
+        // Drag-to-move only exists in debug mode; clean mode boxes are fixed.
         box.addEventListener('pointerdown', (ev) => {
+          if (!state.pdfOverlayDebugMode) return;
           if (ev.target.closest('button') || ev.target.closest('[data-overlay-resize]')) return;
           beginBodyOverlayPointerEdit(ev, box, 'move');
         });
@@ -16783,6 +17604,7 @@
         if (handle.dataset.boundOverlayResize === '1') return;
         handle.dataset.boundOverlayResize = '1';
         handle.addEventListener('pointerdown', (ev) => {
+          if (!state.pdfOverlayDebugMode) return;
           const box = handle.closest('[data-overlay-block]');
           if (box) beginBodyOverlayPointerEdit(ev, box, 'resize');
         });
@@ -16790,6 +17612,487 @@
       bindPdfOverlaySelectionToolbar();
       syncPdfOverlaySelectionToolbar();
       bindPdfBodyBoundaryInteractions();
+      renderPdfFeedbackLayer();
+    }
+
+    function togglePdfOverlayDebugMode() {
+      state.pdfOverlayDebugMode = !state.pdfOverlayDebugMode;
+      try { localStorage.setItem('scenarioPdfOverlayDebugMode', state.pdfOverlayDebugMode ? '1' : '0'); } catch (e) {}
+      state.pdfFeedbackComposer = null;
+      syncPdfDebugChrome();
+      const el = $('scriptStructurePanel');
+      if (el) el.dataset.renderKey = '';
+      renderScriptStructurePanel();
+    }
+
+    function syncPdfDebugChrome() {
+      document.body.dataset.pdfDebug = state.pdfOverlayDebugMode ? 'on' : 'off';
+      const dot = $('stripDebugState');
+      if (dot) dot.classList.toggle('on', state.pdfOverlayDebugMode);
+    }
+
+    // ---- Clean-mode feedback surface: note chips + inline composer over the PDF ----
+    function pdfFeedbackBlockRect(blockId) {
+      const box = findOverlayBoxForBlockId(blockId);
+      if (!box) return null;
+      return {
+        left: parseFloat(box.style.left) || 0,
+        top: parseFloat(box.style.top) || 0,
+        width: parseFloat(box.style.width) || 0,
+        height: parseFloat(box.style.height) || 0
+      };
+    }
+
+    // Find a non-overlapping spot for a note/composer rect near its anchor column.
+    // Vertical notes belong ABOVE/BELOW the column (below preferred); they may widen
+    // only when the widened rect still fits without touching an already placed one.
+    // sizes = candidate {w,h} pairs in % units, tried in order (wide first when allowed).
+    // occupied = % rects already claimed by other notes; mutated by the caller, not here.
+    function placePdfFeedbackRect(anchor, sizes, occupied, band) {
+      const PAD = 0.5, GAP = 0.7, EDGE = 0.4;
+      const hitAt = (r) => occupied.find(o =>
+        r.left < o.left + o.width + PAD && r.left + r.width + PAD > o.left &&
+        r.top < o.top + o.height + PAD && r.top + r.height + PAD > o.top);
+      const centerX = anchor.left + anchor.width / 2;
+      const clampX = (x, w) => Math.max(EDGE, Math.min(100 - w - EDGE, x));
+      // Notes live in the page's empty margins, clear of the text body: `band` is the
+      // text block's extent, so "below" starts under ALL columns and "above" ends over
+      // them — not squeezed right against the anchor column.
+      const belowStart = Math.max(anchor.top + anchor.height, band ? band.bottom : 0);
+      const aboveEnd = Math.min(anchor.top, band ? band.top : anchor.top);
+      // Slide down (below) / up (above) past occupants inside the band; null if the band is full.
+      const slide = (left, size, side) => {
+        let top = side === 'below' ? belowStart + GAP : aboveEnd - size.h - GAP;
+        let guard = 0;
+        while (guard++ < 40) {
+          if (side === 'below' ? top + size.h > 100 - EDGE : top < EDGE) return null;
+          const hit = hitAt({ left, top, width: size.w, height: size.h });
+          if (!hit) return top;
+          top = side === 'below' ? hit.top + hit.height + PAD + 0.1 : hit.top - size.h - PAD - 0.1;
+        }
+        return null;
+      };
+      for (const size of sizes) {
+        const nudges = [0, -(size.w + PAD), size.w + PAD];
+        for (const side of ['below', 'above']) {
+          for (const dx of nudges) {
+            const left = clampX(centerX - size.w / 2 + dx, size.w);
+            const top = slide(left, size, side);
+            if (top != null) return { left, top, w: size.w, h: size.h, size, side };
+          }
+        }
+      }
+      // No spot next to the column: sweep full-height bands outward from the anchor
+      // with the shortest candidate until a free slot appears anywhere on the page.
+      const small = sizes.reduce((a, b) => (b.h < a.h ? b : a));
+      const maxK = Math.ceil(100 / (small.w + PAD)) + 1;
+      for (let k = 0; k <= maxK; k++) {
+        for (const s of (k === 0 ? [1] : [-1, 1])) {
+          const left = clampX(centerX - small.w / 2 + s * k * (small.w + PAD), small.w);
+          let top = EDGE, guard = 0;
+          while (top + small.h <= 100 - EDGE && guard++ < 60) {
+            const hit = hitAt({ left, top, width: small.w, height: small.h });
+            if (!hit) return { left, top, w: small.w, h: small.h, size: small, side: 'floating' };
+            top = hit.top + hit.height + PAD + 0.1;
+          }
+        }
+      }
+      // Page genuinely full: clamp below the column and accept the overlap.
+      const left = clampX(centerX - small.w / 2, small.w);
+      const top = Math.max(EDGE, Math.min(100 - small.h - EDGE, anchor.top + anchor.height + GAP));
+      return { left, top, w: small.w, h: small.h, size: small, side: 'below' };
+    }
+
+    // Cap each note's vertical line length (max-height) and give the note an explicit
+    // px width from the measured text. Needed because a flex parent's intrinsic width
+    // ignores the max-height wrap of an orthogonal (vertical-rl) child — leaving the
+    // width auto blows the capsule up to one character per column.
+    function applyPdfNoteCapsuleSize(stack, maxPx) {
+      stack.querySelectorAll('.pdf-feedback-note').forEach((note) => {
+        const txt = note.querySelector('.pdf-feedback-note-text');
+        const head = note.querySelector('.pdf-feedback-note-head');
+        if (!txt) return;
+        note.style.width = '';
+        txt.style.maxHeight = maxPx + 'px';
+        const cs = getComputedStyle(note);
+        const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+          + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+        note.style.width = Math.ceil(Math.max(txt.offsetWidth, head ? head.offsetWidth : 0) + pad) + 'px';
+      });
+    }
+
+    function pdfFeedbackNoteStackHtml(notes) {
+      return notes.map(n => {
+        const type = n.noteType === 'fact' ? 'fact' : n.noteType === 'direct_rewrite' ? 'direct_rewrite' : '';
+        return `<div class="pdf-feedback-note ${type}" data-note-id="${esc(n.id)}">
+          <div class="pdf-feedback-note-head"><span class="pdf-feedback-note-badge">${esc(noteLabel(n))}</span>
+          <button type="button" class="pdf-feedback-note-del" data-delete-revision-note="${esc(n.id)}" title="${esc(t('deleteNote'))}">×</button></div>
+          <div class="pdf-feedback-note-text">${esc(n.text)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // Extent of the text body across all overlay columns, in % of the page. Notes
+    // prefer the empty margins outside this band.
+    function pdfFeedbackContentBand() {
+      let top = null, bottom = null;
+      document.querySelectorAll('[data-overlay-block]').forEach((box) => {
+        const t0 = parseFloat(box.style.top) || 0;
+        const b0 = t0 + (parseFloat(box.style.height) || 0);
+        if (top === null || t0 < top) top = t0;
+        if (bottom === null || b0 > bottom) bottom = b0;
+      });
+      if (top === null) return null;
+      return { top, bottom };
+    }
+
+    function ensurePdfFeedbackLinkLayer(layer) {
+      let svg = layer.querySelector(':scope > svg.pdf-feedback-links');
+      if (!svg) {
+        svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'pdf-feedback-links');
+        layer.prepend(svg);
+      }
+      return svg;
+    }
+
+    // Curved leader line from the source column to its note stack. Endpoints sit on
+    // the facing edges; the S-curve bows through the margin between them.
+    // `cache` (optional) carries pre-measured px metrics so drag frames touch zero
+    // layout properties: { lw, lh, anchor:{x,y,w,h}, stackW, stackH, g }.
+    function drawPdfFeedbackLink(layer, stack, blockId, type, cache) {
+      let g = cache && cache.g;
+      if (!g) {
+        const svg = ensurePdfFeedbackLinkLayer(layer);
+        g = svg.querySelector(`[data-link-for="${blockId}"]`);
+        if (!g) {
+          g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.setAttribute('data-link-for', blockId);
+          g.innerHTML = '<path></path><circle r="2.4"></circle>';
+          svg.appendChild(g);
+        }
+        g.setAttribute('class', 'pdf-feedback-link ' + (type || ''));
+      }
+      const lw = cache ? cache.lw : (layer.clientWidth || 1);
+      const lh = cache ? cache.lh : (layer.clientHeight || 1);
+      let ar = cache && cache.anchor;
+      if (!ar) {
+        const a = pdfFeedbackBlockRect(blockId);
+        if (!a) { g.remove(); return; }
+        ar = { x: a.left / 100 * lw, y: a.top / 100 * lh, w: a.width / 100 * lw, h: a.height / 100 * lh };
+      }
+      const sr = {
+        x: (parseFloat(stack.style.left) || 0) / 100 * lw,
+        y: (parseFloat(stack.style.top) || 0) / 100 * lh,
+        w: cache ? cache.stackW : stack.offsetWidth,
+        h: cache ? cache.stackH : stack.offsetHeight
+      };
+      const dxc = (sr.x + sr.w / 2) - (ar.x + ar.w / 2);
+      const dyc = (sr.y + sr.h / 2) - (ar.y + ar.h / 2);
+      let p1, p2, d;
+      if (Math.abs(dyc) >= Math.abs(dxc)) {
+        p1 = dyc >= 0 ? { x: ar.x + ar.w / 2, y: ar.y + ar.h } : { x: ar.x + ar.w / 2, y: ar.y };
+        p2 = dyc >= 0 ? { x: sr.x + sr.w / 2, y: sr.y } : { x: sr.x + sr.w / 2, y: sr.y + sr.h };
+        const my = (p1.y + p2.y) / 2;
+        d = `M ${p1.x} ${p1.y} C ${p1.x} ${my}, ${p2.x} ${my}, ${p2.x} ${p2.y}`;
+      } else {
+        p1 = dxc >= 0 ? { x: ar.x + ar.w, y: ar.y + ar.h / 2 } : { x: ar.x, y: ar.y + ar.h / 2 };
+        p2 = dxc >= 0 ? { x: sr.x, y: sr.y + sr.h / 2 } : { x: sr.x + sr.w, y: sr.y + sr.h / 2 };
+        const mx = (p1.x + p2.x) / 2;
+        d = `M ${p1.x} ${p1.y} C ${mx} ${p1.y}, ${mx} ${p2.y}, ${p2.x} ${p2.y}`;
+      }
+      g.querySelector('path').setAttribute('d', d);
+      const dot = g.querySelector('circle');
+      dot.setAttribute('cx', p1.x);
+      dot.setAttribute('cy', p1.y);
+    }
+
+    // Drag a note stack by its badge/head. Free placement: the chosen spot is stored
+    // on the notes (pdfPos) so it survives re-renders and saves; the leader line
+    // follows live.
+    function beginPdfFeedbackNoteDrag(ev, stack, blockId) {
+      if (state.pdfOverlayDebugMode) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const layer = $('pdfFeedbackLayer');
+      if (!layer) return;
+      // Measure everything ONCE up front; drag frames are then pure math + style
+      // writes, throttled to one update per animation frame.
+      const lw = layer.clientWidth || 1, lh = layer.clientHeight || 1;
+      const startX = ev.clientX, startY = ev.clientY;
+      const startLeft = parseFloat(stack.style.left) || 0;
+      const startTop = parseFloat(stack.style.top) || 0;
+      const stackW = stack.offsetWidth, stackH = stack.offsetHeight;
+      const wPct = stackW / lw * 100, hPct = stackH / lh * 100;
+      const type = (notesFor('block', blockId)[0] || {}).noteType;
+      const linkType = type === 'fact' ? 'fact' : type === 'direct_rewrite' ? 'direct_rewrite' : '';
+      const cache = { lw, lh, stackW, stackH, g: null, anchor: null };
+      const a = pdfFeedbackBlockRect(blockId);
+      if (a) cache.anchor = { x: a.left / 100 * lw, y: a.top / 100 * lh, w: a.width / 100 * lw, h: a.height / 100 * lh };
+      const svg = ensurePdfFeedbackLinkLayer(layer);
+      cache.g = svg.querySelector(`[data-link-for="${blockId}"]`) || null;
+      let moved = false;
+      let pendingX = startX, pendingY = startY, raf = 0;
+      const applyFrame = () => {
+        raf = 0;
+        // client-px deltas → layer layout-px: divide by canvas zoom (layer clientWidth is unscaled)
+        const z = canvasZoomFactor();
+        const dl = (pendingX - startX) / z / lw * 100;
+        const dt = (pendingY - startY) / z / lh * 100;
+        stack.style.left = Math.max(0.2, Math.min(100 - wPct - 0.2, startLeft + dl)) + '%';
+        stack.style.top = Math.max(0.2, Math.min(100 - hPct - 0.2, startTop + dt)) + '%';
+        drawPdfFeedbackLink(layer, stack, blockId, linkType, cache);
+      };
+      const onMove = (e) => {
+        if (!moved && Math.abs(e.clientX - startX) < 3 && Math.abs(e.clientY - startY) < 3) return;
+        if (!moved) { moved = true; stack.classList.add('dragging'); }
+        pendingX = e.clientX;
+        pendingY = e.clientY;
+        if (!raf) raf = requestAnimationFrame(applyFrame);
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        if (raf) { cancelAnimationFrame(raf); applyFrame(); }
+        stack.classList.remove('dragging');
+        if (!moved) return;
+        const txt = stack.querySelector('.pdf-feedback-note-text');
+        const maxPx = txt ? parseFloat(txt.style.maxHeight) || null : null;
+        const pos = { left: parseFloat(stack.style.left) || 0, top: parseFloat(stack.style.top) || 0, maxPx };
+        notesFor('block', blockId).forEach((n) => { n.pdfPos = pos; });
+        stack.dataset.feedbackSide = 'manual';
+        markProjectChanged('move_feedback_note');
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    }
+
+    function renderPdfFeedbackLayer() {
+      const layer = $('pdfFeedbackLayer');
+      if (!layer) return;
+      // Capsule sizes and collision rects are measured in px against the layer's
+      // CURRENT size — if the surface resizes later (PDF canvas settling, window
+      // resize), re-render so the measurements stay true.
+      if (!layer._feedbackResizeObserved && window.ResizeObserver) {
+        layer._feedbackResizeObserved = true;
+        let t = null;
+        new ResizeObserver(() => {
+          const w = layer.clientWidth, h = layer.clientHeight;
+          if (w === layer._feedbackW && h === layer._feedbackH) return;
+          clearTimeout(t);
+          t = setTimeout(() => renderPdfFeedbackLayer(), 150);
+        }).observe(layer);
+      }
+      layer._feedbackW = layer.clientWidth;
+      layer._feedbackH = layer.clientHeight;
+      // One-shot size re-check: ResizeObserver callbacks ride the paint pipeline and
+      // never fire in hidden tabs, and the surface often settles right after a PDF
+      // canvas render — a plain timer catches both. No-op when the size is stable.
+      clearTimeout(layer._feedbackSizeTimer);
+      layer._feedbackSizeTimer = setTimeout(() => {
+        if (layer.clientWidth !== layer._feedbackW || layer.clientHeight !== layer._feedbackH) renderPdfFeedbackLayer();
+      }, 600);
+      if (state.pdfOverlayDebugMode) { layer.innerHTML = ''; return; }
+      const entries = [];
+      document.querySelectorAll('[data-overlay-block]').forEach((box) => {
+        const blockId = box.getAttribute('data-overlay-block');
+        const notes = notesFor('block', blockId);
+        box.classList.toggle('has-feedback', notes.length > 0);
+        if (!notes.length) return;
+        const rect = pdfFeedbackBlockRect(blockId);
+        if (!rect) return;
+        entries.push({ blockId, rect, notes });
+      });
+      layer.innerHTML = '';
+      if (!entries.length) { bindRevisionNoteDeleteButtons(); return; }
+      // Vertical JP script reads right→left: give right-hand columns first pick of space.
+      entries.sort((a, b) => (b.rect.left + b.rect.width) - (a.rect.left + a.rect.width));
+      const layerH = layer.clientHeight || 1;
+      const layerW = layer.clientWidth || 1;
+      const band = pdfFeedbackContentBand();
+      const occupied = [];
+      const buildStack = (entry) => {
+        const stack = document.createElement('div');
+        stack.className = 'pdf-feedback-note-stack';
+        stack.setAttribute('data-feedback-for', entry.blockId);
+        stack.innerHTML = pdfFeedbackNoteStackHtml(entry.notes);
+        stack.style.visibility = 'hidden';
+        layer.appendChild(stack);
+        return stack;
+      };
+      const finishStack = (entry, stack, side) => {
+        stack.dataset.feedbackSide = side;
+        stack.style.visibility = '';
+        occupied.push({
+          left: parseFloat(stack.style.left) || 0,
+          top: parseFloat(stack.style.top) || 0,
+          width: (stack.offsetWidth / layerW) * 100,
+          height: (stack.offsetHeight / layerH) * 100
+        });
+        const firstType = entry.notes[0] && entry.notes[0].noteType;
+        entry.linkType = firstType === 'fact' ? 'fact' : firstType === 'direct_rewrite' ? 'direct_rewrite' : '';
+        entry.stack = stack;
+      };
+      // Hand-placed stacks first: their spot is the user's choice, everyone else
+      // routes around them.
+      const manual = entries.filter(e => e.notes[0] && e.notes[0].pdfPos);
+      const auto = entries.filter(e => !(e.notes[0] && e.notes[0].pdfPos));
+      manual.forEach((entry) => {
+        const stack = buildStack(entry);
+        const saved = entry.notes[0].pdfPos;
+        applyPdfNoteCapsuleSize(stack, saved.maxPx || Math.max(64, (Math.min(46, Math.max(entry.rect.height, 22)) / 100) * layerH));
+        const wPct = stack.offsetWidth / layerW * 100, hPct = stack.offsetHeight / layerH * 100;
+        stack.style.left = Math.max(0.2, Math.min(100 - wPct - 0.2, saved.left)) + '%';
+        stack.style.top = Math.max(0.2, Math.min(100 - hPct - 0.2, saved.top)) + '%';
+        finishStack(entry, stack, 'manual');
+      });
+      auto.forEach((entry) => {
+        const stack = buildStack(entry);
+        // Vertical-writing capsule: cap the text line length (max-height) and let the
+        // box grow SIDEWAYS as lines wrap — one vertical line by default, 2-3 lines
+        // when the text is long. Candidates trade height for width, tallest first.
+        const baseH = Math.min(46, Math.max(entry.rect.height, 22));
+        const sizes = [baseH, baseH * 0.7, baseH * 0.5].map((hPct) => {
+          const maxPx = Math.max(64, (hPct / 100) * layerH);
+          applyPdfNoteCapsuleSize(stack, maxPx);
+          return { w: (stack.offsetWidth / layerW) * 100, h: (stack.offsetHeight / layerH) * 100, maxPx };
+        });
+        // Margin-fit candidate: when even the squattest standard capsule is taller
+        // than the page margins, shorten the line length until it fits the taller
+        // margin, so notes stay out of the text body instead of floating over it.
+        if (band) {
+          const txt = stack.querySelector('.pdf-feedback-note-text');
+          const overheadPx = stack.offsetHeight - (txt ? txt.offsetHeight : 0);
+          const marginPx = (Math.max(100 - band.bottom, band.top) / 100) * layerH;
+          const fitPx = Math.floor(marginPx - overheadPx - 8);
+          if (fitPx >= 24 && sizes.every(s => fitPx < s.maxPx)) {
+            applyPdfNoteCapsuleSize(stack, fitPx);
+            sizes.push({ w: (stack.offsetWidth / layerW) * 100, h: (stack.offsetHeight / layerH) * 100, maxPx: fitPx });
+          }
+        }
+        const pos = placePdfFeedbackRect(entry.rect, sizes, occupied, band);
+        if (pos.size && pos.size.maxPx) applyPdfNoteCapsuleSize(stack, pos.size.maxPx);
+        stack.style.left = pos.left + '%';
+        stack.style.top = pos.top + '%';
+        finishStack(entry, stack, pos.side);
+      });
+      // Leader lines + interactions (drag by head, click text to re-edit).
+      entries.forEach((entry) => {
+        if (!entry.stack) return;
+        drawPdfFeedbackLink(layer, entry.stack, entry.blockId, entry.linkType);
+        entry.stack.querySelectorAll('.pdf-feedback-note-head').forEach((head) => {
+          head.addEventListener('pointerdown', (ev) => {
+            if (ev.target.closest('[data-delete-revision-note]')) return;
+            beginPdfFeedbackNoteDrag(ev, entry.stack, entry.blockId);
+          });
+        });
+        entry.stack.querySelectorAll('.pdf-feedback-note-text').forEach((txt) => {
+          txt.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const note = txt.closest('.pdf-feedback-note');
+            openPdfFeedbackComposer(entry.blockId, note ? note.getAttribute('data-note-id') : null);
+          });
+        });
+      });
+      bindRevisionNoteDeleteButtons();
+    }
+
+    function openPdfFeedbackComposer(blockId, editNoteId) {
+      if (!blockId) return;
+      const layer = $('pdfFeedbackLayer');
+      const rect = pdfFeedbackBlockRect(blockId);
+      if (!layer || !rect) return;
+      closePdfFeedbackComposer();
+      document.querySelectorAll('.pdf-overlay-box.compose-active').forEach(b => b.classList.remove('compose-active'));
+      const box = findOverlayBoxForBlockId(blockId);
+      if (box) box.classList.add('compose-active');
+      const editNote = editNoteId ? (state.project.revisionNotes || []).find(n => n.id === editNoteId) : null;
+      state.pdfFeedbackComposer = { blockId, noteType: editNote ? (editNote.noteType || 'retake') : 'retake', noteId: editNote ? editNote.id : null };
+      const block = (state.project.sourceBlocks || []).find(b => b.id === blockId);
+      const targetText = block ? displayPdfBlockText(block.rawText || block.text || '').slice(0, 40) : blockId;
+      const wrap = document.createElement('div');
+      wrap.className = 'pdf-feedback-composer';
+      wrap.style.visibility = 'hidden';
+      wrap.innerHTML = `
+        <div class="pdf-feedback-composer-target" title="${esc(targetText)}">${esc(targetText)}</div>
+        <div class="pdf-feedback-composer-type">
+          <button type="button" class="retake active" data-fb-type="retake">${esc(t('noteRetake'))}</button>
+          <button type="button" class="direct_rewrite" data-fb-type="direct_rewrite">${esc(t('rewriteDraft'))}</button>
+          <button type="button" class="fact" data-fb-type="fact">${esc(t('noteFact'))}</button>
+        </div>
+        <textarea placeholder="${esc(t('pdfFeedbackComposerPlaceholder'))}"></textarea>
+        <div class="pdf-feedback-composer-actions">
+          <button type="button" class="small ghost" data-fb-cancel>${esc(t('pdfFeedbackComposerCancel'))}</button>
+          <button type="button" class="small save retake" data-fb-save>${esc(t('pdfFeedbackComposerSave'))}</button>
+        </div>`;
+      layer.appendChild(wrap);
+      // Same placement rule as the note stacks: below the column first, above as
+      // fallback, never overlapping the note stacks already on the page.
+      const layerW = layer.clientWidth || 1;
+      const layerH = layer.clientHeight || 1;
+      const occupied = Array.from(layer.querySelectorAll('.pdf-feedback-note-stack')).map(el => ({
+        left: parseFloat(el.style.left) || 0,
+        top: parseFloat(el.style.top) || 0,
+        width: (el.offsetWidth / layerW) * 100,
+        height: (el.offsetHeight / layerH) * 100
+      }));
+      const pos = placePdfFeedbackRect(rect, [{
+        w: (wrap.offsetWidth / layerW) * 100,
+        h: (wrap.offsetHeight / layerH) * 100
+      }], occupied, pdfFeedbackContentBand());
+      wrap.style.left = pos.left + '%';
+      wrap.style.top = pos.top + '%';
+      wrap.style.visibility = '';
+      const ta = wrap.querySelector('textarea');
+      const saveBtn = wrap.querySelector('[data-fb-save]');
+      const setType = (type) => {
+        state.pdfFeedbackComposer.noteType = type;
+        wrap.querySelectorAll('[data-fb-type]').forEach(b => b.classList.toggle('active', b.getAttribute('data-fb-type') === type));
+        saveBtn.className = 'small save ' + type;
+      };
+      if (editNote) { ta.value = editNote.text || ''; setType(editNote.noteType || 'retake'); }
+      wrap.querySelectorAll('[data-fb-type]').forEach(b => b.addEventListener('click', () => { setType(b.getAttribute('data-fb-type')); ta.focus(); }));
+      wrap.querySelector('[data-fb-cancel]').addEventListener('click', closePdfFeedbackComposer);
+      const commit = () => {
+        const text = ta.value.trim();
+        if (!text) { closePdfFeedbackComposer(); return; }
+        const editing = state.pdfFeedbackComposer.noteId
+          ? (state.project.revisionNotes || []).find(n => n.id === state.pdfFeedbackComposer.noteId)
+          : null;
+        if (editing) {
+          editing.text = norm(text);
+          editing.noteType = state.pdfFeedbackComposer.noteType;
+          editing.color = editing.noteType === 'fact' ? 'green' : 'red';
+          state.project.audit.push({ at: nowIso(), action: 'edit_revision_note', noteId: editing.id, targetType: 'block', targetId: blockId });
+          markProjectChanged('edit_revision_note_inline');
+        } else {
+          addRevisionNote('block', blockId, state.pdfFeedbackComposer.noteType, text);
+          markProjectChanged('add_revision_note_inline');
+        }
+        closePdfFeedbackComposer();
+        syncAll(false);
+      };
+      saveBtn.addEventListener('click', commit);
+      ta.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commit(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); closePdfFeedbackComposer(); }
+      });
+      const onDocDown = (e) => {
+        if (e.target.closest('.pdf-feedback-composer')) return;
+        if (e.target.closest('[data-overlay-block]')) return; // box click reopens for that block
+        closePdfFeedbackComposer();
+      };
+      wrap._outside = onDocDown;
+      setTimeout(() => { document.addEventListener('pointerdown', onDocDown, true); ta.focus(); }, 0);
+    }
+
+    function closePdfFeedbackComposer() {
+      state.pdfFeedbackComposer = null;
+      document.querySelectorAll('.pdf-feedback-composer').forEach(el => {
+        if (el._outside) document.removeEventListener('pointerdown', el._outside, true);
+        el.remove();
+      });
+      document.querySelectorAll('.pdf-overlay-box.compose-active').forEach(b => b.classList.remove('compose-active'));
     }
 
     function bindPdfBodyBoundaryInteractions() {
@@ -17039,6 +18342,8 @@
     function renderStats() {
       const p = state.project;
       const blocks = activeDocumentBlocks(p);
+      const strip = $('stripBlocks');
+      if (strip) strip.textContent = blocks.length;
       const body = blocks.filter(b => b.zone === 'body').length;
       const characters = (p.entities || []).filter(e => e.type === 'character' && entityVisibleInActiveDocument(e, p)).length;
       const places = (p.entities || []).filter(e => e.type === 'place' && entityVisibleInActiveDocument(e, p)).length;
@@ -17049,17 +18354,18 @@
         const tab = btn.getAttribute('data-tab');
         btn.innerHTML = `${esc(blockTabLabels[tab] || tab)} <span class="chip">${esc(blockTabCounts[tab] || 0)}</span>`;
       });
-      const activeType = $('entityFilter') ? $('entityFilter').value : 'organization';
+      document.querySelectorAll('#materialScopeTabs .seg-btn').forEach((btn) => {
+        const scopeTab = btn.getAttribute('data-material-scope');
+        const count = (p.entities || []).filter(e => entityVisibleInMaterialTab(e, scopeTab, p)).length;
+        btn.classList.toggle('active', state.activeMiddleTab === scopeTab);
+        btn.innerHTML = `${esc(scopeTab === 'commonMaterials' ? t('materialScopeCommon') : t('materialScopeEpisode'))} <span class="seg-count">${count}</span>`;
+      });
       const visibleEntities = (p.entities || []).filter(e => entityVisibleInActiveMaterialTab(e, p));
-      const counts = ENTITY_TYPES.map(type => `<button type="button" class="stat-card ${activeType === type ? 'selected' : ''}" data-entity-count-filter="${esc(type)}" ${workspaceReady() ? '' : 'disabled'}><div class="stat-value">${visibleEntities.filter(e => e.type === type).length}</div><div class="stat-label">${esc(typeLabel(type))}</div></button>`).join('');
-      $('entityCounts').innerHTML = counts || '';
-      document.querySelectorAll('[data-entity-count-filter]').forEach(el => el.addEventListener('click', () => {
-        $('entityFilter').value = el.getAttribute('data-entity-count-filter');
-        if (!['episodeMaterials', 'commonMaterials'].includes(state.activeMiddleTab)) state.activeMiddleTab = 'episodeMaterials';
-        renderStats();
-        renderEntities();
-        renderMiddleTabs();
-      }));
+      document.querySelectorAll('#materialTypeTabs .tab').forEach((btn) => {
+        const type = btn.getAttribute('data-material-filter');
+        const count = type === 'all' ? visibleEntities.length : visibleEntities.filter(e => e.type === type).length;
+        btn.innerHTML = `${esc(type === 'all' ? t('filterAll') : typeLabel(type))} <span class="chip">${count}</span>`;
+      });
       renderMaterialTypeTabs();
     }
 
@@ -17194,53 +18500,166 @@
       document.querySelectorAll('[data-add-entity-note]').forEach(el => el.addEventListener('click', () => openAddEntityNote(el.getAttribute('data-add-entity-note'))));
     }
 
+    function materialEntityCardHtml(e) {
+      const refs = (e.sourceRefs || []);
+      const refLinks = refs.slice(0, 6).map((id, i) => `<button type="button" class="ref-jump" data-jump-block="${esc(id)}" title="${esc(id)}">${i + 1}</button>`).join('');
+      const refMore = refs.length > 6 ? `<span>+${refs.length - 6}</span>` : '';
+      const claims = settingClaimsForEntity(e.id).concat(legacyClaimsForEntity(e.id));
+      const notes = notesFor('entity', e.id);
+      const claimRows = claims.map(c => `<div class="annotation-row fact">
+          <span class="annotation-row-badge">${esc(claimLabel(c))}</span>
+          <div class="annotation-row-main">
+            <div class="annotation-row-text">${esc(c.text)}</div>
+            <div class="annotation-row-meta"><span class="annotation-row-target">${esc(authorityLabel(c.authority))}</span></div>
+          </div>
+        </div>`).join('');
+      const noteRows = notes.map(n => `<div class="annotation-row ${esc(n.noteType || 'retake')} ${n.status === 'done' ? 'done' : ''}">
+          <span class="annotation-row-badge">${esc(noteLabel(n))}</span>
+          <div class="annotation-row-main">
+            <div class="annotation-row-text" data-edit-entity-note="${esc(n.id)}" data-note-entity="${esc(e.id)}" title="${esc(t('materialNoteEditHint'))}">${esc(n.text)}</div>
+          </div>
+          <div class="annotation-row-actions">
+            <button type="button" data-delete-revision-note="${esc(n.id)}" title="${esc(t('deleteNote'))}">×</button>
+          </div>
+        </div>`).join('');
+      const tags = (e.tags || []).filter(tag => !/^scope:/.test(tag)).filter(tag => !/^source:/.test(tag) || tagLabel(tag) !== tag);
+      const authValue = editableAuthorityValue(e.authority);
+      return `<div class="entity-card material-card" data-material-card="${esc(e.id)}">
+          <div class="material-card-head">
+            <span class="chip type-${esc(e.type)}">${esc(typeLabel(e.type) || e.type)}</span>
+            <span class="material-card-name" title="${esc((e.aliases || []).join(', '))}">${esc(e.name)}</span>
+            ${renderCharacterProfileChips(e)}
+            <span class="material-card-spacer"></span>
+            <select class="pill-select" data-entity-field="scope" data-entity-id="${esc(e.id)}" title="${esc(t('scopeLabelTitle'))}">${ENTITY_SCOPE_OPTIONS.map(([value]) => `<option value="${value}" ${value === (e.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select>
+            <select class="pill-select authority-${esc(authValue)}" data-entity-field="authority" data-entity-id="${esc(e.id)}" title="${esc(t('authorityTitle'))}">${AUTHORITY.map(a => `<option value="${a}" ${a === authValue ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select>
+          </div>
+          ${e.summary ? `<div class="material-card-summary">${esc(e.summary)}</div>` : ''}
+          ${tags.length ? `<div class="material-card-tags chips">${tags.map(tag => `<span class="chip">${esc(tagLabel(tag))}</span>`).join('')}</div>` : ''}
+          ${(claimRows || noteRows) ? `<div class="material-card-rows">${claimRows}${noteRows}</div>` : ''}
+          <div class="material-card-foot">
+            <span class="material-refs">${refs.length ? `${esc(t('materialRefsLabel'))} ${refLinks}${refMore}` : ''}</span>
+            <div class="row">
+              <button class="small" data-annotate-entity="${esc(e.id)}">${esc(t('materialAddNote'))}</button>
+              <button class="small" data-annotate-setting="${esc(e.id)}">${esc(t('addSettingBlock'))}</button>
+              <button class="small" data-edit-entity="${esc(e.id)}">${esc(t('detail'))}</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
     function renderEntities() {
+      closeMaterialComposer();
       if (!materialWorkUnlocked()) {
         $('entityList').innerHTML = `<div class="empty">${esc(t('materialCardsLocked'))}</div>`;
         return;
       }
       const filter = $('entityFilter').value;
-      const list = (state.project.entities || []).filter(e => entityVisibleInActiveMaterialTab(e) && (filter === 'all' || e.type === filter));
-      if (!list.length) { $('entityList').innerHTML = `<div class="empty">${esc(t('noMaterialCards'))}</div>`; return; }
-      $('entityList').innerHTML = list.map(e => {
-        const refs = (e.sourceRefs || []).slice(0, 4).map(id => `<span class="source-link" data-jump-block="${esc(id)}">${esc(id)}</span>`).join(' ');
-        const settings = settingClaimsForEntity(e.id);
-        const notes = notesFor('entity', e.id);
-        const settingHtml = renderSettingBlocks(e);
-        const noteHtml = notes.map(renderRevisionNoteAnnotation).join('');
-        return `<div class="entity-card">
-          <div class="card-head">
-            <div>
-              <div class="card-title">${esc(e.name)}</div>
-              <div class="card-sub mono">${esc(e.id)} ・ ${esc(e.status || 'candidate')} ・ ${esc(docTitleById(state.project, e.sourceDocumentId))}</div>
-            </div>
-            <div class="chips"><span class="chip type-${esc(e.type)}">${esc(typeLabel(e.type) || e.type)}</span>${renderCharacterProfileChips(e)}<span class="chip">${esc(entityScopeLabel(e.scope))}</span><span class="chip ${esc(editableAuthorityValue(e.authority))}">${esc(authorityLabel(e.authority))}</span></div>
-          </div>
-          <div class="card-body">
-            <div class="grid-2">
-              <div><label>${esc(t('scopeLabelTitle'))}</label><select data-entity-field="scope" data-entity-id="${esc(e.id)}">${ENTITY_SCOPE_OPTIONS.map(([value]) => `<option value="${value}" ${value === (e.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select></div>
-              <div><label>${esc(t('authorityTitle'))}</label><select data-entity-field="authority" data-entity-id="${esc(e.id)}">${AUTHORITY.map(a => `<option value="${a}" ${a === editableAuthorityValue(e.authority) ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select></div>
-            </div>
-            ${(e.tags || []).filter(tag => !/^scope:/.test(tag)).length ? `<div class="chips">${renderTagChips(e)}</div>` : ''}
-            ${settingHtml ? `<div class="annotation-list">${settingHtml}</div>` : ''}
-            ${noteHtml ? `<div class="annotation-list">${noteHtml}</div>` : ''}
-          </div>
-          <div class="card-foot">
-            <span class="card-sub">Refs: ${refs || '-'} ・ ${esc(t('settingsCount', { count: settings.length }))}</span>
-            <div class="row">
-              <button class="small" data-add-entity-setting="${esc(e.id)}">${esc(t('addSettingBlock'))}</button>
-              <button class="small" data-add-entity-note="${esc(e.id)}">${esc(t('retakeNote'))}</button>
-              <button class="small" data-edit-entity="${esc(e.id)}">${esc(t('detail'))}</button>
-            </div>
-          </div>
-        </div>`;
-      }).join('');
+      const query = norm(state.entitySearch || '').toLowerCase();
+      const matchesSearch = (e) => {
+        if (!query) return true;
+        const haystack = [e.name].concat(e.aliases || [], (e.tags || []).filter(tag => !/^scope:/.test(tag)).map(tagLabel)).join(' ').toLowerCase();
+        return haystack.includes(query);
+      };
+      const list = (state.project.entities || []).filter(e => entityVisibleInActiveMaterialTab(e) && (filter === 'all' || e.type === filter) && matchesSearch(e));
+      if (!list.length) {
+        const emptyKey = query ? 'materialNoSearchHit' : (state.activeMiddleTab === 'commonMaterials' ? 'materialCommonEmpty' : 'noMaterialCards');
+        $('entityList').innerHTML = `<div class="empty">${esc(t(emptyKey))}</div>`;
+        return;
+      }
+      $('entityList').innerHTML = list.map(materialEntityCardHtml).join('');
       bindEntityInputs();
       bindJumpLinks();
       document.querySelectorAll('[data-edit-entity]').forEach(el => el.addEventListener('click', () => openEntityModal(el.getAttribute('data-edit-entity'))));
-      document.querySelectorAll('[data-add-entity-setting]').forEach(el => el.addEventListener('click', () => openAddEntitySettingBlock(el.getAttribute('data-add-entity-setting'))));
-      document.querySelectorAll('[data-add-entity-note]').forEach(el => el.addEventListener('click', () => openAddEntityNote(el.getAttribute('data-add-entity-note'))));
+      document.querySelectorAll('[data-annotate-entity]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-annotate-entity'), { mode: 'retake' })));
+      document.querySelectorAll('[data-annotate-setting]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-annotate-setting'), { mode: 'setting' })));
+      document.querySelectorAll('[data-edit-entity-note]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-note-entity'), { noteId: el.getAttribute('data-edit-entity-note') })));
       bindRevisionNoteDeleteButtons();
+    }
+
+    function closeMaterialComposer() {
+      state.materialComposer = null;
+      document.querySelectorAll('.material-composer').forEach((el) => {
+        if (el._outside) document.removeEventListener('pointerdown', el._outside, true);
+        el.remove();
+      });
+      document.querySelectorAll('.material-card.compose-active').forEach(el => el.classList.remove('compose-active'));
+    }
+
+    function openMaterialComposer(entityId, opts) {
+      const entity = state.project.entities.find(e => e.id === entityId);
+      const card = document.querySelector(`[data-material-card="${entityId}"]`);
+      if (!entity || !card) return;
+      closeMaterialComposer();
+      const editNote = opts && opts.noteId ? (state.project.revisionNotes || []).find(n => n.id === opts.noteId) : null;
+      const initialMode = editNote ? (editNote.noteType || 'retake') : ((opts && opts.mode) || 'retake');
+      state.materialComposer = { entityId, mode: initialMode, noteId: editNote ? editNote.id : null };
+      const wrap = document.createElement('div');
+      wrap.className = 'material-composer';
+      const modeButtons = [
+        ['retake', t('noteRetake')],
+        ['direct_rewrite', t('rewriteDraft')],
+        ['fact', t('noteFact')]
+      ].concat(editNote ? [] : [['setting', t('materialSettingMode')]]);
+      wrap.innerHTML = `
+        <div class="material-composer-type">${modeButtons.map(([mode, label]) => `<button type="button" class="${mode}" data-mc-type="${mode}">${esc(label)}</button>`).join('')}</div>
+        <div class="material-composer-setting-fields hidden">
+          <select data-mc-claim-type>${SETTING_BLOCK_TYPES.map(([value]) => `<option value="${value}">${esc(settingBlockTypeLabel(value))}</option>`).join('')}</select>
+          <select data-mc-authority>${AUTHORITY.map(a => `<option value="${a}" ${a === 'soft' ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select>
+        </div>
+        <textarea placeholder="${esc(t('pdfFeedbackComposerPlaceholder'))}"></textarea>
+        <div class="material-composer-actions">
+          <button type="button" class="small ghost" data-mc-cancel>${esc(t('pdfFeedbackComposerCancel'))}</button>
+          <button type="button" class="small save retake" data-mc-save>${esc(t('pdfFeedbackComposerSave'))}</button>
+        </div>`;
+      card.appendChild(wrap);
+      card.classList.add('compose-active');
+      const ta = wrap.querySelector('textarea');
+      const saveBtn = wrap.querySelector('[data-mc-save]');
+      const settingFields = wrap.querySelector('.material-composer-setting-fields');
+      const setMode = (mode) => {
+        state.materialComposer.mode = mode;
+        wrap.querySelectorAll('[data-mc-type]').forEach(b => b.classList.toggle('active', b.getAttribute('data-mc-type') === mode));
+        settingFields.classList.toggle('hidden', mode !== 'setting');
+        saveBtn.className = 'small save ' + mode;
+      };
+      setMode(initialMode);
+      if (editNote) ta.value = editNote.text || '';
+      wrap.querySelectorAll('[data-mc-type]').forEach(b => b.addEventListener('click', () => { setMode(b.getAttribute('data-mc-type')); ta.focus(); }));
+      wrap.querySelector('[data-mc-cancel]').addEventListener('click', closeMaterialComposer);
+      const commit = () => {
+        const text = ta.value.trim();
+        if (!text) { closeMaterialComposer(); return; }
+        const mode = state.materialComposer.mode;
+        if (mode === 'setting') {
+          const claim = addClaim(state.project, entity, wrap.querySelector('[data-mc-claim-type]').value, text, wrap.querySelector('[data-mc-authority]').value, []);
+          if (claim) entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
+          markProjectChanged('add_entity_setting_block');
+        } else if (state.materialComposer.noteId) {
+          const editing = (state.project.revisionNotes || []).find(n => n.id === state.materialComposer.noteId);
+          if (editing) {
+            editing.text = norm(text);
+            editing.noteType = mode;
+            editing.color = mode === 'fact' ? 'green' : 'red';
+            state.project.audit.push({ at: nowIso(), action: 'edit_revision_note', noteId: editing.id, targetType: 'entity', targetId: entity.id });
+            markProjectChanged('edit_revision_note_inline');
+          }
+        } else {
+          addRevisionNote('entity', entity.id, mode, text, [entity.id]);
+        }
+        closeMaterialComposer();
+        syncAll(false);
+      };
+      saveBtn.addEventListener('click', commit);
+      ta.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commit(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); closeMaterialComposer(); }
+      });
+      const onDocDown = (e) => {
+        if (e.target.closest('.material-composer')) return;
+        closeMaterialComposer();
+      };
+      wrap._outside = onDocDown;
+      setTimeout(() => { document.addEventListener('pointerdown', onDocDown, true); ta.focus(); }, 0);
     }
 
     function bindEntityInputs() {
@@ -17293,26 +18712,35 @@
 
     function renderConflicts() {
       const notes = state.project.revisionNotes || [];
+      const railCount = $('railNoteCount');
+      if (railCount) {
+        const open = notes.filter(n => n.status !== 'done').length;
+        railCount.textContent = open;
+        railCount.classList.toggle('hidden', !open);
+      }
       if (!notes.length) { $('conflictList').innerHTML = `<div class="empty">${esc(t('noNotesYet'))}</div>`; return; }
+      // Compact rows: type badge + text + target excerpt. Internal ids, target type
+      // and raw timestamps stay in the data — they are noise on screen.
       $('conflictList').innerHTML = notes.map(n => {
         const target = n.targetType === 'entity'
           ? state.project.entities.find(e => e.id === n.targetId)
           : state.project.sourceBlocks.find(b => b.id === n.targetId);
-        const title = target ? (target.name || target.text || target.id) : n.targetId;
+        const rawTitle = target ? (target.name || displayPdfBlockText(target.rawText || target.text || '') || target.id) : '';
+        const title = String(rawTitle || '').replace(/\s+/g, ' ').slice(0, 26);
+        const type = n.noteType === 'fact' ? 'fact' : n.noteType === 'direct_rewrite' ? 'direct_rewrite' : 'retake';
+        const targetHtml = n.targetType === 'block'
+          ? `<span class="annotation-row-target" data-jump-block="${esc(n.targetId)}" title="${esc(rawTitle)}">${esc(title)}</span>`
+          : (title ? `<span class="annotation-row-target" title="${esc(rawTitle)}">${esc(title)}</span>` : '');
         const linked = (n.linkedEntityIds || []).map(id => state.project.entities.find(e => e.id === id)).filter(Boolean).map(e => `<span class="chip type-${esc(e.type)}">${esc(e.name)}</span>`).join('');
-        const jump = n.targetType === 'block' ? `<span class="source-link" data-jump-block="${esc(n.targetId)}">${esc(n.targetId)}</span>` : '';
-        return `<div class="annotation-card">
-          <div class="card-head">
-            <div><div class="card-title">${esc(title)}</div><div class="card-sub mono">${esc(n.id)} ・ ${esc(n.targetType)} ・ ${esc(noteLabel(n))}</div></div>
-            <div class="chips"><span class="chip ${n.noteType === 'fact' ? 'ok' : 'danger'}">${esc(n.status || 'open')}</span></div>
+        return `<div class="annotation-row ${type} ${n.status === 'done' ? 'done' : ''}">
+          <span class="annotation-row-badge">${esc(noteLabel(n))}</span>
+          <div class="annotation-row-main">
+            <div class="annotation-row-text">${esc(n.text)}</div>
+            ${(targetHtml || linked) ? `<div class="annotation-row-meta">${targetHtml}${linked}</div>` : ''}
           </div>
-          <div class="card-body">
-            ${renderRevisionNoteAnnotation(n)}
-            <div class="chips">${linked}${jump}</div>
-          </div>
-          <div class="card-foot">
-            <span class="card-sub">${esc(n.createdAt || '')}</span>
-            <button class="small" data-close-note="${esc(n.id)}">${n.status === 'done' ? esc(t('openButton')) : esc(t('doneButton'))}</button>
+          <div class="annotation-row-actions">
+            <button type="button" data-close-note="${esc(n.id)}" title="${n.status === 'done' ? esc(t('openButton')) : esc(t('doneButton'))}">${n.status === 'done' ? '↺' : '✓'}</button>
+            <button type="button" data-delete-revision-note="${esc(n.id)}" title="${esc(t('deleteNote'))}">×</button>
           </div>
         </div>`;
       }).join('');
@@ -17604,8 +19032,191 @@
       renderStaticI18n();
     }
 
+    // ===== ver074 canvas shell: pan / zoom / rails / floating chrome =====
+    function canvasZoomFactor() {
+      return (state.canvasView && state.canvasView.z) || 1;
+    }
+
+    function applyCanvasView() {
+      const scene = $('canvasScene');
+      if (!scene) return;
+      const v = state.canvasView;
+      // Keep the scene reachable: never let it fully leave the viewport
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const sw = (scene.offsetWidth || 960) * v.z;
+      const sh = Math.max(scene.offsetHeight || 0, 400) * v.z;
+      v.x = Math.min(vw - 160, Math.max(160 - sw, v.x));
+      v.y = Math.min(vh - 120, Math.max(120 - sh, v.y));
+      scene.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.z})`;
+      const label = $('zoomLabel');
+      if (label) label.textContent = Math.round(v.z * 100) + '%';
+      try { localStorage.setItem('scenarioCanvasZoom', String(v.z)); } catch (e) {}
+    }
+
+    function centerCanvasView(zoomOverride) {
+      const scene = $('canvasScene');
+      if (!scene) return;
+      const v = state.canvasView;
+      if (zoomOverride) v.z = zoomOverride;
+      v.x = Math.round((window.innerWidth - (scene.offsetWidth || 960) * v.z) / 2);
+      v.y = 74;
+      applyCanvasView();
+    }
+
+    function zoomCanvasBy(k, cx, cy) {
+      const v = state.canvasView;
+      const nz = Math.min(2.5, Math.max(0.35, v.z * k));
+      if (nz === v.z) return;
+      const px = typeof cx === 'number' ? cx : window.innerWidth / 2;
+      const py = typeof cy === 'number' ? cy : window.innerHeight / 2;
+      const kk = nz / v.z;
+      v.x = px - (px - v.x) * kk;
+      v.y = py - (py - v.y) * kk;
+      v.z = nz;
+      applyCanvasView();
+    }
+
+    function syncPageChrome() {
+      const chip = $('pageChip');
+      const prev = $('pagePrevBtn');
+      const next = $('pageNextBtn');
+      if (!chip || !prev || !next) return;
+      const scriptMode = document.body.dataset.centerMode !== 'materials';
+      const sel = document.getElementById('scriptPageSelect');
+      const show = Boolean(sel) && scriptMode;
+      // Floating scene info: mirror the (hidden) in-scene page head — title + tag chips
+      const bar = $('sceneInfoBar');
+      if (bar) {
+        const head = document.querySelector('.pane-center .script-page > .card-head');
+        const barShow = scriptMode && Boolean(head);
+        bar.classList.toggle('hidden', !barShow);
+        if (barShow) {
+          const html = head.innerHTML;
+          if (bar._mirrorHtml !== html) { bar._mirrorHtml = html; bar.innerHTML = html; }
+        }
+      }
+      chip.classList.toggle('hidden', !show);
+      prev.classList.toggle('hidden', !show);
+      next.classList.toggle('hidden', !show);
+      if (!show) return;
+      chip.textContent = `${sel.value} / ${sel.options.length}`;
+      const prevSrc = document.querySelector('#scriptStructurePanel [data-script-page-go="prev"]');
+      const nextSrc = document.querySelector('#scriptStructurePanel [data-script-page-go="next"]');
+      prev.disabled = !prevSrc || prevSrc.disabled;
+      next.disabled = !nextSrc || nextSrc.disabled;
+    }
+
+    function setSidePanelOpen(side, open) {
+      document.body.dataset[side === 'left' ? 'panelLeft' : 'panelRight'] = open ? 'open' : 'closed';
+      try { localStorage.setItem('scenarioCanvasPanel_' + side, open ? '1' : '0'); } catch (e) {}
+    }
+
+    function bindCanvasShell() {
+      const root = $('canvasRoot');
+      const scene = $('canvasScene');
+      if (!root || !scene) return;
+      // Hidden-scroll guard: scrollIntoView from inner code must not shift the fixed canvas
+      root.addEventListener('scroll', () => { root.scrollLeft = 0; root.scrollTop = 0; });
+      // Wheel = pan, Ctrl/Cmd+wheel (incl. trackpad pinch) = zoom at cursor
+      root.addEventListener('wheel', (e) => {
+        if (e.target.closest('.side-panel')) return; // panels keep native scrolling
+        const zooming = e.ctrlKey || e.metaKey;
+        // 본문(PDF) 모드: 휠 이동 없음(줌만) — 소재카드 모드에서만 휠로 팬
+        if (!zooming && document.body.dataset.centerMode === 'script') return;
+        e.preventDefault();
+        const v = state.canvasView;
+        if (zooming) {
+          zoomCanvasBy(Math.exp(-e.deltaY * 0.0016), e.clientX, e.clientY);
+        } else {
+          v.x -= e.deltaX;
+          v.y -= e.deltaY;
+          applyCanvasView();
+        }
+      }, { passive: false });
+      // Space forces pan-drag from anywhere; plain drag pans from non-interactive spots
+      let spaceDown = false;
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          const t = e.target;
+          if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+          spaceDown = true;
+          e.preventDefault();
+          return;
+        }
+        if (!(e.ctrlKey || e.metaKey)) return;
+        if (e.key === '0') { e.preventDefault(); centerCanvasView(1); }
+        else if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomCanvasBy(1.15); }
+        else if (e.key === '-') { e.preventDefault(); zoomCanvasBy(1 / 1.15); }
+      });
+      document.addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; });
+      const INTERACTIVE = 'button, a, select, input, textarea, [contenteditable], .side-panel, [data-overlay-block], .pdf-feedback-note-stack, .pdf-feedback-composer, .material-composer, .entity-card, .annotation-row, .pdf-overlay-tools, .pdf-range-test-panel, .pdf-overlay-selection-toolbar';
+      let panning = false, panPointer = 0, sx = 0, sy = 0, ox = 0, oy = 0, movedPx = 0;
+      root.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 && e.button !== 1) return;
+        if (!spaceDown && e.button === 0 && e.target.closest(INTERACTIVE)) return;
+        panning = true; movedPx = 0; panPointer = e.pointerId;
+        sx = e.clientX; sy = e.clientY;
+        ox = state.canvasView.x; oy = state.canvasView.y;
+        root.classList.add('panning');
+        try { root.setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+      });
+      root.addEventListener('pointermove', (e) => {
+        if (!panning || e.pointerId !== panPointer) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        movedPx = Math.max(movedPx, Math.abs(dx), Math.abs(dy));
+        state.canvasView.x = ox + dx;
+        state.canvasView.y = oy + dy;
+        applyCanvasView();
+      });
+      const endPan = (e) => {
+        if (!panning || (e && typeof e.pointerId === 'number' && e.pointerId !== panPointer)) return;
+        panning = false;
+        root.classList.remove('panning');
+        // The click that ends this gesture fires synchronously after pointerup —
+        // clear the pan distance right after it so later unrelated clicks pass.
+        setTimeout(() => { movedPx = 0; }, 0);
+      };
+      root.addEventListener('pointerup', endPan);
+      root.addEventListener('pointercancel', endPan);
+      // A drag that actually panned must not fall through as a click (composer open etc.)
+      root.addEventListener('click', (e) => {
+        if (movedPx > 4) { e.stopPropagation(); e.preventDefault(); movedPx = 0; }
+      }, true);
+      $('zoomResetBtn').addEventListener('click', () => centerCanvasView(1));
+      window.addEventListener('resize', applyCanvasView);
+      // Rails / collapse
+      $('railLeft').addEventListener('click', () => setSidePanelOpen('left', true));
+      $('railRight').addEventListener('click', () => setSidePanelOpen('right', true));
+      document.querySelectorAll('[data-collapse-panel]').forEach(btn => btn.addEventListener('click', () => setSidePanelOpen(btn.getAttribute('data-collapse-panel'), false)));
+      // Page-nav proxies → in-scene (hidden) nav rendered by renderScriptStructurePanel
+      $('pagePrevBtn').addEventListener('click', () => { const b = document.querySelector('#scriptStructurePanel [data-script-page-go="prev"]'); if (b) b.click(); });
+      $('pageNextBtn').addEventListener('click', () => { const b = document.querySelector('#scriptStructurePanel [data-script-page-go="next"]'); if (b) b.click(); });
+      const sp = $('scriptStructurePanel');
+      if (sp && window.MutationObserver) new MutationObserver(() => syncPageChrome()).observe(sp, { childList: true, subtree: true });
+      $('stripDebugBtn').addEventListener('click', togglePdfOverlayDebugMode);
+    }
+
+    function initCanvasShell() {
+      let z = parseFloat(localStorage.getItem('scenarioCanvasZoom') || '1');
+      if (!isFinite(z) || z < 0.35 || z > 2.5) z = 1;
+      state.canvasView.z = z;
+      document.body.dataset.panelLeft = localStorage.getItem('scenarioCanvasPanel_left') === '1' ? 'open' : 'closed';
+      document.body.dataset.panelRight = localStorage.getItem('scenarioCanvasPanel_right') === '1' ? 'open' : 'closed';
+      syncPdfDebugChrome();
+      centerCanvasView();
+      syncPageChrome();
+    }
+
     function renderMiddleTabs() {
-      document.querySelectorAll('#middleTabs .tab').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-middle-tab') === state.activeMiddleTab));
+      const isMaterials = ['episodeMaterials', 'commonMaterials'].includes(state.activeMiddleTab);
+      if (isMaterials) state.lastMaterialTab = state.activeMiddleTab;
+      document.body.dataset.centerMode = isMaterials ? 'materials' : 'script';
+      syncPageChrome();
+      document.querySelectorAll('#middleTabs .tab').forEach((btn) => {
+        const tab = btn.getAttribute('data-middle-tab');
+        btn.classList.toggle('active', tab === 'materials' ? isMaterials : tab === state.activeMiddleTab);
+      });
       const script = $('scriptTabPanel');
       const materials = $('materialTabPanel');
       if (script) script.classList.toggle('hidden', state.activeMiddleTab !== 'script');
@@ -18098,7 +19709,7 @@
         format: 'scenario_to_conte_package',
         schemaVersion: 1,
         generator: {
-          name: 'Scenario Material Control Layer kari ver065',
+          name: 'Scenario Material Control Layer',
           generatedAt,
           app: 'scenario_material_control_layer'
         },
@@ -18810,9 +20421,19 @@ V（城島剛志）
       $('printShareBtn').addEventListener('click', () => { renderShareOutput(true); window.print(); });
       $('entityFilter').addEventListener('change', () => { renderMaterialTypeTabs(); renderEntities(); });
       document.querySelectorAll('#middleTabs .tab').forEach(btn => btn.addEventListener('click', () => {
-        state.activeMiddleTab = btn.getAttribute('data-middle-tab');
+        const tab = btn.getAttribute('data-middle-tab');
+        state.activeMiddleTab = tab === 'materials' ? (state.lastMaterialTab || 'episodeMaterials') : tab;
+        closeMaterialComposer();
         renderMiddleTabs();
         renderScriptStructurePanel();
+        renderStats();
+        renderEntities();
+        applyWorkspaceLock();
+      }));
+      document.querySelectorAll('#materialScopeTabs .seg-btn').forEach(btn => btn.addEventListener('click', () => {
+        state.activeMiddleTab = btn.getAttribute('data-material-scope');
+        closeMaterialComposer();
+        renderMiddleTabs();
         renderStats();
         renderEntities();
         applyWorkspaceLock();
@@ -18824,7 +20445,12 @@ V（城島剛志）
         renderStats();
         renderEntities();
       }));
+      $('entitySearchInput').addEventListener('input', () => {
+        state.entitySearch = $('entitySearchInput').value;
+        renderEntities();
+      });
       $('addEntityBtn').addEventListener('click', openAddEntity);
+      bindCanvasShell();
       $('closeModalBtn').addEventListener('click', closeModal);
       $('editModal').addEventListener('click', (ev) => { if (ev.target === $('editModal')) ev.stopPropagation(); });
       document.addEventListener('click', (ev) => {
@@ -18890,6 +20516,7 @@ V（城島剛志）
       loadActiveDocumentToInput();
       await restorePdfPreviewFilesForProject(state.project);
       syncAll();
+      initCanvasShell();
       restoreSettingsFolderHandle();
     }
 
