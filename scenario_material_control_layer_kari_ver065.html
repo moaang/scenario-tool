@@ -3462,6 +3462,15 @@
       return state.pdfPreviewUrls[doc.id] || '';
     }
 
+    // Japanese scripts use CID-keyed vertical fonts; without the matching CMap resources pdf.js
+    // can't resolve their glyph metrics and collapses each vertical column to roughly half height,
+    // which forces the overlay geometry to be reconstructed from estimates. Point pdf.js at the CDN
+    // CMaps so it reports real vertical metrics instead.
+    const PDF_JS_CMAP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/';
+    function pdfJsDocumentParams(data) {
+      return { data, cMapUrl: PDF_JS_CMAP_URL, cMapPacked: true };
+    }
+
     async function loadPdfJsLibrary() {
       if (window.pdfjsLib) return window.pdfjsLib;
       if (window.__scenarioPdfJsLoading) return window.__scenarioPdfJsLoading;
@@ -6081,7 +6090,7 @@
       let pdf;
       try {
         pdfjsLib = await loadPdfJsLibrary();
-        pdf = await pdfjsLib.getDocument({ data: data.slice(0) }).promise;
+        pdf = await pdfjsLib.getDocument(pdfJsDocumentParams(data.slice(0))).promise;
       } catch (error) {
         if (logicalPages && logicalPages.length) return pdfDocumentResultFromLogicalPages(logicalPages, error);
         throw error;
@@ -6461,10 +6470,13 @@
 
     function pdfVerticalLogicalTailBottomPadPct(pitch, extraGlyphs) {
       const sourcePitch = Number(pitch) || 0;
-      if (!sourcePitch) return extraGlyphs ? 0.85 : 0.45;
-      const ratio = extraGlyphs > 0 ? 2.85 : 0.55;
-      const min = extraGlyphs > 0 ? 0.85 : 0.4;
-      const max = extraGlyphs > 0 ? 6.0 : 1.4;
+      if (!sourcePitch) return extraGlyphs ? 0.6 : 0.45;
+      // pitch is now derived from pdf.js's real column heights, so pitch*extraGlyphs already lands on
+      // the recovered glyphs' true cells; only a small descender margin is needed on top. (The old
+      // 2.85x/6% pad dated from when the base height was a fontSize estimate and had to overshoot.)
+      const ratio = extraGlyphs > 0 ? 0.7 : 0.55;
+      const min = extraGlyphs > 0 ? 0.5 : 0.4;
+      const max = extraGlyphs > 0 ? 1.8 : 1.4;
       return Math.min(max, Math.max(min, sourcePitch * ratio));
     }
 
@@ -7761,6 +7773,9 @@
 
     function pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight) {
       if (!isPdfExpandedVerticalRunItem(item)) return 0;
+      // Measured runs already sit on the real glyph column; the shift only compensated for the
+      // fontSize-estimated geometry, so applying it here would re-introduce the leftward drift.
+      if (item && item.verticalRunMeasured) return 0;
       const glyphWidth = Math.max(0, Number(item.glyphWidthPct) || width || rawWidth || 0);
       if (!glyphWidth) return 0;
       const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text);
@@ -7774,6 +7789,8 @@
 
     function pdfVerticalRunBottomPadPct(item, rawHeight) {
       if (!isPdfExpandedVerticalRunItem(item)) return 0;
+      // Measured runs carry pdf.js's true column height, so the estimation bottom pad isn't needed.
+      if (item && item.verticalRunMeasured) return 0;
       const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text);
       const height = Number(rawHeight) || Number(item.heightPct) || 0;
       if (!height) return 0;
@@ -15572,7 +15589,7 @@
       let pdf = state.pdfJsDocuments && state.pdfJsDocuments[doc.id];
       if (!pdf) {
         const data = await file.arrayBuffer();
-        pdf = await pdfjsLib.getDocument({ data }).promise;
+        pdf = await pdfjsLib.getDocument(pdfJsDocumentParams(data)).promise;
         state.pdfJsDocuments[doc.id] = pdf;
       }
       const page = await pdf.getPage(Math.max(1, Math.min(Number(pageNo) || 1, pdf.numPages || 1)));
@@ -16135,6 +16152,7 @@
           bottom: top + height,
           verticalTextItem: box.verticalTextItem,
           verticalRunExpanded: Boolean(box.verticalRunExpanded),
+          verticalRunMeasured: Boolean(box.verticalRunMeasured),
           rawHeight: box.rawHeight,
           verticalGlyphCount: box.verticalGlyphCount,
           glyphWidth: box.glyphWidth,
@@ -16180,19 +16198,35 @@
       return compact ? charLen(compact) : 0;
     }
 
-    function expandCollapsedPdfJsVerticalRunBounds(bounds, text, fontSize, viewport) {
+    function expandCollapsedPdfJsVerticalRunBounds(bounds, text, fontSize, viewport, measuredHeightPx) {
       if (!bounds || isRotatedLatinPdfRun(text)) return bounds;
       if (isPdfVerticalPunctuationFragment(text)) return bounds;
       const glyphCount = pdfVerticalRunGlyphCount(text);
       if (glyphCount < 2) return bounds;
       const currentHeight = Math.max(0, Number(bounds.height) || 0);
       const currentWidth = Math.max(0, Number(bounds.width) || 0);
+      const pageHeight = Number(viewport && viewport.height) || 0;
+      const clampToPage = (value) => pageHeight > 0 ? Math.min(value, pageHeight - Math.max(0, Number(bounds.top) || 0)) : value;
+      // pdf.js reports the true column height for vertical (ttb) runs. When that measurement looks
+      // like a real multi-glyph column, use it verbatim instead of reconstructing the length from a
+      // fontSize×pitch estimate — the estimate is what left overlay boxes mis-sized and off-center.
+      const measured = Number(measuredHeightPx) || 0;
+      if (measured > currentHeight * 1.35 && measured >= (Number(fontSize) || 0) * 1.5) {
+        const measuredHeight = clampToPage(measured);
+        if (measuredHeight > currentHeight) {
+          return Object.assign({}, bounds, {
+            height: measuredHeight,
+            verticalRunExpanded: true,
+            verticalRunMeasured: true,
+            rawHeight: currentHeight,
+            verticalGlyphCount: glyphCount
+          });
+        }
+      }
       const glyphPitch = Math.max(Number(fontSize) || 0, currentHeight, currentWidth) * 1.08;
       const expectedHeight = glyphPitch * glyphCount;
       if (!Number.isFinite(expectedHeight) || expectedHeight <= currentHeight * 1.35) return bounds;
-      const pageHeight = Number(viewport && viewport.height) || 0;
-      const maxHeight = pageHeight > 0 ? Math.max(currentHeight, pageHeight - Math.max(0, Number(bounds.top) || 0)) : expectedHeight;
-      const height = Math.min(expectedHeight, maxHeight);
+      const height = Math.min(expectedHeight, Math.max(currentHeight, clampToPage(expectedHeight)));
       if (!Number.isFinite(height) || height <= currentHeight) return bounds;
       return Object.assign({}, bounds, {
         height,
@@ -16222,7 +16256,10 @@
       const boxTop = anchorY - ascent * Math.cos(angle);
       const bounds = rotatedPdfTextBoxBounds(boxLeft, boxTop, advance, fontSize, angle);
       if (axisVertical) {
-        const verticalBounds = expandCollapsedPdfJsVerticalRunBounds(bounds, text, fontSize, viewport);
+        // pdf.js gives ttb runs the real column height in item.height (the glyph advance runs along
+        // the vertical axis), so hand it in as the trusted measurement.
+        const measuredHeightPx = Math.abs(Number(item && item.height) || 0) * scale;
+        const verticalBounds = expandCollapsedPdfJsVerticalRunBounds(bounds, text, fontSize, viewport, measuredHeightPx);
         return {
           left: verticalBounds.left,
           top: verticalBounds.top,
@@ -16231,6 +16268,7 @@
           glyphWidth: Math.max(2, Math.min(verticalBounds.width, fontSize * 1.15)),
           verticalTextItem: true,
           verticalRunExpanded: Boolean(verticalBounds.verticalRunExpanded),
+          verticalRunMeasured: Boolean(verticalBounds.verticalRunMeasured),
           rawHeight: verticalBounds.rawHeight,
           verticalGlyphCount: verticalBounds.verticalGlyphCount
         };
