@@ -9868,8 +9868,15 @@
       const cleanItems = (items || []).filter(item => item && item.text && item.text !== ' ');
       if (!cleanItems.length) return { bodyLines: [], annotations: [] };
       const colorNoteItems = cleanItems.filter(isPdfBlueTextItem);
-      const bodyItems = cleanItems.filter(item => !isPdfDetachedNoteText(item.text));
       const colorAnnotations = pdfAnnotationsFromColorItems(colorNoteItems);
+      // Blue-ink note glyphs must never reach the BODY line builders: the content-order
+      // path used to keep them, so note text leaked into bodyLines and the colour
+      // annotations were then deduped away as "already in body" — the import-side root
+      // of unstable note/body boundaries. Majority-blue pages keep everything (body
+      // printed blue).
+      const majorityBlue = colorNoteItems.length && colorNoteItems.length >= cleanItems.length * 0.5;
+      const bodyItems = cleanItems.filter(item => !isPdfDetachedNoteText(item.text)
+        && (majorityBlue || !isPdfBlueTextItem(item)));
       if (!bodyItems.length) return { bodyLines: [], annotations: colorAnnotations };
       const bodyTextItems = stripPdfLineGuideNumberItems(bodyItems);
       if (!bodyTextItems.length) return { bodyLines: [], annotations: colorAnnotations };
