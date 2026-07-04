@@ -1049,6 +1049,7 @@
     .pdf-overlay-box.dialog { border-color: var(--speaker-color, #1d516d); }
     .pdf-overlay-box.action { border-color: #7b6a22; }
     .pdf-overlay-box.text, .pdf-overlay-box.body_text, .pdf-overlay-box.appendix_text, .pdf-overlay-box.front_summary { border-color: #4f7d55; }
+    .pdf-overlay-box.pdf_note { border-color: #4c93c8; border-style: dashed; }
     .pdf-overlay-box.cast_entry, .pdf-overlay-box.cast_section, .pdf-overlay-box.cast_note { border-color: #5f5589; }
     .pdf-overlay-box.scene_heading { border-color: #ff1744; }
     .pdf-overlay-box.end_marker { border-color: #7f1717; }
@@ -1105,6 +1106,7 @@
     .pdf-overlay-box.cast_note .pdf-overlay-tag { color: #5f5589; }
     .pdf-overlay-box.scene_heading .pdf-overlay-tag { color: #ff1744; }
     .pdf-overlay-box.end_marker .pdf-overlay-tag { color: #7f1717; }
+    .pdf-overlay-box.pdf_note .pdf-overlay-tag { color: #4c93c8; }
     .pdf-overlay-box.continued .pdf-overlay-tag {
       font-size: 8px;
       line-height: 1;
@@ -15315,98 +15317,6 @@
       return isPdfPageArtifactText(block.rawText || block.text || '', block.pageNo || 1);
     }
 
-    function resolveBlockOverlayCollisionsForPage(doc, pageNo, options) {
-      const includeManual = Boolean(options && options.includeManual);
-      const blocks = (state.project.sourceBlocks || [])
-        .filter(block => block.sourceDocumentId === doc.id && blockHasOverlayPage(block, pageNo) && overlayRectForBlockPage(block, pageNo) && !isPageArtifactBlock(block))
-        .filter(block => {
-          const rect = overlayRectForBlockPage(block, pageNo);
-          return includeManual || !(rect && rect.manual);
-        });
-      resolveOverlayRectCollisions(blocks, () => pageNo || 1, block => overlayRectForBlockPage(block, pageNo), (block, rect) => {
-        const previousRect = overlayRectForBlockPage(block, pageNo);
-        const manual = Boolean(previousRect && previousRect.manual);
-        const nextRect = Object.assign({}, rect, { manual });
-        setBlockOverlayRectForPage(block, pageNo, nextRect);
-        syncReviewItemOverlayRectFromBlock(block, pageNo, nextRect);
-        const box = findOverlayBoxForBlockId(block.id);
-        if (box) applyOverlayRectToElement(box, nextRect, pageNo);
-      });
-    }
-
-    function resolveOverlayRectCollisions(items, pageGetter, rectGetter, rectSetter) {
-      const byPage = new Map();
-      (items || []).forEach((item) => {
-        const rect = rectGetter(item);
-        if (!rect) return;
-        const pageNo = Number(pageGetter(item) || 1);
-        if (!byPage.has(pageNo)) byPage.set(pageNo, []);
-        byPage.get(pageNo).push({ item, rect: normalizeOverlayRect(rect) });
-      });
-      byPage.forEach((entries) => {
-        entries.sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);
-        for (let pass = 0; pass < 6; pass += 1) {
-          let changed = false;
-          for (let i = 0; i < entries.length; i += 1) {
-            for (let j = i + 1; j < entries.length; j += 1) {
-              if (separateOverlayRects(entries[i].rect, entries[j].rect)) changed = true;
-            }
-          }
-          if (!changed) break;
-        }
-        entries.forEach(entry => rectSetter(entry.item, normalizeOverlayRect(entry.rect)));
-      });
-    }
-
-    function separateOverlayRects(a, b) {
-      const gap = 0.12;
-      const ar = a.left + a.width;
-      const ab = a.top + a.height;
-      const br = b.left + b.width;
-      const bb = b.top + b.height;
-      const overlapW = Math.min(ar, br) - Math.max(a.left, b.left);
-      const overlapH = Math.min(ab, bb) - Math.max(a.top, b.top);
-      if (overlapW <= gap || overlapH <= gap) return false;
-      const verticalBias = Boolean(a.vertical || b.vertical || overlapW <= overlapH * 1.25);
-      if (verticalBias) return splitOverlayRectsOnX(a, b, gap);
-      return splitOverlayRectsOnY(a, b, gap);
-    }
-
-    function splitOverlayRectsOnX(a, b, gap) {
-      const leftFirst = (a.left + a.width / 2) <= (b.left + b.width / 2);
-      const left = leftFirst ? a : b;
-      const right = leftFirst ? b : a;
-      const leftRight = left.left + left.width;
-      const rightRight = right.left + right.width;
-      const boundary = ((left.left + left.width / 2) + (right.left + right.width / 2)) / 2;
-      const nextLeftWidth = Math.max(1.2, Math.min(left.width, boundary - gap / 2 - left.left));
-      const nextRightLeft = Math.max(right.left, boundary + gap / 2);
-      const nextRightWidth = Math.max(1.2, rightRight - nextRightLeft);
-      if (nextLeftWidth >= left.width && nextRightLeft <= right.left) return false;
-      left.width = nextLeftWidth;
-      right.left = Math.min(98, nextRightLeft);
-      right.width = Math.min(nextRightWidth, Math.max(1.2, 99 - right.left));
-      left.width = Math.min(left.width, Math.max(1.2, 99 - left.left));
-      return true;
-    }
-
-    function splitOverlayRectsOnY(a, b, gap) {
-      const topFirst = (a.top + a.height / 2) <= (b.top + b.height / 2);
-      const top = topFirst ? a : b;
-      const bottom = topFirst ? b : a;
-      const bottomBottom = bottom.top + bottom.height;
-      const boundary = ((top.top + top.height / 2) + (bottom.top + bottom.height / 2)) / 2;
-      const nextTopHeight = Math.max(1.2, Math.min(top.height, boundary - gap / 2 - top.top));
-      const nextBottomTop = Math.max(bottom.top, boundary + gap / 2);
-      const nextBottomHeight = Math.max(1.2, bottomBottom - nextBottomTop);
-      if (nextTopHeight >= top.height && nextBottomTop <= bottom.top) return false;
-      top.height = nextTopHeight;
-      bottom.top = Math.min(98, nextBottomTop);
-      bottom.height = Math.min(nextBottomHeight, Math.max(1.2, 99 - bottom.top));
-      top.height = Math.min(top.height, Math.max(1.2, 99 - top.top));
-      return true;
-    }
-
     function dialogTextWithQuotes(item) {
       const dialog = String(item && item.dialog || '').trim();
       if (!dialog) return '';
@@ -16575,7 +16485,8 @@
 
     function pdfOverlayBlocksForPage(doc, pageNo, pageBlocks) {
       const targetPageNo = overlayPageNoForBlock(null, pageNo);
-      const sourceBlocks = doc ? sortedDocumentBlocks(doc).filter(isScriptPreviewBlock) : (pageBlocks || []).filter(isScriptPreviewBlock);
+      const overlayEligible = (block) => isScriptPreviewBlock(block) || isPdfNoteOverlayBlock(block);
+      const sourceBlocks = doc ? sortedDocumentBlocks(doc).filter(overlayEligible) : (pageBlocks || []).filter(overlayEligible);
       const byId = new Map();
       sourceBlocks.forEach((block) => {
         const overlayBlock = pdfOverlayBlockForPage(block, targetPageNo);
@@ -16761,6 +16672,8 @@
       rect.vertical = Boolean(saved.vertical || rect.height > rect.width * 1.25);
       rect.inferred = Boolean(saved.inferred);
       rect.manual = Boolean(saved.manual);
+      // Margin-note boxes live outside the configured body band by definition.
+      if (isPdfNoteOverlayBlock(block)) return normalizeOverlayRect(rect);
       return clipOverlayRectToPdfBodyBounds(rect, doc || activeDocument(), pageNo);
     }
 
@@ -16820,7 +16733,8 @@
     }
 
     function renderBodyOverlayBox(doc, block, index, total) {
-      const isDialog = block.type === 'dialog' || block.speaker;
+      const isNote = isPdfNoteOverlayBlock(block);
+      const isDialog = !isNote && (block.type === 'dialog' || block.speaker);
       const isAppendixText = block.type === 'appendix_text';
       const isBodyText = block.type === 'body_text' || block.type === 'text_insert' || isAppendixText;
       const isCast = block.type === 'cast_entry' || block.type === 'cast_section' || block.type === 'cast_note' || block.zone === 'cast_list';
@@ -16831,10 +16745,10 @@
       const rect = overlayRectForBlock(block, index, total, doc);
       if (!rect) return '';
       const style = `${isDialog ? characterColorStyle(speaker || 'unknown-speaker') : ''};left:${rect.left}%;top:${rect.top}%;width:${rect.width}%;height:${rect.height}%`;
-      const typeClass = isDialog ? 'dialog' : (isAppendixText ? 'appendix_text' : isBodyText ? 'body_text' : isCast ? 'cast_entry' : isFrontText ? 'front_summary' : (block.type || 'action'));
+      const typeClass = isNote ? 'pdf_note' : isDialog ? 'dialog' : (isAppendixText ? 'appendix_text' : isBodyText ? 'body_text' : isCast ? 'cast_entry' : isFrontText ? 'front_summary' : (block.type || 'action'));
       const verticalClass = rect.vertical || rect.height > rect.width * 1.25 ? ' vertical' : '';
       const continuedLabel = block.overlayLabel || continuedOverlayLabelForBlock(block, pageNo);
-      const label = continuedLabel || (block.type === 'scene_heading' ? 'SCENE' : isDialog ? 'DIALOG' : block.type === 'end_marker' ? 'END' : isCast ? 'CAST' : (isBodyText || isFrontText) ? 'TEXT' : 'ACTION');
+      const label = continuedLabel || (isNote ? 'NOTE' : block.type === 'scene_heading' ? 'SCENE' : isDialog ? 'DIALOG' : block.type === 'end_marker' ? 'END' : isCast ? 'CAST' : (isBodyText || isFrontText) ? 'TEXT' : 'ACTION');
       const continuedClass = continuedLabel ? ' continued' : '';
       return `<div class="pdf-overlay-box ${esc(typeClass)}${verticalClass}${continuedClass} ${state.selectedBlockId === block.id ? 'selected' : ''}" data-overlay-block="${esc(block.id)}" data-overlay-page-no="${esc(pageNo)}" data-overlay-continued-from="${esc(block.continuedFromPageNo || '')}" style="${style}">
         <div class="pdf-overlay-tools">
@@ -17723,7 +17637,7 @@
       const targetPageNo = Number(pageNo || 1);
       return (state.project.sourceBlocks || []).filter(block => {
         if (!block || block.sourceDocumentId !== doc.id || !blockHasOverlayPage(block, targetPageNo)) return false;
-        if (!isScriptPreviewBlock(block)) return false;
+        if (!isScriptPreviewBlock(block) && !isPdfNoteOverlayBlock(block)) return false;
         return !hasCurrentRenderedPdfOverlayRect(block, targetPageNo);
       }).map(block => {
         const rect = overlayRectForBlockPage(block, targetPageNo) || {};
@@ -17742,29 +17656,41 @@
       if (!doc || !items || !items.length) return 0;
       const force = Boolean(options && options.force);
       const coordinateSource = options && options.coordinateSource || pdfTextItemsCoordinateSource(items);
-      const matcher = createPdfItemTextMatcher(pdfOverlayMatchingItemsForPage(doc, pageNo, items), new Set());
+      const pools = pdfOverlayMatchingPoolsForPage(doc, pageNo, items);
+      const bodyMatcher = createPdfItemTextMatcher(pools.body, new Set());
       const blocks = (state.project.sourceBlocks || [])
         .filter(block => block.sourceDocumentId === doc.id && blockHasOverlayPage(block, pageNo) && !isPageArtifactBlock(block))
-        .filter(isScriptPreviewBlock)
+        .filter(block => isScriptPreviewBlock(block) || isPdfNoteOverlayBlock(block))
         .filter(block => force || !hasCurrentRenderedPdfOverlayRect(block, pageNo));
       let changed = 0;
       blocks.forEach((block) => {
+        const isNote = isPdfNoteOverlayBlock(block);
         const overlayBlock = pdfOverlayBlockForPage(block, pageNo) || block;
-        const matched = inferOverlayRectFromPdfText(overlayBlock, matcher);
+        const matched = isNote
+          ? inferNoteOverlayRectFromLines(overlayBlock, pools.noteLines, pageNo)
+          : inferOverlayRectFromPdfText(overlayBlock, bodyMatcher);
         if (!matched || !matched.rect) return;
-        const nextRect = clipOverlayRectToPdfBodyBounds(matched.rect, doc, pageNo) || normalizeOverlayRect(matched.rect);
+        // Notes live outside the configured body band — clipping them into it would be
+        // exactly the kind of forced coordinate correction we want to avoid.
+        const nextRect = isNote
+          ? normalizeOverlayRect(matched.rect)
+          : (clipOverlayRectToPdfBodyBounds(matched.rect, doc, pageNo) || normalizeOverlayRect(matched.rect));
         const savedRect = setBlockOverlayRectForPage(block, pageNo, Object.assign({}, nextRect, {
           inferred: true,
           manual: false,
           coordinateSource
         }));
         syncReviewItemOverlayRectFromBlock(block, pageNo, savedRect);
-        markPdfItemMatchUsed(matched, matcher.usedSet);
+        if (!isNote) markPdfItemMatchUsed(matched, bodyMatcher.usedSet);
         const box = findOverlayBoxForBlockId(block.id);
         if (box) applyOverlayRectToElement(box, savedRect, pageNo);
         changed += 1;
       });
       return changed;
+    }
+
+    function isPdfNoteOverlayBlock(block) {
+      return Boolean(block && block.type === 'pdf_note');
     }
 
     function pdfTextItemsCoordinateSource(items) {
@@ -17774,36 +17700,113 @@
       return 'rendered-pdfjs-v21';
     }
 
-    function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
+    function pdfOverlayMatchingPoolsForPage(doc, pageNo, renderedItems) {
       const targetPageNo = Number(pageNo || 1);
-      const renderedSource = pdfLayoutGuideItemsForOverlayMatching(doc, targetPageNo, renderedItems);
-      if (renderedSource.length) return renderedSource;
+      const rendered = pdfLayoutGuidePoolsForOverlayMatching(doc, targetPageNo, renderedItems);
+      if (rendered.body.length || rendered.noteLines.length) return rendered;
       const page = (doc && doc.draftPages || []).find(item => Number(item.pageNo || item.sourcePageIndex || 1) === targetPageNo);
-      const linkedItems = pdfLayoutGuideItemsForOverlayMatching(doc, targetPageNo, page && page.textItems || []);
-      if (linkedItems.length) return linkedItems;
+      const linked = pdfLayoutGuidePoolsForOverlayMatching(doc, targetPageNo, page && page.textItems || []);
+      if (linked.body.length || linked.noteLines.length) return linked;
       const pageItems = pdfPageItemsForOverlayMatching(page, doc);
-      return pdfScriptBodyItemsForOverlayMatching(pageItems, doc, targetPageNo);
+      return { body: pdfScriptBodyItemsForOverlayMatching(pageItems, doc, targetPageNo), noteLines: [] };
     }
 
-    function pdfLayoutGuideItemsForOverlayMatching(doc, pageNo, items) {
+    // Two first-class matching pools per page: BODY (V) and margin-note/annotation (C).
+    // Body blocks match against the body pool; pdf_note blocks match against the note
+    // pool. Notes are not "noise to discard" — they are recognised content whose overlay
+    // visualises coordinate coverage — but they must not pollute the body stream either.
+    function pdfLayoutGuidePoolsForOverlayMatching(doc, pageNo, items) {
       const all = (items || []).filter(item => item && item.text);
-      // Comment-version scripts: margin notes pollute the reading-order char stream and
-      // break match contiguity for wrapped body sentences. Blue-ink notes are dropped by
-      // color BEFORE line grouping (the guide-line union both merges note glyphs into body
-      // lines and hard-marks every pooled item pdfScriptBodyColorProtected, which used to
-      // neutralise the later blue filter). Majority-blue pages keep everything (body
-      // printed blue). Black-ink notes are handled after grouping by the note-band strip.
+      // Blue-ink note glyphs are separated by colour BEFORE line grouping (the guide-line
+      // union both merges note glyphs into body lines and hard-marks every pooled item
+      // pdfScriptBodyColorProtected, which used to neutralise the later blue filter).
+      // Majority-blue pages keep everything in the body pool (body printed blue).
       const blueItems = all.filter(item => isPdfJsBlueTextItem(item));
-      const source = blueItems.length && blueItems.length < all.length * 0.5
-        ? all.filter(item => !isPdfJsBlueTextItem(item))
-        : all;
+      const majorityBlue = blueItems.length && blueItems.length >= all.length * 0.5;
+      const source = majorityBlue ? all : all.filter(item => !isPdfJsBlueTextItem(item));
       const groups = pdfLayoutGuideLineGroupsForPage(doc, source, pageNo, pdfBodyRangeForPage(doc, pageNo));
-      const lines = stripPdfMarginNoteRunsFromGuideLines(groups.bodyLines || []);
-      const guideItems = pdfOverlayMatchingItemsFromGuideLines(lines);
-      if (guideItems.length) return pdfScriptBodyItemsForOverlayMatching(guideItems, doc, pageNo);
-      const orderedItems = orderedPdfItemsForMatching(source, pageNo);
-      if (orderedItems.length) return pdfScriptBodyItemsForOverlayMatching(orderedItems, doc, pageNo);
-      return [];
+      const split = splitPdfGuideLinesForOverlayMatching(groups.bodyLines || []);
+      let noteLines = split.noteLines;
+      if (!majorityBlue && blueItems.length) {
+        noteLines = noteLines.concat(pdfBlueNoteGuideLines(blueItems, pageNo));
+      }
+      let body = [];
+      const bodyGuide = pdfOverlayMatchingItemsFromGuideLines(split.bodyLines);
+      if (bodyGuide.length) body = pdfScriptBodyItemsForOverlayMatching(bodyGuide, doc, pageNo);
+      else {
+        const orderedItems = orderedPdfItemsForMatching(source, pageNo);
+        if (orderedItems.length) body = pdfScriptBodyItemsForOverlayMatching(orderedItems, doc, pageNo);
+      }
+      // Note pool = LINE objects (text + rect), not a char stream: note blocks aggregate
+      // annotation text across regions/pages, so coverage-style char matching is the
+      // wrong tool — notes are matched by line-containment union instead.
+      return { body, noteLines };
+    }
+
+    // Blue note glyphs never pass through the body line grouper, so synthesise their
+    // lines directly: cluster glyphs into vertical columns by X, then split each column
+    // into contiguous Y-runs (same run rule as the body split).
+    function pdfBlueNoteGuideLines(blueItems, pageNo) {
+      const glyphH = 1.8;
+      const source = (blueItems || []).filter(item => item && item.text && String(item.text).trim());
+      if (!source.length) return [];
+      const sorted = source.slice().sort((a, b) => {
+        const ax = Number(a.centerXPct != null ? a.centerXPct : a.leftPct) || 0;
+        const bx = Number(b.centerXPct != null ? b.centerXPct : b.leftPct) || 0;
+        return ax - bx;
+      });
+      const columns = [];
+      let col = null;
+      sorted.forEach((item) => {
+        const x = Number(item.centerXPct != null ? item.centerXPct : item.leftPct) || 0;
+        if (col && Math.abs(x - col.x) <= 1.0) { col.items.push(item); col.x = (col.x + x) / 2; }
+        else { col = { x, items: [item] }; columns.push(col); }
+      });
+      const lines = [];
+      columns.forEach((column) => {
+        const items = column.items.slice().sort((a, b) => (Number(a.topPct) || 0) - (Number(b.topPct) || 0));
+        let run = null;
+        const runs = [];
+        items.forEach((item) => {
+          const top = Number(item.topPct) || 0;
+          const h = Number(item.heightPct) || glyphH;
+          if (run && top - run.end <= glyphH * 1.5) { run.items.push(item); run.end = Math.max(run.end, top + h); }
+          else { run = { start: top, end: top + h, items: [item] }; runs.push(run); }
+        });
+        runs.forEach((r) => {
+          const its = r.items;
+          const left = Math.min.apply(null, its.map(i => Number(i.leftPct) || 0));
+          const right = Math.max.apply(null, its.map(i => (Number(i.leftPct) || 0) + (Number(i.widthPct) || 0)));
+          const rect = { left, top: r.start, width: Math.max(0.8, right - left), height: r.end - r.start, vertical: true };
+          lines.push({ text: its.map(i => i.text).join(''), items: its, pageNo, overlayRect: rect, compactOverlayRect: rect });
+        });
+      });
+      return lines;
+    }
+
+    // Match a pdf_note block by line containment: a note line belongs to the block when
+    // its text appears inside the block's aggregated text (head-anchored fallback for
+    // truncation). The rect is the union of matched lines — true measured coordinates,
+    // order-insensitive, and robust to the block holding more text than this page shows.
+    function inferNoteOverlayRectFromLines(block, noteLines, pageNo) {
+      const target = normalizePdfCoordinateMatchText(overlayTextForBlockPage(block, pageNo));
+      if (!target || target.length < 2) return null;
+      const hits = (noteLines || []).filter((line) => {
+        const lineText = normalizePdfCoordinateMatchText(line && line.text || '');
+        if (!lineText || lineText.length < 3) return false;
+        if (target.indexOf(lineText) >= 0) return true;
+        return lineText.length >= 8 && target.indexOf(lineText.slice(0, 8)) >= 0;
+      });
+      if (!hits.length) return null;
+      const rects = hits.map(line => line.compactOverlayRect || line.overlayRect).filter(Boolean);
+      if (!rects.length) return null;
+      const left = Math.min.apply(null, rects.map(r => Number(r.left) || 0));
+      const top = Math.min.apply(null, rects.map(r => Number(r.top) || 0));
+      const right = Math.max.apply(null, rects.map(r => (Number(r.left) || 0) + (Number(r.width) || 0)));
+      const bottom = Math.max.apply(null, rects.map(r => (Number(r.top) || 0) + (Number(r.height) || 0)));
+      const rect = { left, top, width: right - left, height: bottom - top };
+      rect.vertical = rect.height > rect.width * 1.25;
+      return { rect };
     }
 
     // Margin notes in the bottom memo band of conte-style script pages (black ink, so the
@@ -17811,21 +17814,22 @@
     //  a) standalone note columns — whole lines that START deep in the page while every
     //     body column starts at the top margin band (wrapped continuations included);
     //  b) note runs line-unioned onto the bottom of a body column after a vertical gap.
-    // (a) is cut by the start band (min line top + 15%). (b) is cut by splitting lines
-    // into contiguous glyph runs and finding the memo band: a Y where 2+ pieces of
+    // (a) is split off by the start band (min line top + 15%). (b) is split by dividing
+    // lines into contiguous glyph runs and finding the memo band: a Y where 2+ pieces of
     // evidence (deep line starts + second-run starts) agree. Without a consistent band,
-    // only huge single-column gaps (4+ glyphs) are cut.
-    function stripPdfMarginNoteRunsFromGuideLines(lines) {
+    // only huge single-column gaps (4+ glyphs) are split. Nothing is discarded — the
+    // separated pieces come back as noteLines so annotations stay first-class content.
+    function splitPdfGuideLinesForOverlayMatching(lines) {
       const sourceLines = (lines || []).filter(Boolean);
-      if (sourceLines.length < 2) return sourceLines;
+      if (sourceLines.length < 2) return { bodyLines: sourceLines, noteLines: [] };
       const glyphH = 1.8;
       const lineTop = (line) => Number((line.compactOverlayRect || line.overlayRect || {}).top) || 0;
       const minTop = Math.min.apply(null, sourceLines.map(lineTop));
       const startBand = minTop + 15;
-      const deepStarts = [];
+      const noteLines = [];
       const shallow = [];
       sourceLines.forEach((line) => {
-        if (lineTop(line) > startBand) deepStarts.push(lineTop(line));
+        if (lineTop(line) > startBand) noteLines.push(line);
         else shallow.push(line);
       });
       const lineRuns = shallow.map((line) => {
@@ -17846,8 +17850,8 @@
         return runs;
       });
       const startCounts = {};
-      deepStarts.forEach((start) => {
-        const key = Math.round(start);
+      noteLines.forEach((line) => {
+        const key = Math.round(lineTop(line));
         startCounts[key] = (startCounts[key] || 0) + 1;
       });
       lineRuns.forEach(runs => runs.slice(1).forEach((run) => {
@@ -17856,22 +17860,38 @@
       }));
       const bandKeys = Object.entries(startCounts).filter(([, count]) => count >= 2).map(([key]) => Number(key));
       const noteBand = bandKeys.length ? Math.min(...bandKeys) : null;
-      const kept = [];
+      const lineFromRuns = (line, runs) => {
+        const items = runs.flatMap(run => run.items);
+        if (!items.length) return null;
+        if (items.length === (line.items || []).length) return line;
+        const text = items.map(item => item.text).join('');
+        const top = Math.min.apply(null, runs.map(run => run.start));
+        const bottom = Math.max.apply(null, runs.map(run => run.end));
+        const rect = Object.assign({}, line.compactOverlayRect || line.overlayRect, { top, height: bottom - top });
+        return Object.assign({}, line, { items, text, compactOverlayRect: rect, overlayRect: rect });
+      };
+      const bodyLines = [];
       shallow.forEach((line, index) => {
         const runs = lineRuns[index];
-        const keptRuns = noteBand != null
-          ? runs.filter(run => run.start < noteBand - 0.5)
-          : runs.filter((run, i) => i === 0 || run.start - runs[i - 1].end <= glyphH * 4);
-        if (!keptRuns.length) return; // the whole line lives in the memo band
-        const items = keptRuns.flatMap(run => run.items);
-        if (items.length === (line.items || []).length) { kept.push(line); return; }
-        const text = items.map(item => item.text).join('');
-        const top = Math.min.apply(null, keptRuns.map(run => run.start));
-        const bottom = Math.max.apply(null, keptRuns.map(run => run.end));
-        const rect = Object.assign({}, line.compactOverlayRect || line.overlayRect, { top, height: bottom - top });
-        kept.push(Object.assign({}, line, { items, text, compactOverlayRect: rect, overlayRect: rect }));
+        // Runs are sorted by start Y; once the memo band (or a huge gap) is crossed,
+        // everything below belongs to the note.
+        const bodyRuns = [];
+        const noteRuns = [];
+        let inNote = false;
+        runs.forEach((run, i) => {
+          if (!inNote) {
+            inNote = noteBand != null
+              ? run.start >= noteBand - 0.5
+              : (i > 0 && run.start - runs[i - 1].end > glyphH * 4);
+          }
+          (inNote ? noteRuns : bodyRuns).push(run);
+        });
+        const bodyLine = lineFromRuns(line, bodyRuns);
+        const noteLine = noteRuns.length ? lineFromRuns(line, noteRuns) : null;
+        if (bodyLine) bodyLines.push(bodyLine);
+        if (noteLine && noteLine !== line) noteLines.push(noteLine);
       });
-      return kept;
+      return { bodyLines, noteLines };
     }
 
     function pdfScriptBodyItemsForOverlayMatching(items, doc, pageNo) {
@@ -18021,7 +18041,10 @@
 
     function applyOverlayRectToElement(box, rect, pageNo) {
       const targetPageNo = Number(pageNo || box && box.getAttribute('data-overlay-page-no') || state.activeScriptPageNo || 1);
-      const clipped = clipOverlayRectToPdfBodyBounds(rect, activeDocument(), targetPageNo);
+      const boxBlock = box && (state.project.sourceBlocks || []).find(item => item.id === box.getAttribute('data-overlay-block'));
+      const clipped = isPdfNoteOverlayBlock(boxBlock)
+        ? normalizeOverlayRect(rect)
+        : clipOverlayRectToPdfBodyBounds(rect, activeDocument(), targetPageNo);
       if (!clipped) {
         box.classList.add('hidden');
         return;
