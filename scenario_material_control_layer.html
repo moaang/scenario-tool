@@ -17068,8 +17068,9 @@
           <span class="pdf-layout-guide-label">${esc(label)}</span>
         </div>`;
       }).join('');
+      const noteGlyphKeys = pdfNoteGlyphKeySetForPage(doc, pageNo, items);
       const pageNumberGuides = (items || [])
-        .filter(item => item && item.text && isPdfTextItemArtifact(item, pageNo))
+        .filter(item => item && item.text && isPdfTextItemArtifact(item, pageNo) && !noteGlyphKeys.has(pdfTextItemKey(item)))
         .slice(0, 16)
         .map((item) => {
           const rect = pdfTextItemOverlayRect(item);
@@ -17789,6 +17790,21 @@
         });
       });
       return lines;
+    }
+
+    // Keys of every glyph that belongs to a recognised margin-note line on this page.
+    // A number inside a note (amount, year, list marker) is note content — not a printed
+    // page number — so the page-number-artifact guide must not fire on it.
+    function pdfNoteGlyphKeySetForPage(doc, pageNo, items) {
+      const keys = new Set();
+      const pools = pdfLayoutGuidePoolsForOverlayMatching(doc, Number(pageNo || 1), items);
+      (pools.noteLines || []).forEach((line) => {
+        (line && line.items || []).forEach((item) => {
+          const key = pdfTextItemKey(item);
+          if (key) keys.add(key);
+        });
+      });
+      return keys;
     }
 
     // Match a pdf_note block by line containment: a note line belongs to the block when
