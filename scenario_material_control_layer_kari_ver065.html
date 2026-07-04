@@ -15303,7 +15303,7 @@
       const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v14' });
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v15' });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -15570,7 +15570,7 @@
     }
 
     function isCurrentPdfCoordinateSource(source) {
-      return source === 'rendered-pdfjs-v14' || source === 'rendered-line-union-v14' || source === 'pdf-logical-fallback';
+      return source === 'rendered-pdfjs-v15' || source === 'rendered-line-union-v15' || source === 'pdf-logical-fallback';
     }
 
     async function renderPdfJsPageForActiveBodyPreview(doc, pageNo) {
@@ -15670,13 +15670,13 @@
           inferred: true,
           manual: false
         }));
-        nextRect.coordinateSource = 'rendered-line-union-v14';
+        nextRect.coordinateSource = 'rendered-line-union-v15';
         const clippedBase = clipOverlayRectToPdfBodyBounds(nextRect, doc, targetPageNo) || nextRect;
         const clipped = Object.assign({}, clippedBase, {
           vertical: true,
           inferred: true,
           manual: false,
-          coordinateSource: 'rendered-line-union-v14'
+          coordinateSource: 'rendered-line-union-v15'
         });
         if (pdfOverlayRectsEquivalent(current, clipped)) return;
         const savedRect = setBlockOverlayRectForPage(block, targetPageNo, clipped);
@@ -16473,7 +16473,7 @@
       const source = Array.isArray(items) ? items : [];
       if (source.pdfFallbackSource === 'pdf-logical-fallback') return 'pdf-logical-fallback';
       if (source.some(item => item && item.coordinateSource === 'pdf-logical-fallback')) return 'pdf-logical-fallback';
-      return 'rendered-pdfjs-v14';
+      return 'rendered-pdfjs-v15';
     }
 
     function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
@@ -16524,12 +16524,31 @@
 
     function normalizeOverlayRect(rect) {
       const source = rect || {};
+      const rawLeft = Math.max(0, Math.min(99, Number(source.left) || 0));
+      const rawTop = Math.max(0, Math.min(99, Number(source.top) || 0));
+      const rawWidth = Math.max(0, Math.min(100, Number(source.width) || 0));
+      const rawHeight = Math.max(0, Math.min(100, Number(source.height) || 0));
+      const width = Math.max(2, rawWidth);
+      const height = Math.max(2, rawHeight);
+      const vertical = Boolean(source.vertical || (Number(source.height) > Number(source.width) * 1.25));
+      // When a thin column/row box is inflated up to the 2% minimum, grow it
+      // symmetrically around the glyph center instead of only rightward/downward,
+      // so the overlay stays centered on the text. Only the cross-axis is
+      // recentered (the main axis keeps its true start edge). Idempotent: once the
+      // dimension already equals the minimum the inflation delta is 0.
+      let left = rawLeft;
+      let top = rawTop;
+      if (vertical) {
+        left = rawLeft - (width - rawWidth) / 2;
+      } else {
+        top = rawTop - (height - rawHeight) / 2;
+      }
       return {
-        left: Math.round(Math.max(0, Math.min(99, Number(source.left) || 0)) * 100) / 100,
-        top: Math.round(Math.max(0, Math.min(99, Number(source.top) || 0)) * 100) / 100,
-        width: Math.round(Math.max(2, Math.min(100, Number(source.width) || 0)) * 100) / 100,
-        height: Math.round(Math.max(2, Math.min(100, Number(source.height) || 0)) * 100) / 100,
-        vertical: Boolean(source.vertical || (Number(source.height) > Number(source.width) * 1.25)),
+        left: Math.round(Math.max(0, Math.min(99, left)) * 100) / 100,
+        top: Math.round(Math.max(0, Math.min(99, top)) * 100) / 100,
+        width: Math.round(width * 100) / 100,
+        height: Math.round(height * 100) / 100,
+        vertical,
         inferred: Boolean(source.inferred),
         manual: Boolean(source.manual),
       };
