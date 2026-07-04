@@ -4585,6 +4585,13 @@
       };
     }
 
+    // Real cast lists rarely name more characters than this; a longer run almost always means
+    // cast-list detection failed to hand off to the body text (see the hard-cap warning below).
+    const CAST_LIST_HARD_CAP = 120;
+    // Past this many entries, a still-open cast list is unusual enough that entries are scored
+    // with lower confidence so they surface for manual review instead of silently trusted.
+    const CAST_ENTRY_LOW_CONFIDENCE_THRESHOLD = 80;
+
     function classifyTextToBlocks(text) {
       const pages = splitPages(text);
       const profile = createScenarioParserProfile(pages);
@@ -4594,7 +4601,7 @@
         bodyStarted: false,
         bodyEnded: false,
         castEntryCount: 0,
-        castHardCap: 120,
+        castHardCap: CAST_LIST_HARD_CAP,
         currentScene: '',
         currentLocationName: '',
         currentTimeOfDay: '',
@@ -5185,7 +5192,7 @@
       if (!context.bodyStarted && context.zone === 'cast_list') {
         if (isLikelyCastEntryLine(raw, profile)) {
           context.castEntryCount += 1;
-          const c = classification('cast_entry', 'cast_list', false, 'none', context.castEntryCount > 80 ? 0.62 : 0.84, ['cast entry before body']);
+          const c = classification('cast_entry', 'cast_list', false, 'none', context.castEntryCount > CAST_ENTRY_LOW_CONFIDENCE_THRESHOLD ? 0.62 : 0.84, ['cast entry before body']);
           const castProfile = parseCharacterProfileFromCastText(raw);
           c.characterName = castProfile.name || extractCastNames(raw)[0] || '';
           c.characterGender = castProfile.gender || '';
@@ -5466,7 +5473,7 @@
       return null;
     }
 
-    function normalizeSpeakerName(value) {
+    function cleanDialogSpeakerNameCore(value) {
       let clean = norm(value)
         .replace(/[：:]$/, '')
         .replace(/[（(]\s*(?:OFF|ＯＦＦ|off|M|Ｍ|MONO|MONOLOGUE|monologue|モノローグ|独白|TEL|電話|通信|無線|電脳通信|モニター|心の声|心ノ声|心内|内心|N|Ｎ|NA|ナレーション|ナレ)\s*[）)]/ig, '')
@@ -5475,6 +5482,11 @@
         .replace(/[・･]+$/g, '');
       clean = clean.replace(/(?:の声|声)$/u, '');
       clean = clean.replace(/^(?:セリフ|台詞|声)\s*[：:]/, '');
+      return clean;
+    }
+
+    function normalizeSpeakerName(value) {
+      const clean = cleanDialogSpeakerNameCore(value);
       const splitNames = splitDialogSpeakerNamesFromClean(clean);
       if (splitNames.length > 1) return splitNames.join('・');
       if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|テロップ|字幕|ナレーション)$/i.test(clean)) return '';
@@ -5504,14 +5516,7 @@
     }
 
     function normalizeSingleSpeakerName(value) {
-      let clean = norm(value)
-        .replace(/[：:]$/, '')
-        .replace(/[（(]\s*(?:OFF|ＯＦＦ|off|M|Ｍ|MONO|MONOLOGUE|monologue|モノローグ|独白|TEL|電話|通信|無線|電脳通信|モニター|心の声|心ノ声|心内|内心|N|Ｎ|NA|ナレーション|ナレ)\s*[）)]/ig, '')
-        .replace(/\s+/g, '')
-        .replace(/[☎☏]+$/g, '')
-        .replace(/[・･]+$/g, '');
-      clean = clean.replace(/(?:の声|声)$/u, '');
-      clean = clean.replace(/^(?:セリフ|台詞|声)\s*[：:]/, '');
+      const clean = cleanDialogSpeakerNameCore(value);
       if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|テロップ|字幕|ナレーション)$/i.test(clean)) return '';
       if (isGenericDialogSpeakerName(clean)) return clean;
       if (isDirectDialogSpeakerName(clean)) return clean;
@@ -6064,6 +6069,10 @@
       return { type: 'txt', text, warning: 'Unknown extension read as text.' };
     }
 
+    // A real anime/TV script script is well under this many pages; the cap exists only to bound
+    // parse time against a pathological or mis-identified PDF (e.g. a whole novel dropped by mistake).
+    const PDF_MAX_PAGES_TO_PARSE = 180;
+
     async function readPdfDocumentWithPdfJs(file) {
       const data = await file.arrayBuffer();
       const logicalPages = await readPdfLogicalPagesFromBuffer(data);
@@ -6078,7 +6087,7 @@
         throw error;
       }
       const pages = [];
-      const maxPages = Math.min(pdf.numPages || 0, 180);
+      const maxPages = Math.min(pdf.numPages || 0, PDF_MAX_PAGES_TO_PARSE);
       for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
         const page = await pdf.getPage(pageNo);
         const viewport = page.getViewport({ scale: 1 });
@@ -6373,7 +6382,7 @@
         .map(line => normalizePdfLogicalLineGuideMatchText(line))
         .filter(Boolean);
       if (!logicalLines.length) return lines || [];
-      (lines || []).forEach((line) => {
+      (lines || []).forEach((line, lineIndex) => {
         if (!line || !line.text) return;
         const rawRect = line.compactOverlayRect || line.overlayRect;
         if (!rawRect || !rawRect.vertical) return;
@@ -6381,20 +6390,39 @@
         if (!compact || compact.length < 2) return;
         const currentGlyphs = pdfVerticalRunGlyphCount(line.text);
         if (currentGlyphs < 2) return;
+        // Pure punctuation (e.g. a lone "……" pause beat) has no discriminating power: it recurs
+        // dozens of times across a page, so matching it against the logical text below would latch
+        // onto whichever unrelated occurrence comes first and staple that occurrence's real tail
+        // onto this line. Only attempt tail recovery for lines with actual word content.
+        if (!/[぀-ヿ㐀-鿿々〆A-Za-z0-9]/.test(compact)) return;
+        // A line's true continuation is often just the next overlay line (columns wrap the same
+        // printed line across a page-width limit). If that next line already starts with the
+        // candidate tail, the text is already correctly present there — appending it here too
+        // would duplicate it rather than recover something pdf.js actually dropped.
+        const nextLineText = normalizePdfLogicalLineGuideMatchText((lines[lineIndex + 1] && lines[lineIndex + 1].text) || '');
+        // If this line's own text shows up in more than one place in the page's logical text
+        // (a short phrase, a stock line ending, a repeated word), there is no way to tell which
+        // occurrence's continuation is the real one — guessing has produced exactly this class of
+        // duplicate-tail corruption. Only trust the match when it is unambiguous.
+        const matchingLogicalLineCount = logicalLines.reduce((count, logicalLine) => count + (logicalLine.includes(compact) ? 1 : 0), 0);
         let extraGlyphs = 0;
         let extraText = '';
-        logicalLines.forEach((logicalLine) => {
-          let extra = pdfLogicalTailFromMatchedLine(compact, logicalLine);
-          if (!extra) return;
-          extra = extra.replace(/[0-9０-９]+$/u, '');
-          if (shouldSkipPdfLogicalTailForOverlayLine(line, extra)) return;
-          if (!isPdfLogicalVerticalTailCandidate(extra)) return;
-          const glyphs = pdfVerticalRunGlyphCount(extra);
-          if (glyphs > extraGlyphs) {
-            extraGlyphs = glyphs;
-            extraText = extra;
-          }
-        });
+        if (matchingLogicalLineCount <= 1) {
+          logicalLines.forEach((logicalLine) => {
+            let extra = pdfLogicalTailFromMatchedLine(compact, logicalLine);
+            if (!extra) return;
+            extra = extra.replace(/[0-9０-９]+$/u, '');
+            if (shouldSkipPdfLogicalTailForOverlayLine(line, extra)) return;
+            if (!isPdfLogicalVerticalTailCandidate(extra)) return;
+            const extraKey = normalizePdfLogicalLineGuideMatchText(extra);
+            if (extraKey && nextLineText && nextLineText.startsWith(extraKey)) return;
+            const glyphs = pdfVerticalRunGlyphCount(extra);
+            if (glyphs > extraGlyphs) {
+              extraGlyphs = glyphs;
+              extraText = extra;
+            }
+          });
+        }
         const rect = normalizeCompactOverlayRect(rawRect, 0.24, 0.75);
         const pitch = pdfVerticalLinePitchPct(line, rect, currentGlyphs);
         const bottomPad = pdfVerticalLogicalTailBottomPadPct(pitch, extraGlyphs);
@@ -7391,7 +7419,8 @@
         row.items.push(item);
         row.y = row.items.reduce((sum, next) => sum + next.centerYPct, 0) / row.items.length;
       });
-      return rows.map(row => pdfJsOverlayLine(row.items.slice().sort((a, b) => a.centerXPct - b.centerXPct), false)).filter(line => line.text);
+      const lines = rows.map(row => pdfJsOverlayLine(row.items.slice().sort((a, b) => a.centerXPct - b.centerXPct), false));
+      return mergePdfJsColorFragmentedOverlayLines(lines, false).filter(line => line.text);
     }
 
     const PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT = 0.58;
@@ -7408,7 +7437,109 @@
         col.items.push(item);
         col.x = col.items.reduce((sum, next) => sum + next.centerXPct, 0) / col.items.length;
       });
-      return cols.map(col => pdfJsOverlayLine(sortPdfJsVerticalItemsTopToBottom(col.items), true)).filter(line => line.text);
+      const lines = cols.map(col => pdfJsOverlayLine(sortPdfJsVerticalItemsTopToBottom(col.items), true));
+      return mergePdfJsColorFragmentedOverlayLines(lines, true).filter(line => line.text);
+    }
+
+    // A single printed line can be split into separate same-position line groups when an inline
+    // color change (e.g. a red in-line correction) breaks the visual-group key mid-line, even though
+    // there is no real gap in the text flow. Left unmerged, the two fragments get concatenated in the
+    // wrong order downstream (the later fragment's text ends up spliced in before its own predecessor),
+    // producing duplicated/garbled body text. Re-stitch same-position, flow-adjacent fragments here,
+    // in their true geometric order, before any text is read out of the line.
+    function mergePdfJsColorFragmentedOverlayLines(lines, vertical) {
+      const list = (lines || []).filter(Boolean);
+      const used = new Array(list.length).fill(false);
+      const merged = [];
+      for (let i = 0; i < list.length; i += 1) {
+        if (used[i]) continue;
+        let group = [list[i]];
+        used[i] = true;
+        let grew = true;
+        while (grew) {
+          grew = false;
+          for (let j = 0; j < list.length; j += 1) {
+            if (used[j]) continue;
+            if (group.some(line => isPdfJsAdjacentColorFragmentLine(line, list[j], vertical))) {
+              group.push(list[j]);
+              used[j] = true;
+              grew = true;
+            }
+          }
+        }
+        merged.push(group.length === 1 ? group[0] : mergePdfJsColorFragmentLineGroup(group, vertical));
+      }
+      return merged;
+    }
+
+    function isPdfJsAdjacentColorFragmentLine(lineA, lineB, vertical) {
+      if (!lineA || !lineB || lineA === lineB) return false;
+      const itemsA = lineA.items || [];
+      const itemsB = lineB.items || [];
+      if (!itemsA.length || !itemsB.length) return false;
+      const crossKey = vertical ? 'centerXPct' : 'centerYPct';
+      const flowKey = vertical ? 'centerYPct' : 'centerXPct';
+      const crossA = pdfOverlayLineItemsAverage(itemsA, crossKey);
+      const crossB = pdfOverlayLineItemsAverage(itemsB, crossKey);
+      const crossTolerance = vertical ? PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT : 0.9;
+      if (!Number.isFinite(crossA) || !Number.isFinite(crossB) || Math.abs(crossA - crossB) > crossTolerance) return false;
+      const rangeA = pdfOverlayLineItemsRange(itemsA, flowKey);
+      const rangeB = pdfOverlayLineItemsRange(itemsB, flowKey);
+      if (!rangeA || !rangeB) return false;
+      // Fragments can overlap (a color-split run wrongly swallowed a later run's span) rather than
+      // sit cleanly end-to-end, so range overlap alone must count as "adjacent" too.
+      if (rangeA.min <= rangeB.max && rangeB.min <= rangeA.max) return true;
+      const gap = rangeA.max < rangeB.min ? rangeB.min - rangeA.max : rangeA.min - rangeB.max;
+      const pitch = pdfOverlayLineItemFlowPitch(itemsA.concat(itemsB), flowKey);
+      const maxGap = pitch > 0 ? pitch * 2.6 : (vertical ? 3.5 : 6);
+      return gap <= maxGap;
+    }
+
+    function pdfOverlayLineItemsAverage(items, key) {
+      const values = (items || []).map(item => Number(item && item[key])).filter(Number.isFinite);
+      if (!values.length) return NaN;
+      return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+
+    function pdfOverlayLineItemsRange(items, key) {
+      const values = (items || []).map(item => Number(item && item[key])).filter(Number.isFinite);
+      if (!values.length) return null;
+      return { min: Math.min(...values), max: Math.max(...values) };
+    }
+
+    function pdfOverlayLineItemFlowPitch(items, flowKey) {
+      const values = (items || [])
+        .map(item => Number(item && item[flowKey]))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+      const diffs = [];
+      for (let index = 1; index < values.length; index += 1) {
+        const diff = values[index] - values[index - 1];
+        if (diff > 0.1) diffs.push(diff);
+      }
+      if (!diffs.length) return 0;
+      diffs.sort((a, b) => a - b);
+      return diffs[Math.floor(diffs.length / 2)];
+    }
+
+    // Each fragment's own .items order can be unreliable here (vertical lines are re-ordered by
+    // PDF content-stream position, not geometry, and a color-split fragment can itself already span
+    // a gap that belongs to a sibling fragment). So the merge re-sorts the full unioned item set by
+    // true geometric position rather than trusting any fragment's pre-existing internal order.
+    function mergePdfJsColorFragmentLineGroup(group, vertical) {
+      const items = group.reduce((all, line) => all.concat(line.items || []), []);
+      const orderedItems = vertical
+        ? sortPdfJsVerticalItemsTopToBottom(items)
+        : items.slice().sort((a, b) => Number(a.centerXPct) - Number(b.centerXPct));
+      const text = normalizePdfJapaneseInlineSpacing(orderedItems.map(item => item.text || '').join('').replace(/\s+/g, ' ').trim());
+      const overlayRect = unionOverlayRects(group.map(line => line.overlayRect).filter(Boolean)) || group[0].overlayRect;
+      return Object.assign({}, group[0], {
+        text,
+        items: orderedItems,
+        overlayRect,
+        compactOverlayRect: overlayRect,
+        mergedColorFragment: true
+      });
     }
 
     function nearestPdfJsVerticalColumn(cols, item, key) {
@@ -14795,169 +14926,6 @@
       return Array.from(pageNos).sort((a, b) => a - b);
     }
 
-    function pageDebugDelay(ms) {
-      return new Promise(resolve => window.setTimeout(resolve, ms));
-    }
-
-    function pageDebugNextFrame() {
-      return new Promise(resolve => {
-        window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
-      });
-    }
-
-    function pageDebugCanvasMatchesPage(doc, pageNo) {
-      const canvas = $('pdfPageCanvas');
-      const renderKey = canvas && canvas.dataset && canvas.dataset.renderKey || '';
-      return Boolean(doc && doc.id && renderKey.indexOf(doc.id + '#' + pageNo + '#') === 0);
-    }
-
-    async function waitForRenderedPageDebug(doc, pageNo, timeoutMs) {
-      const startedAt = Date.now();
-      let statusText = '';
-      let matchingCanvas = false;
-      while (Date.now() - startedAt < timeoutMs) {
-        await pageDebugDelay(90);
-        const status = $('pdfJsStatus');
-        statusText = status && status.textContent || '';
-        const canvas = $('pdfPageCanvas');
-        const fallback = $('pdfTextFallbackPreview') || $('pdfFallbackTextLayer');
-        matchingCanvas = pageDebugCanvasMatchesPage(doc, pageNo);
-        if (!canvas || matchingCanvas || fallback || (statusText && statusText !== 'PDF.js...')) {
-          await pageDebugNextFrame();
-          return {
-            ok: true,
-            timeout: false,
-            elapsedMs: Date.now() - startedAt,
-            statusText,
-            matchingCanvas,
-            fallbackRendered: Boolean(fallback)
-          };
-        }
-      }
-      return {
-        ok: false,
-        timeout: true,
-        elapsedMs: Date.now() - startedAt,
-        statusText,
-        matchingCanvas,
-        fallbackRendered: Boolean($('pdfTextFallbackPreview') || $('pdfFallbackTextLayer'))
-      };
-    }
-
-    function buildStoredPageDebugDump(doc, pageNo, reason) {
-      const page = pdfLogicalPageForDocument(doc, pageNo);
-      const draftItems = pageDebugDraftItemsForPage(page);
-      const draftCoordinateSourceCounts = pdfDebugTextItemCoordinateSourceCounts(draftItems);
-      const bodyRange = pdfBodyRangeForPage(doc, pageNo);
-      const guideGroups = pdfLayoutGuideLineGroupsForPage(doc, draftItems, pageNo, bodyRange);
-      const reviewItems = pageDebugReviewItemsForPage(doc, pageNo);
-      const pageBlocks = sortedDocumentBlocks(doc)
-        .filter(block => blockHasOverlayPage(block, pageNo) || Number(block.pageNo || 0) === Number(pageNo))
-        .filter(isScriptPreviewBlock);
-      const overlayBlocks = pdfOverlayBlocksForPage(doc, pageNo, pageBlocks);
-      const remainingNonCurrentOverlayBlocks = debugRemainingNonCurrentOverlayBlocks(overlayBlocks, pageNo);
-      return {
-        generatedAt: nowIso(),
-        appVersion: 'kari ver065',
-        document: doc ? {
-          id: doc.id,
-          title: doc.title,
-          draftSourceType: doc.draftSourceType,
-          importedFileName: doc.importedFileName,
-          sourceStatus: doc.sourceStatus,
-          sourceConfirmed: Boolean(doc.sourceConfirmed),
-          reviewItemCount: (doc.reviewItems || []).length,
-          draftPageCount: (doc.draftPages || []).length
-        } : null,
-        activePage: {
-          pageNo,
-          pageEntryCount: 0,
-          pageBlockCount: pageBlocks.length,
-          overlayBlockCount: overlayBlocks.length,
-          renderedPdfJsTextItemCount: 0,
-          draftTextItemCount: draftItems.length,
-          fallbackTextItemCount: pdfDebugLogicalFallbackTextItemCount(draftItems),
-          textItemCoordinateSourceCounts: draftCoordinateSourceCounts,
-          reviewItemCount: reviewItems.length,
-          pdfKey: doc && doc.id ? doc.id + '#' + pageNo : '',
-          pdfTextItemsCoordinateSource: '',
-          missingOverlayRectsKey: doc ? pdfOverlayMissingRectsKey(doc, pageNo) : '',
-          overlayComputeKey: '',
-          overlayComputeStatus: '',
-          overlayCurrentStatus: remainingNonCurrentOverlayBlocks.length ? 'missing_non_current' : 'current',
-          remainingNonCurrentOverlayBlockCount: remainingNonCurrentOverlayBlocks.length,
-          remainingNonCurrentOverlayBlockIds: remainingNonCurrentOverlayBlocks.map(item => item.id)
-        },
-        pipelinePath: pageDebugPipelinePath(),
-        pdfBodyBounds: {
-          saved: cloneJson(doc && doc.pdfBodyBounds || null),
-          effectiveRange: bodyRange,
-          topLinePct: pdfBodyTopLinePctForPage(doc, pageNo),
-          bodyTopLineTrigger: page && page.bodyTopLineTrigger || '',
-          cutLinePct: pdfBodyCutLinePctForPage(doc, pageNo),
-          bodyCutLineTrigger: page && page.bodyCutLineTrigger || ''
-        },
-        sourceReviewOptions: cloneJson(doc && doc.pdfReviewOptions || {}),
-        pdfExtractionSignals: cloneJson(doc && doc.pdfExtractionSignals || {}),
-        logicalText: {
-          textSource: page && page.textSource || '',
-          rawLogicalText: page && page.rawLogicalText || '',
-          logicalText: page && page.logicalText || '',
-          bodyReviewText: page && page.bodyReviewText || '',
-          text: page && page.text || '',
-          logicalLines: cloneJson(page && page.logicalLines || [])
-        },
-        draftPageCoordinateParts: {
-          textItems: draftItems.map((item, index) => debugTextItem(item, index, pageNo)),
-          lines: (page && page.lines || []).map(debugLine),
-          bodyBaseLines: (page && page.bodyBaseLines || []).map(debugLine),
-          bodySourceLines: (page && page.bodySourceLines || []).map(debugLine),
-          pdfJsMergedBodyLines: (page && page.pdfJsMergedBodyLines || []).map(debugLine),
-          horizontalMetadataLines: (page && page.horizontalMetadataLines || []).map(debugLine),
-          colorLines: (page && page.colorLines || []).map(debugLine),
-          layoutDividers: (page && page.layoutDividers || []).map(debugLayoutDivider),
-          bodyTopLinePct: page && page.bodyTopLinePct || null,
-          bodyTopLineTrigger: page && page.bodyTopLineTrigger || '',
-          annotations: cloneJson(page && page.annotations || [])
-        },
-        renderedPdfJsPart: {
-          textItems: [],
-          logicalFallbackTextItems: [],
-          textItemCoordinateSourceCounts: {},
-          guideLineGroups: {
-            bodyLines: (guideGroups.bodyLines || []).map(debugLine),
-            colorLines: (guideGroups.colorLines || []).map(debugLine)
-          }
-        },
-        reviewItems: reviewItems.map((item, index) => debugReviewItem(item, index, pageNo)),
-        blockListSemantics: {
-          pageOriginalBlocks: 'blocks grouped on this page by block.pageNo; continued overlays from previous pages are not included',
-          pageOverlaySourceBlocks: 'source blocks that can draw an overlay on this page, including pageSpans/continued overlays',
-          visiblePageBlocks: 'legacy alias of pageOriginalBlocks',
-          sourceBlocksForPage: 'legacy alias of pageOverlaySourceBlocks'
-        },
-        pageOriginalBlocks: [],
-        pageOverlaySourceBlocks: pageBlocks.map((block, index) => debugSourceBlock(block, index, pageNo)),
-        sourceBlocksForPage: pageBlocks.map((block, index) => debugSourceBlock(block, index, pageNo)),
-        visiblePageBlocks: [],
-        remainingNonCurrentOverlayBlocks,
-        overlayBlocks: overlayBlocks.map((block, index) => debugOverlayBlock(block, index, pageNo)),
-        displayedDomState: {
-          rendered: false,
-          reason,
-          statusText: '',
-          surface: null,
-          canvas: null,
-          layoutLayer: null,
-          overlayLayer: null,
-          layoutDomGuideCount: 0,
-          overlayDomBoxCount: 0,
-          layoutDomGuides: [],
-          overlayDomBoxes: []
-        }
-      };
-    }
-
     function buildActivePageDebugText() {
       const dump = buildActivePageDebugDump();
       return [
@@ -14985,7 +14953,6 @@
         'appVersion: ' + allDump.appVersion,
         'document: ' + (allDump.document ? `${allDump.document.title || allDump.document.id} / ${allDump.document.importedFileName || ''}` : 'none'),
         'pages: ' + (allDump.pages || []).length,
-        'renderedDomCanvasPages: ' + (Number(allDump.renderedDomCanvasPages) || 0),
         '',
         '## Pipeline Path',
         (allDump.pipelinePath || []).map((step, index) => `${index + 1}. ${step}`).join('\n'),
@@ -15005,46 +14972,46 @@
       }
     }
 
+    // A per-page full debug dump (DOM/canvas render + item-level coordinates for every text run)
+    // is only actually needed to dig into ONE already-identified problem page — use the single-page
+    // debug copy for that. Reading across all pages (the common case: checking text integrity or
+    // skimming content) never needs DOM rendering or per-item coordinates, so this stays purely off
+    // already-parsed data and skips rendering entirely. That is what keeps this fast and the output
+    // small instead of re-rendering every page and re-emitting a full coordinate dump per page.
+    function buildLightAllPagesPageSummary(doc, pageNo) {
+      const page = pdfLogicalPageForDocument(doc, pageNo);
+      const pageBlocks = sortedDocumentBlocks(doc)
+        .filter(block => blockHasOverlayPage(block, pageNo) || Number(block.pageNo || 0) === Number(pageNo))
+        .filter(isScriptPreviewBlock);
+      const blockTypeCounts = {};
+      let lowConfidenceBlockCount = 0;
+      pageBlocks.forEach((block) => {
+        const type = block && block.type || 'unknown';
+        blockTypeCounts[type] = (blockTypeCounts[type] || 0) + 1;
+        if (Number(block && block.meta && block.meta.confidence) < 0.6) lowConfidenceBlockCount += 1;
+      });
+      return {
+        pageNo,
+        textSource: page && page.textSource || '',
+        text: page ? (page.bodyReviewText || page.logicalText || page.text || '') : '',
+        blockCount: pageBlocks.length,
+        blockTypeCounts,
+        lowConfidenceBlockCount
+      };
+    }
+
     async function copyAllPagesDebugText() {
       const btn = $('copyAllPageDebugTextBtn');
       const previous = btn && btn.textContent || '';
       const doc = activeDocument();
       const context = pageDebugPreviewContext(doc);
       const pageNos = allDebugPageNos(doc, context);
-      const originalPageNo = state.activeScriptPageNo;
-      const originalMiddleTab = state.activeMiddleTab;
-      const pages = [];
       if (btn) {
         btn.disabled = true;
         btn.textContent = t('copyAllPageDebugTextBusy');
       }
       try {
-        state.activeMiddleTab = 'script';
-        for (let index = 0; index < pageNos.length; index += 1) {
-          const pageNo = pageNos[index];
-          if (btn) btn.textContent = `${t('copyAllPageDebugTextBusy')} ${index + 1}/${pageNos.length}`;
-          if (context.renderablePageNos.has(Number(pageNo))) {
-            state.activeScriptPageNo = pageNo;
-            const panel = $('scriptStructurePanel');
-            if (panel) panel.dataset.renderKey = '';
-            renderScriptStructurePanel();
-            await pageDebugNextFrame();
-            const renderWait = await waitForRenderedPageDebug(doc, pageNo, 8000);
-            const dump = buildActivePageDebugDump();
-            dump.renderedForDebug = true;
-            dump.renderWait = renderWait;
-            pages.push(dump);
-          } else {
-            const dump = buildStoredPageDebugDump(doc, pageNo, 'no script preview page entry for DOM/canvas render');
-            dump.renderedForDebug = false;
-            dump.renderWait = { ok: false, skipped: true, reason: dump.displayedDomState.reason };
-            pages.push(dump);
-          }
-        }
-        const remainingNonCurrentOverlayBlocks = pages.flatMap((pageDump) => {
-          const pageNo = pageDump && pageDump.activePage && pageDump.activePage.pageNo || 0;
-          return (pageDump && pageDump.remainingNonCurrentOverlayBlocks || []).map(block => Object.assign({ pageNo }, block));
-        });
+        const pages = pageNos.map(pageNo => buildLightAllPagesPageSummary(doc, pageNo));
         const allDump = {
           generatedAt: nowIso(),
           appVersion: 'kari ver065',
@@ -15059,25 +15026,14 @@
             draftPageCount: (doc.draftPages || []).length
           } : null,
           pipelinePath: pageDebugPipelinePath(),
-          originalActivePageNo: originalPageNo,
           pageNos,
           renderablePageNos: Array.from(context.renderablePageNos).sort((a, b) => a - b),
-          renderedDomCanvasPages: pages.filter(page => page.renderedForDebug).length,
-          overlayCurrentSummary: {
-            remainingNonCurrentOverlayBlockCount: remainingNonCurrentOverlayBlocks.length,
-            remainingNonCurrentOverlayBlockIds: remainingNonCurrentOverlayBlocks.map(item => item.id),
-            remainingNonCurrentOverlayBlocks
-          },
+          note: 'Lightweight text/block summary per page. For full per-item coordinate debugging of a single page, use the single-page debug copy instead.',
           pages
         };
         copyText(buildAllPagesDebugText(allDump));
         if (btn) btn.textContent = t('copyPageDebugTextDone');
       } finally {
-        state.activeScriptPageNo = originalPageNo;
-        state.activeMiddleTab = originalMiddleTab;
-        const panel = $('scriptStructurePanel');
-        if (panel) panel.dataset.renderKey = '';
-        renderScriptStructurePanel();
         if (btn) {
           window.setTimeout(() => {
             if (btn) {
