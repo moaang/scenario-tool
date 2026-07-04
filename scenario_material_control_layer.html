@@ -5369,8 +5369,72 @@
       const lines = pages.flatMap(page => page.lines || []).map(line => String(line || '').trim()).filter(Boolean);
       return {
         quotePairs: detectDialogQuotePairs(lines),
-        sceneMarkerFamilies: detectScenarioSceneMarkerFamilies(lines)
+        sceneMarkerFamilies: detectScenarioSceneMarkerFamilies(lines),
+        numberedSceneHeadings: detectNumberedSceneHeadingFormat(lines)
       };
+    }
+
+    // NGOD/ニディガール-style scripts number scenes by writing a bare digit immediately
+    // followed by the location (e.g. "１ライブ会場・全景（夜）") with NO ○ marker and NO space,
+    // and use アバン / Aパート as part-membership labels rather than scenes. This detects that
+    // convention per-document so the numbered-scene + part-marker handling only activates there.
+    function detectNumberedSceneHeadingFormat(lines) {
+      const numbers = [];
+      let candidates = 0;
+      let markerLocationScenes = 0;
+      (lines || []).slice(0, 1400).forEach((line) => {
+        const raw = norm(line);
+        if (/^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*\S+/.test(raw)) {
+          const markerBody = raw.replace(/^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*/, '');
+          if (hasLocationSignal(markerBody)) markerLocationScenes += 1;
+          return;
+        }
+        const num = numberedSceneHeadingLineNumber(raw);
+        if (num === null) return;
+        candidates += 1;
+        numbers.push(num);
+      });
+      if (candidates < 3 || candidates < markerLocationScenes) return false;
+      return numbers.includes(1) && numbers.includes(2);
+    }
+
+    function numberedSceneHeadingLineNumber(raw) {
+      const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
+      const match = source.match(/^([0-9０-９]{1,3})[\s　]*(\S.*)$/);
+      if (!match) return null;
+      const rest = norm(match[2]);
+      if (!rest || charLen(rest) > 40) return null;
+      if (/^[○●◯〇◎□■△▲▽▼]/.test(rest)) return null;
+      if (/[。！？!?「」『』]/.test(rest)) return null;
+      if (!hasLocationSignal(rest)) return null;
+      const parsed = parseInt(String(match[1]).normalize('NFKC'), 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function isNumberedSceneHeadingLine(raw, profile) {
+      if (!profile || !profile.numberedSceneHeadings) return false;
+      if (numberedSceneHeadingLineNumber(raw) === null) return false;
+      const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
+      if (parseDialog(source, profile)) return false;
+      if (isCastSectionLine(source) || isLikelyCastEntryLine(source, profile)) return false;
+      return true;
+    }
+
+    // Part-membership labels (アバン / プロローグ / Aパート) group scenes without being scenes
+    // themselves. OP / CM / ED / オープニング / エンディング stay as their own markers.
+    const SCENARIO_PART_MEMBERSHIP_RE = /^(?:アバン|プロローグ|[A-Z]パート)$/;
+    function isScenarioPartMembershipLine(raw) {
+      const source = norm(raw).normalize('NFKC').trim();
+      if (!source || charLen(source) > 12) return false;
+      const payload = standaloneStructureMarkerPayload(source);
+      return Boolean(payload) && SCENARIO_PART_MEMBERSHIP_RE.test(payload);
+    }
+    function scenarioPartMarkerLabel(raw) {
+      return norm(raw)
+        .replace(/^[【\[\(（]\s*/, '')
+        .replace(/\s*[】\]\)）]$/g, '')
+        .replace(/^[○●◯〇◎□■△▲▽▼◆◇]\s*/, '')
+        .replace(/\s+/g, '');
     }
 
     function detectScenarioSceneMarkerFamilies(lines) {
@@ -5672,6 +5736,10 @@
             else if (classification.scenePart) context.currentLocationName = '';
             if (classification.timeOfDay) context.currentTimeOfDay = classification.timeOfDay;
             if (classification.scenePart) context.currentScenePart = classification.scenePart;
+          }
+          if (classification.type === 'section_marker' && classification.scenePart) {
+            context.currentScenePart = classification.scenePart;
+            context.currentLocationName = '';
           }
           if (classification.type === 'scene_heading' || classification.type === 'section_marker') context.currentScene = classification.text || raw;
           classification.currentScene = context.currentScene;
@@ -6293,6 +6361,11 @@
 
     function classifyBody(raw, context, quality, evidence, profile) {
       if (isEndMarkerLine(raw)) return classification('end_marker', 'body_end', false, 'none', 0.96, evidence.concat(['end marker']));
+      if (profile && profile.numberedSceneHeadings && isScenarioPartMembershipLine(raw)) {
+        const c = classification('section_marker', 'body', true, 'action', 0.82, evidence.concat(['scenario part marker']));
+        c.scenePart = scenarioPartMarkerLabel(raw);
+        return c;
+      }
       if (isScenarioSectionMarkerLine(raw)) return classification('scene_heading', 'body', true, 'action', 0.88, evidence.concat(['scenario section marker']));
       if (isBodyTextInsertLine(raw, profile)) return classification('body_text', 'body', true, 'action', 0.88, evidence.concat(['body text/title insert']));
       if (isSceneHeading(raw, profile)) return classification('scene_heading', 'body', true, 'action', 0.84, evidence.concat(['scene heading']));
@@ -6468,6 +6541,7 @@
       const clean = source.replace(/^[0-9０-９]*\s*[○●◯〇□■△▲▽▼]?\s*/, '');
       if (parseDialog(source, profile)) return false;
       if (isLikelyCastEntryLine(source, profile)) return false;
+      if (isNumberedSceneHeadingLine(source, profile)) return true;
       const markerFamily = scenarioLineMarkerFamily(source);
       const dominantFamilies = profile && Array.isArray(profile.sceneMarkerFamilies) ? profile.sceneMarkerFamilies : [];
       const markerAllowed = !dominantFamilies.length || !markerFamily || dominantFamilies.includes(markerFamily);
@@ -6863,6 +6937,10 @@
           block.scenePart = block.scenePart || currentPart;
           block.currentScene = currentScene;
           return;
+        }
+        if (block.type === 'section_marker' && block.scenePart) {
+          currentPart = block.scenePart;
+          currentLocation = '';
         }
         if (block.zone === 'body') {
           block.locationName = block.locationName || currentLocation;
@@ -15150,6 +15228,10 @@
           if (c.timeOfDay) currentTimeOfDay = c.timeOfDay;
           if (c.scenePart) currentScenePart = c.scenePart;
           currentScene = raw;
+        }
+        if (c.type === 'section_marker' && c.scenePart) {
+          currentScenePart = c.scenePart;
+          currentLocationName = '';
         }
         if (c.zone === 'body') {
           c.currentScene = c.currentScene || currentScene;
