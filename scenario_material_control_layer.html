@@ -134,10 +134,12 @@
       width: 960px;
       transform-origin: 0 0;
       border: 0; background: transparent; box-shadow: none;
-      overflow: visible;
       display: block;
     }
-    .pane-center > .pane-body { overflow: visible; padding: 0; }
+    /* id beats the later `.pane { overflow: hidden }` rule — the scene must not clip the
+       page's crop-mark corners / feedback capsules that sit outside the page box */
+    #canvasScene, #canvasScene > .pane-body { overflow: visible; }
+    .pane-center > .pane-body { padding: 0; }
 
     /* Side panels: floating, collapsible to rails */
     .side-panel {
@@ -1640,8 +1642,8 @@
     /* faint crop-mark corners framing the edgeless page (clean mode only) */
     .scene-corner {
       position: absolute; z-index: 1;
-      width: 18px; height: 18px;
-      border: 1.5px solid #d5d5ce;
+      width: 20px; height: 20px;
+      border: 1.5px solid #c4c4bb;
       pointer-events: none;
     }
     .scene-corner.tl { top: -11px; left: -11px; border-right: 0; border-bottom: 0; border-radius: 4px 0 0 0; }
