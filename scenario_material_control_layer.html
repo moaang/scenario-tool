@@ -4369,11 +4369,33 @@
       const vertical = Boolean(rawRect.vertical || Number(rawRect.height || 0) > Number(rawRect.width || 0) * 1.25);
       const clipped = pdfJsOverlayLine(clippedItems, vertical);
       if (!clipped || !clipped.text) return null;
-      return Object.assign({}, line, clipped, {
+      const result = Object.assign({}, line, clipped, {
         index: line.index,
         overlayRect: Object.assign({}, clipped.overlayRect || line.overlayRect || {}, { vertical }),
         compactOverlayRect: clipped.compactOverlayRect || line.compactOverlayRect || clipped.overlayRect
       });
+      // Numbered scene headings print the scene number ABOVE the body top-line (top margin), so
+      // clipping drops the digit item here. Keep it as sceneNumberPrefix — pdfReviewLineText, the
+      // single review-text derivation point, prepends it — but only when digit + remaining text
+      // really form a numbered scene heading (rejects per-line guide digits on ordinary lines).
+      const droppedDigits = pdfClippedTopMarginDigitRun(items, clippedItems, range);
+      if (droppedDigits && numberedSceneHeadingLineNumber(droppedDigits + String(clipped.text || '').trim()) !== null) {
+        result.sceneNumberPrefix = droppedDigits;
+      }
+      return result;
+    }
+
+    function pdfClippedTopMarginDigitRun(items, clippedItems, range) {
+      if (!range || !range.enabled) return '';
+      const kept = new Set(clippedItems || []);
+      const dropped = (items || []).filter((item) => {
+        if (!item || kept.has(item)) return false;
+        const centerY = Number(item.centerYPct);
+        return Number.isFinite(centerY) && centerY < range.top;
+      });
+      if (!dropped.length) return '';
+      const text = dropped.map(item => String(item.text || '').trim()).join('');
+      return /^[0-9０-９]{1,3}$/.test(text) ? text : '';
     }
 
     function pdfBaseBodyLinesForPage(page) {
@@ -4394,7 +4416,8 @@
       pages.forEach((page) => {
         const lines = pdfBodyLinesForPageRange(page, doc);
         page.lines = lines;
-        page.text = lines.map(line => line && line.text).filter(Boolean).join('\n');
+        // Single derivation point: pdfReviewLineText (logical tails + scene-number prefixes).
+        page.text = lines.map(line => line && pdfReviewLineText(line)).filter(Boolean).join('\n');
       });
       doc.pageMetadata = sourcePagesToPageMetadata(pages);
       return pages.map(page => page && page.text || '').join('\n\f\n');
@@ -5429,6 +5452,11 @@
       const payload = standaloneStructureMarkerPayload(source);
       return Boolean(payload) && SCENARIO_PART_MEMBERSHIP_RE.test(payload);
     }
+    // SINGLE decision point (used by classifyBody AND sourceReviewItemsToBlocks): in a
+    // numbered-scene document a part label is a part marker, not a scene of its own.
+    function isScenarioPartMarkerText(raw, profile) {
+      return Boolean(profile && profile.numberedSceneHeadings && isScenarioPartMembershipLine(raw));
+    }
     function scenarioPartMarkerLabel(raw) {
       return norm(raw)
         .replace(/^[【\[\(（]\s*/, '')
@@ -6361,7 +6389,7 @@
 
     function classifyBody(raw, context, quality, evidence, profile) {
       if (isEndMarkerLine(raw)) return classification('end_marker', 'body_end', false, 'none', 0.96, evidence.concat(['end marker']));
-      if (profile && profile.numberedSceneHeadings && isScenarioPartMembershipLine(raw)) {
+      if (isScenarioPartMarkerText(raw, profile)) {
         const c = classification('section_marker', 'body', true, 'action', 0.82, evidence.concat(['scenario part marker']));
         c.scenePart = scenarioPartMarkerLabel(raw);
         return c;
@@ -7343,10 +7371,7 @@
         page.bodyCutLineTrigger = stableCut == null ? '' : 'annotation_layout_stable';
         page.bodyTopLinePct = pageTopLine;
         page.bodyTopLineTrigger = pageTopLine == null ? '' : 'layout_divider_stable';
-        // Clipping to the body top-line drops the top-margin scene number (e.g. NGOD's "１" above
-        // "ライブ会場・全景（夜）"); restore it from the content-order logical stream so numbered
-        // scene headings survive into classification.
-        const bodyReviewText = restorePdfSceneHeadingNumbersFromLogical(pdfBodyReviewTextFromLines(bodyLines), page.rawLogicalText);
+        const bodyReviewText = pdfBodyReviewTextFromLines(bodyLines);
         page.bodyReviewText = bodyReviewText;
         page.text = bodyReviewText || normalizePdfLogicalPageText(page.logicalText) || bodyLines.map(line => line.text).filter(Boolean).join('\n');
         delete page.bodySourceLines;
@@ -7362,35 +7387,6 @@
       return normalizePdfSceneHeadingDashLeaderReviewLines(reviewLines)
         .join('\n')
         .trim();
-    }
-
-    // NGOD/numbered-scene scripts print the scene NUMBER in the top margin (above the body band),
-    // so the geometry-grouped body line keeps only the location (e.g. "ライブ会場・全景（夜）").
-    // The content-order logical channel still has the number attached ("１ライブ会場・全景（夜）").
-    // Restore that leading number onto the matching body line so it classifies as a scene heading —
-    // only when the number provably precedes the same location text in the logical stream.
-    function restorePdfSceneHeadingNumbersFromLogical(reviewText, logicalText) {
-      const body = String(reviewText || '');
-      if (!body) return body;
-      const numberByLocation = new Map();
-      normalizePdfLogicalPageText(logicalText).split(/\n+/).forEach((line) => {
-        const match = String(line || '').trim().match(/^([0-9０-９]{1,3})[\s　]*(\S.*)$/);
-        if (!match) return;
-        const rest = norm(match[2]);
-        if (!rest || charLen(rest) > 40) return;
-        if (/^[○●◯〇◎□■△▲▽▼]/.test(rest)) return;
-        if (/[。！？!?「」『』]/.test(rest)) return;
-        if (!hasLocationSignal(rest)) return;
-        const key = normalizePdfLogicalLineGuideMatchText(rest);
-        if (key && !numberByLocation.has(key)) numberByLocation.set(key, norm(match[1]));
-      });
-      if (!numberByLocation.size) return body;
-      return body.split('\n').map((line) => {
-        const trimmed = line.trim();
-        if (!trimmed || /^[0-9０-９]/.test(trimmed)) return line;
-        const num = numberByLocation.get(normalizePdfLogicalLineGuideMatchText(trimmed));
-        return num ? num + trimmed : line;
-      }).join('\n');
     }
 
     function normalizePdfSceneHeadingDashLeaderReviewLines(lines) {
@@ -12495,7 +12491,10 @@
 
     function pdfReviewLineText(line) {
       const text = appendPdfLogicalTailToLineText(line && line.text || '', line && line.pdfLogicalTailText || '');
-      return normalizePdfJapaneseInlineSpacing(text).trim();
+      const prefix = line && line.sceneNumberPrefix || '';
+      // Guard: a line that already went through a review-text mapping carries the prefixed text.
+      const merged = prefix && !String(text).startsWith(prefix) ? prefix + text : text;
+      return normalizePdfJapaneseInlineSpacing(merged).trim();
     }
 
     function mergeDetachedPdfDialogModifierLines(lines) {
@@ -15331,7 +15330,7 @@
         }
         if (item.type === 'scene') {
           const sceneRaw = sourceReviewItemText(item);
-          if (conversionProfile.numberedSceneHeadings && isScenarioPartMembershipLine(sceneRaw)) {
+          if (isScenarioPartMarkerText(sceneRaw, conversionProfile)) {
             // NGOD-style part label (アバン / Aパート): a part-membership marker, not a scene.
             pushBlock(item, sceneRaw, {
               type: 'section_marker',
@@ -16521,6 +16520,9 @@
         baseText || sourceReviewItemText(item),
         ...pdfDialogHeadModifierCoordinateTexts(item),
         ...pdfDialogVisualCoordinateTexts(item),
+        // Numbered scene headings carry a top-margin scene number that is absent
+        // from the body glyph stream — also try the number-stripped text.
+        ...(item && item.type === 'scene' ? [String(baseText || item.text || '').replace(/^[0-9０-９]{1,3}[\s　]*/, '')] : []),
         item && item.text || ''
       ]);
     }
