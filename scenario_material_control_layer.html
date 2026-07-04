@@ -11809,6 +11809,7 @@
         state.renamingTreeNode = { type: menu.type, id: menu.id };
         syncAll(false);
       } else if (action === 'properties' && menu.type === 'document') {
+        renderDocumentPanel(); // opening a modal doesn't re-render the tree — clear the menu DOM
         openDocumentPropertiesModal(menu.id);
       } else if (action === 'delete') {
         if (menu.type === 'document') deleteDocumentById(menu.id);
