@@ -7788,10 +7788,12 @@
       const height = Number(rawHeight) || Number(item.heightPct) || 0;
       if (!height) return 0;
       const pitch = height / Math.max(1, glyphCount);
-      // Measured runs already carry pdf.js's true column height, so they only need a small margin so
-      // the final glyph is visibly enclosed rather than sitting flush on the box edge (which read as
-      // "the last character isn't wrapped"). Estimated runs keep the larger safety pad.
-      if (item && item.verticalRunMeasured) return Math.min(1.0, Math.max(0.35, pitch * 0.3));
+      // pdf.js item.height is the glyph ADVANCE box, but the actual rendered ink of the bottom glyph
+      // descends ~0.6 of a glyph pitch below it (measured against a rasterized render of the kamiina
+      // decision draft: box bottom sat 0.6-0.7% above the real ink every column). So even a "measured"
+      // run needs roughly 0.8*pitch of bottom pad (~0.6 to reach the ink + ~0.2 margin) or the last
+      // character reads as "not wrapped". Estimated runs keep their own safety pad.
+      if (item && item.verticalRunMeasured) return Math.min(1.9, Math.max(0.9, pitch * 0.8));
       return Math.min(2.2, Math.max(0.55, pitch * 0.68));
     }
 
@@ -15303,7 +15305,7 @@
       const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v15' });
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v16' });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -15570,7 +15572,7 @@
     }
 
     function isCurrentPdfCoordinateSource(source) {
-      return source === 'rendered-pdfjs-v15' || source === 'rendered-line-union-v15' || source === 'pdf-logical-fallback';
+      return source === 'rendered-pdfjs-v16' || source === 'rendered-line-union-v16' || source === 'pdf-logical-fallback';
     }
 
     async function renderPdfJsPageForActiveBodyPreview(doc, pageNo) {
@@ -15670,13 +15672,13 @@
           inferred: true,
           manual: false
         }));
-        nextRect.coordinateSource = 'rendered-line-union-v15';
+        nextRect.coordinateSource = 'rendered-line-union-v16';
         const clippedBase = clipOverlayRectToPdfBodyBounds(nextRect, doc, targetPageNo) || nextRect;
         const clipped = Object.assign({}, clippedBase, {
           vertical: true,
           inferred: true,
           manual: false,
-          coordinateSource: 'rendered-line-union-v15'
+          coordinateSource: 'rendered-line-union-v16'
         });
         if (pdfOverlayRectsEquivalent(current, clipped)) return;
         const savedRect = setBlockOverlayRectForPage(block, targetPageNo, clipped);
@@ -16473,7 +16475,7 @@
       const source = Array.isArray(items) ? items : [];
       if (source.pdfFallbackSource === 'pdf-logical-fallback') return 'pdf-logical-fallback';
       if (source.some(item => item && item.coordinateSource === 'pdf-logical-fallback')) return 'pdf-logical-fallback';
-      return 'rendered-pdfjs-v15';
+      return 'rendered-pdfjs-v16';
     }
 
     function pdfOverlayMatchingItemsForPage(doc, pageNo, renderedItems) {
