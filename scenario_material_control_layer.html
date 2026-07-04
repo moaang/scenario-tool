@@ -1628,6 +1628,7 @@
       background: transparent;
       box-shadow: none;
       overflow: visible; /* let the crop-mark corners sit just outside the real page/canvas */
+      contain: none;     /* base rule uses `contain: layout paint`, which paint-clips the corners */
     }
     .pane-center .pdf-page-canvas {
       --edge: 66px;
