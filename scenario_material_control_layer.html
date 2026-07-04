@@ -1664,23 +1664,23 @@
       position: fixed; left: 330px; top: 96px;
       z-index: 45;
       display: none;
-      width: 288px; max-height: 60vh; overflow: auto;
-      padding: 8px; gap: 6px;
-      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      width: 232px; max-height: 58vh; overflow: auto;
+      padding: 4px; gap: 3px;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
       box-shadow: var(--shadow-lg);
-      font-size: 10px;
+      font-size: 9px;
     }
     #debugWindow.open { display: grid; }
-    .dbg-head { display: flex; align-items: center; gap: 6px; cursor: move; touch-action: none; }
-    .dbg-head .dbg-grip { color: var(--faint); font-size: 11px; letter-spacing: -1px; }
-    .dbg-head .dbg-title { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
-    .dbg-head .dbg-close { margin-left: auto; width: 18px; min-height: 18px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .dbg-head { display: flex; align-items: center; gap: 4px; height: 15px; cursor: move; touch-action: none; }
+    .dbg-head .dbg-grip { color: var(--faint); font-size: 10px; letter-spacing: -2px; }
+    .dbg-head .dbg-title { font-size: 8px; font-weight: 800; letter-spacing: .1em; color: var(--faint); }
+    .dbg-head .dbg-close { margin-left: auto; width: 15px; height: 15px; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted); font-size: 12px; font-weight: 800; line-height: 1; }
     .dbg-head .dbg-close:hover { color: var(--ink); background: var(--chip); border-color: transparent; }
-    .dbg-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-    #debugWindow button { min-height: 20px; padding: 1px 7px; font-size: 10px; box-shadow: none; border-radius: 6px; }
-    #debugWindow select { min-height: 20px; padding: 1px 5px; font-size: 10px; width: auto; }
-    #debugWindow .chip { font-size: 9px; padding: 1px 5px; }
-    #debugWindow textarea { min-height: 46px; font-family: var(--mono); font-size: 9.5px; padding: 5px 6px; }
+    .dbg-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+    #debugWindow button { min-height: 17px; padding: 0 6px; font-size: 9px; box-shadow: none; border-radius: 5px; }
+    #debugWindow select { min-height: 17px; padding: 0 4px; font-size: 9px; width: auto; border-radius: 5px; }
+    #debugWindow .chip { font-size: 8px; padding: 0 5px; min-height: 15px; }
+    #debugWindow textarea { min-height: 34px; font-family: var(--mono); font-size: 9px; padding: 4px 5px; border-radius: 5px; }
     .pane-center .material-toolbar {
       width: max-content;
       max-width: 100%;
@@ -2596,7 +2596,6 @@
           <div id="dropZone" class="dropzone">untitled_01에 불러옴: タコピーの原罪_02_決定稿コンテ打ち用_240130.pdf</div>
           <textarea id="sourceInput" class="source-textarea hidden" placeholder="시나리오 / 플롯 / 캐릭터 설정 / 장소 설정 원문" data-i18n-placeholder="sourcePlaceholder" data-requires-project="" hidden=""></textarea>
           <div id="sourceReviewPanel" class="source-review-panel">
-          <div class="note"><strong>원문 인식됨:</strong> 원문확인창은 현재 인식 결과를 확인/수정해서 본문 표시에 반영하는 보조 화면임.</div>
           <div class="row">
             <button id="editSourceAgainBtn" class="small">원문확인 창 열기</button>
           </div>
@@ -12136,7 +12135,6 @@
       }
       if (unlocked && doc.originalText) {
         el.innerHTML = `
-          <div class="note"><strong>${esc(t('sourceReviewReadyTitle'))}</strong> ${esc(t('sourceReviewReadyBody'))}</div>
           <div class="row">
             <button id="editSourceAgainBtn" class="small">${esc(t('openSourceReview'))}</button>
           </div>
