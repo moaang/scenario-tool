@@ -7772,31 +7772,26 @@
     }
 
     function pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight) {
-      if (!isPdfExpandedVerticalRunItem(item)) return 0;
-      // For measured (ttb) runs pdf.js reports the column's x-origin at the glyph INK CENTER, so the
-      // box must be pulled left by half its own width to sit centered on the column. (Zeroing the
-      // shift left the box hanging to the right of the ink; the old glyphWidth*0.68 estimate slightly
-      // overshot to the left — half-width is the exact centering.)
-      if (item && item.verticalRunMeasured) return Math.max(0, (Number(rawWidth) || Number(width) || 0) / 2);
-      const glyphWidth = Math.max(0, Number(item.glyphWidthPct) || width || rawWidth || 0);
-      if (!glyphWidth) return 0;
-      const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text);
-      const pitch = (Number(rawHeight) || Number(item.heightPct) || 0) / Math.max(1, glyphCount);
-      const maxShift = Math.max(0, Math.min(
-        (Number(rawWidth) || glyphWidth) * 0.84,
-        Math.max(glyphWidth * 0.62, pitch * 0.5)
-      ));
-      return Math.max(0, Math.min(maxShift, glyphWidth * 0.68));
+      // pdf.js reports every vertical (ttb) glyph's x-origin at the ink CENTER, so centering the box
+      // means pulling it left by half its own width — uniformly for measured runs, estimated runs,
+      // and SINGLE-glyph markers alike (a lone × / ○ / 」 stacked in a column). The >=2 glyph gate in
+      // isPdfExpandedVerticalRunItem only guards the height heuristics; x-centering applies to any
+      // vertical glyph. (ltr-glyph columns keep verticalTextItem false and are left untouched.)
+      if (!item || item.rotatedLatinRun) return 0;
+      if (!item.verticalTextItem && !item.verticalRunExpanded) return 0;
+      return Math.max(0, (Number(rawWidth) || Number(width) || 0) / 2);
     }
 
     function pdfVerticalRunBottomPadPct(item, rawHeight) {
       if (!isPdfExpandedVerticalRunItem(item)) return 0;
-      // Measured runs carry pdf.js's true column height, so the estimation bottom pad isn't needed.
-      if (item && item.verticalRunMeasured) return 0;
       const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text);
       const height = Number(rawHeight) || Number(item.heightPct) || 0;
       if (!height) return 0;
       const pitch = height / Math.max(1, glyphCount);
+      // Measured runs already carry pdf.js's true column height, so they only need a small margin so
+      // the final glyph is visibly enclosed rather than sitting flush on the box edge (which read as
+      // "the last character isn't wrapped"). Estimated runs keep the larger safety pad.
+      if (item && item.verticalRunMeasured) return Math.min(1.0, Math.max(0.35, pitch * 0.3));
       return Math.min(2.2, Math.max(0.55, pitch * 0.68));
     }
 
