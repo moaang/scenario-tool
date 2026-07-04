@@ -283,6 +283,21 @@
     .rs-meta { font-size: 9.5px; color: var(--muted); font-weight: 600; }
     .restore-foot { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line-soft); }
     .restore-foot .small { flex: 1; }
+    /* Global file-drop overlay (drop a settings .json or a document anywhere) */
+    #globalDropOverlay {
+      position: fixed; inset: 0; z-index: 70;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(47, 111, 237, .08);
+      backdrop-filter: blur(1px);
+      pointer-events: none;
+    }
+    #globalDropOverlay.show { display: flex; }
+    #globalDropOverlay .drop-card {
+      padding: 18px 26px; border-radius: 16px;
+      background: var(--panel); border: 2px dashed var(--focus);
+      box-shadow: var(--shadow-lg);
+      color: var(--ink); font-size: 13px; font-weight: 750;
+    }
     /* Toast */
     .app-toast {
       position: fixed; left: 50%; bottom: 58px; transform: translateX(-50%) translateY(6px);
@@ -460,6 +475,56 @@
     }
     .document-context-menu button:hover { background: #edf2f7; }
     .document-context-menu .danger { color: var(--danger); }
+
+    /* Drop-line: insertion target between rows / at root level (pull docs out of folders) */
+    .tree-drop-line {
+      height: 6px;
+      margin: -3px 4px;
+      border-radius: 3px;
+      background: transparent;
+      transition: background .1s ease;
+    }
+    .tree-drop-line.drop-active { background: var(--focus); box-shadow: 0 0 0 2px var(--focus-tint); }
+
+    /* Document version flyout (opens right of the tree when a multi-version doc is selected) */
+    #versionFlyout {
+      top: 96px; left: 322px;
+      z-index: 33;
+      display: none;
+      max-width: min(60vw, 720px);
+      padding: 8px 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow-lg);
+    }
+    #versionFlyout.open { display: block; }
+    body[data-panel-left="closed"] #versionFlyout { display: none; }
+    .vf-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .vf-title { font-size: 11px; font-weight: 750; color: var(--ink); }
+    .vf-doc { font-size: 10.5px; color: var(--muted); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vf-close { margin-left: auto; width: 22px; min-height: 22px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted); font-size: 14px; font-weight: 800; }
+    .vf-close:hover { background: var(--chip); color: var(--ink); border-color: transparent; }
+    .vf-track { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+    .vf-card {
+      flex: none; min-width: 96px; max-width: 150px;
+      display: grid; gap: 3px; padding: 8px 10px;
+      border: 1px solid var(--line); border-radius: 10px; background: #fff;
+      cursor: pointer; text-align: left; box-shadow: none;
+    }
+    .vf-card:hover { border-color: var(--focus); background: var(--focus-tint); }
+    .vf-card.active { border-color: var(--focus); background: var(--focus-tint); box-shadow: var(--ring); cursor: default; }
+    .vf-card .vf-label { font-size: 12px; font-weight: 750; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vf-card .vf-meta { font-size: 9.5px; color: var(--muted); font-weight: 650; }
+
+    /* Version list inside the document-properties modal */
+    .prop-version-list { display: grid; gap: 5px; }
+    .prop-version-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 9px; border: 1px solid var(--line); border-radius: 9px; background: #fff;
+    }
+    .prop-version-row.active { border-color: var(--focus); background: var(--focus-tint); }
+    .prop-version-row .pv-label { flex: 1; font-size: 12px; font-weight: 650; }
 
     .source-textarea { min-height: 320px; font-family: var(--mono); font-size: 12px; }
     .source-textarea.hidden { display: none; }
@@ -2888,8 +2953,10 @@
       </div>
     </div>
     <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
+    <div id="globalDropOverlay"><div class="drop-card" data-i18n="globalDropHint">설정/문서 파일을 놓아 불러오기</div></div>
 
     <div id="sceneInfoBar" class="canvas-chrome hidden"></div>
+    <div id="versionFlyout" class="canvas-chrome"></div>
 
     <div id="railLeft" class="side-rail side-rail-left" role="button" tabindex="0" title="펼치기">
       <svg class="rail-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h8L19 8.5V18.5a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 18.5z"/><path d="M13 4v5h6"/></svg>
@@ -3257,6 +3324,14 @@
         selectInList: '一覧で選択'
         ,
         workRoot: '作品フォルダ',
+        workRenameHint: 'ダブルクリックで作品名を変更',
+        renameWork: '作品名を変更',
+        deleteWork: '作品を削除',
+        workDeletedToast: '作品を削除しました',
+        versionActiveBadge: '使用中',
+        versionApply: 'この版に',
+        versionFlyoutTitle: 'バージョン',
+        globalDropHint: '設定/文書ファイルをドロップして読み込み',
         addFolder: 'フォルダ追加',
         folderLabel: 'フォルダ',
         folderName: 'フォルダ名',
@@ -3551,6 +3626,14 @@
         sourceBlockTitle: '원문 블록',
         selectInList: '목록에서 선택',
         workRoot: '작품 폴더',
+        workRenameHint: '더블클릭하여 작품명 변경',
+        renameWork: '작품명 바꾸기',
+        deleteWork: '작품 삭제',
+        workDeletedToast: '작품을 삭제했습니다',
+        versionActiveBadge: '사용 중',
+        versionApply: '이 버전으로',
+        versionFlyoutTitle: '버전',
+        globalDropHint: '설정/문서 파일을 놓아 불러오기',
         addFolder: '폴더 추가',
         folderLabel: '폴더',
         folderName: '폴더명',
@@ -3845,6 +3928,14 @@
         sourceBlockTitle: 'Source Block',
         selectInList: 'Select in List',
         workRoot: 'Work Folder',
+        workRenameHint: 'Double-click to rename the work',
+        renameWork: 'Rename Work',
+        deleteWork: 'Delete Work',
+        workDeletedToast: 'Work deleted',
+        versionActiveBadge: 'In use',
+        versionApply: 'Use this',
+        versionFlyoutTitle: 'Versions',
+        globalDropHint: 'Drop a settings / document file to load',
         addFolder: 'Add Folder',
         folderLabel: 'Folder',
         folderName: 'Folder Name',
@@ -11418,7 +11509,55 @@
           <span class="tree-tags">${tagHtml}</span>
         </div>`;
       if (!isFolder || collapsed) return row;
-      return row + children.map(child => renderDocumentTreeNode(child, depth + 1)).join('');
+      return row + renderDocumentTreeLevel(id, depth + 1);
+    }
+
+    // Render a level's children interleaved with drop-lines (insertion targets), so a node
+    // can be dropped at a precise position — including pulled out to the root level.
+    function renderDocumentTreeLevel(parentId, depth) {
+      const children = documentTreeChildren(state.project, parentId);
+      const indent = Math.max(0, depth) * 16 + 8;
+      const line = (beforeId, afterId) => `<div class="tree-drop-line" data-drop-parent="${esc(parentId)}" data-drop-before="${esc(beforeId || '')}" data-drop-after="${esc(afterId || '')}" style="margin-left:${indent}px"></div>`;
+      let html = line('', children[0] ? children[0].node.id : '');
+      children.forEach((child, i) => {
+        html += renderDocumentTreeNode(child, depth);
+        html += line(child.node.id, children[i + 1] ? children[i + 1].node.id : '');
+      });
+      return html;
+    }
+
+    function treeNodeByAnyId(id) {
+      if (!id) return null;
+      return folderById(id) || documentById(id) || null;
+    }
+
+    function moveDocumentTreeNodeBetween(type, id, parentId, beforeId, afterId) {
+      const target = parentId || 'root';
+      if (type === 'root' || id === beforeId && !afterId) { /* allow */ }
+      const before = treeNodeByAnyId(beforeId);
+      const after = treeNodeByAnyId(afterId);
+      let order;
+      const bo = before ? Number(before.sortOrder || 0) : null;
+      const ao = after ? Number(after.sortOrder || 0) : null;
+      if (bo != null && ao != null) order = bo === ao ? bo + 5 : (bo + ao) / 2;
+      else if (bo != null) order = bo + 10;
+      else if (ao != null) order = ao - 10;
+      else order = 10;
+      if (type === 'folder') {
+        const folder = folderById(id);
+        if (!folder || folder.id === target || isFolderDescendant(folder.id, target)) return;
+        folder.parentId = target;
+        folder.sortOrder = order;
+        folder.updatedAt = nowIso();
+      } else if (type === 'document') {
+        const doc = documentById(id);
+        if (!doc || doc.id === 'project-common') return;
+        doc.parentId = target;
+        doc.sortOrder = order;
+        doc.updatedAt = nowIso();
+      } else return;
+      markProjectChanged('reorder_document_tree_node');
+      syncAll(false);
     }
 
     function renderDocumentContextMenu() {
@@ -11435,9 +11574,9 @@
       if (isDocument) {
         buttons.push(`<button type="button" data-document-context-action="properties">${esc(t('documentProperties'))}</button>`);
       }
-      if (isFolder || isDocument) {
-        buttons.push(`<button type="button" data-document-context-action="rename">${esc(t('rename'))}</button>`);
-        buttons.push(`<button type="button" class="danger" data-document-context-action="delete">${esc(t('remove'))}</button>`);
+      if (isFolder || isDocument || isRoot) {
+        buttons.push(`<button type="button" data-document-context-action="rename">${esc(isRoot ? t('renameWork') : t('rename'))}</button>`);
+        buttons.push(`<button type="button" class="danger" data-document-context-action="delete">${esc(isRoot ? t('deleteWork') : t('remove'))}</button>`);
       }
       return `<div class="document-context-menu" style="left:${esc(menu.x)}px;top:${esc(menu.y)}px" data-document-context-menu>${buttons.join('')}</div>`;
     }
@@ -11471,10 +11610,12 @@
           <div class="document-explorer">
             <div class="document-explorer-root" data-tree-node-type="root" data-tree-node-id="root" data-tree-drop-target="root">
               <span class="tree-icon">&#9635;</span>
-              <span class="tree-title">${esc(workspaceTitle(state.project) || t('workRoot'))}</span>
+              ${state.renamingTreeNode && state.renamingTreeNode.type === 'root'
+                ? `<input class="tree-title-input" data-tree-rename-input data-node-type="root" data-node-id="root" value="${esc(workspaceTitle(state.project) || t('workRoot'))}" />`
+                : `<span class="tree-title" data-tree-root-title title="${esc(t('workRenameHint'))}">${esc(workspaceTitle(state.project) || t('workRoot'))}</span>`}
               <span class="tree-tags"><span class="tree-kind-tag">${esc(t('workRoot'))}</span></span>
             </div>
-            <div class="document-tree">${rootChildren.length ? rootChildren.map(child => renderDocumentTreeNode(child, 0)).join('') : `<div class="empty">${esc(t('documentEmptyNote'))}</div>`}</div>
+            <div class="document-tree">${rootChildren.length ? renderDocumentTreeLevel('root', 0) : `<div class="empty">${esc(t('documentEmptyNote'))}</div>`}</div>
             <span id="saveStatus" class="card-sub"></span>
           </div>
           ${renderDocumentContextMenu()}
@@ -11489,8 +11630,22 @@
       $('addFolderBtn').addEventListener('click', () => addDocumentFolder('root'));
       document.querySelectorAll('[data-tree-document]').forEach(row => row.addEventListener('click', (event) => {
         if (event.target && event.target.closest('[data-tree-rename-input]')) return;
+        if (event.detail > 1) return; // let dblclick start rename instead of re-switching
         switchActiveDocument(row.getAttribute('data-tree-document'));
       }));
+      // Double-click a name to rename (documents, folders, and the work-folder root)
+      document.querySelectorAll('.tree-row[data-tree-node-type]').forEach(row => row.addEventListener('dblclick', (event) => {
+        if (event.target && event.target.closest('[data-tree-rename-input]')) return;
+        event.preventDefault();
+        state.renamingTreeNode = { type: row.getAttribute('data-tree-node-type'), id: row.getAttribute('data-tree-node-id') };
+        syncAll(false);
+      }));
+      const rootTitleEl = document.querySelector('[data-tree-root-title]');
+      if (rootTitleEl) rootTitleEl.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        state.renamingTreeNode = { type: 'root', id: 'root' };
+        syncAll(false);
+      });
       document.querySelectorAll('[data-tree-toggle]').forEach(btn => btn.addEventListener('click', (event) => {
         event.stopPropagation();
         const folder = folderById(btn.getAttribute('data-tree-toggle'));
@@ -11547,6 +11702,26 @@
           }
         });
       });
+      document.querySelectorAll('.tree-drop-line').forEach(line => {
+        line.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          line.classList.add('drop-active');
+          event.dataTransfer.dropEffect = 'move';
+        });
+        line.addEventListener('dragleave', () => line.classList.remove('drop-active'));
+        line.addEventListener('drop', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          line.classList.remove('drop-active');
+          const raw = event.dataTransfer.getData('application/x-scenario-tree-node') || event.dataTransfer.getData('text/plain');
+          try {
+            const payload = JSON.parse(raw);
+            moveDocumentTreeNodeBetween(payload.type, payload.id, line.getAttribute('data-drop-parent') || 'root', line.getAttribute('data-drop-before'), line.getAttribute('data-drop-after'));
+          } catch (err) {
+            console.warn('tree drop-line failed', err);
+          }
+        });
+      });
     }
 
     function contextTargetParentId() {
@@ -11574,8 +11749,40 @@
         openDocumentPropertiesModal(menu.id);
       } else if (action === 'delete') {
         if (menu.type === 'document') deleteDocumentById(menu.id);
-        if (menu.type === 'folder') deleteDocumentFolder(menu.id);
+        else if (menu.type === 'folder') deleteDocumentFolder(menu.id);
+        else if (menu.type === 'root') deleteActiveWork();
       }
+    }
+
+    function deleteActiveWork() {
+      if (!workspaceReady()) return;
+      const title = workspaceTitle(state.project) || t('workRoot');
+      const msg = activeUiLanguage === 'en'
+        ? `Delete the work "${title}"? All its documents, blocks, materials and notes will be permanently removed.`
+        : activeUiLanguage === 'ja'
+        ? `作品「${title}」を削除しますか？文書・ブロック・素材・注釈がすべて削除されます。`
+        : `작품 "${title}"을(를) 삭제할까요? 문서·블록·소재·주석이 모두 영구 삭제됩니다.`;
+      if (!confirm(msg)) return;
+      syncActiveWorkToSettings();
+      const workId = state.project && state.project.workspace && state.project.workspace.workId;
+      state.settings.works = (state.settings.works || []).filter(w => !(w.workspace && w.workspace.workId === workId));
+      state.documentContextMenu = null;
+      state.renamingTreeNode = null;
+      const next = (state.settings.works || [])[0];
+      if (next) {
+        state.project = ensureProjectShape(next);
+        state.settings.activeWorkId = next.workspace.workId;
+      } else {
+        state.project = blankProject();
+        state.settings.activeWorkId = '';
+      }
+      state.activeScriptPageNo = 1;
+      state.selectedBlockId = '';
+      state.activeBlockTab = '';
+      loadActiveDocumentToInput();
+      putSettingsAutosaveSnapshot('delete_work').catch(err => console.warn('settings autosave failed', err));
+      toast(t('workDeletedToast'));
+      syncAll(false);
     }
 
     function commitTreeRename(input) {
@@ -11599,6 +11806,11 @@
           folder.title = title;
           folder.updatedAt = nowIso();
         }
+      } else if (nodeType === 'root') {
+        // The work folder IS the work — renaming it renames the work title everywhere.
+        if (state.project.workspace) state.project.workspace.title = title;
+        if (state.project.project) state.project.project.savedProjectTitle = title;
+        syncActiveWorkToSettings();
       }
       state.renamingTreeNode = null;
       markProjectChanged('rename_document_tree_node');
@@ -11637,6 +11849,47 @@
       state.project.audit.push({ at: nowIso(), action: 'switch_document', documentId });
       markProjectChanged('switch_document');
       syncAll(false);
+      // Reveal version history to the right when the selected doc has more than one version.
+      ensureDocumentHasCurrentVersion(targetDoc);
+      if ((targetDoc.versions || []).length >= 2) openVersionFlyout(targetDoc);
+      else closeVersionFlyout();
+    }
+
+    function openVersionFlyout(doc) {
+      const el = $('versionFlyout');
+      if (!el || !doc) return;
+      const versions = doc.versions || [];
+      const activeId = doc.activeVersionId || doc.latestVersionId || (versions[versions.length - 1] && versions[versions.length - 1].id) || '';
+      const cards = versions.map((v) => {
+        let time = ''; try { time = v.savedAt || v.createdAt ? new Date(v.savedAt || v.createdAt).toLocaleDateString() : ''; } catch (e) {}
+        return `<button type="button" class="vf-card ${v.id === activeId ? 'active' : ''}" data-vf-version="${esc(v.id)}">
+          <span class="vf-label">${esc(versionDisplayLabel(doc, v))}</span>
+          ${time ? `<span class="vf-meta">${esc(time)}</span>` : ''}
+        </button>`;
+      }).join('');
+      el.innerHTML = `
+        <div class="vf-head">
+          <span class="vf-title">${esc(t('versionFlyoutTitle'))}</span>
+          <span class="vf-doc">${esc(doc.title || doc.id)}</span>
+          <button type="button" class="vf-close" data-vf-close aria-label="close">&times;</button>
+        </div>
+        <div class="vf-track">${cards}</div>`;
+      el.dataset.docId = doc.id;
+      el.classList.add('open');
+      el.querySelector('[data-vf-close]').addEventListener('click', closeVersionFlyout);
+      el.querySelectorAll('[data-vf-version]').forEach(btn => btn.addEventListener('click', () => {
+        const vid = btn.getAttribute('data-vf-version');
+        const d = documentById(el.dataset.docId) || activeDocument();
+        if (vid !== d.activeVersionId) applyDocumentVersion(d, vid);
+        openVersionFlyout(documentById(el.dataset.docId) || d);
+      }));
+    }
+
+    function closeVersionFlyout() {
+      const el = $('versionFlyout');
+      if (!el) return;
+      el.classList.remove('open');
+      el.dataset.docId = '';
     }
 
     function deleteActiveDocument() {
@@ -11735,14 +11988,34 @@
       const doc = documentById(documentId);
       if (!doc || doc.id === 'project-common') return;
       $('modalTitle').textContent = t('documentProperties') + ': ' + (doc.title || doc.id);
+      ensureDocumentHasCurrentVersion(doc);
+      const versions = doc.versions || [];
+      const activeVersionId = doc.activeVersionId || doc.latestVersionId || (versions[versions.length - 1] && versions[versions.length - 1].id) || '';
+      const versionsHtml = versions.length ? `
+        <div><label>${esc(t('versionLabel'))}</label>
+          <div class="prop-version-list">${versions.map((v) => {
+            const active = v.id === activeVersionId;
+            let time = ''; try { time = v.savedAt || v.createdAt ? new Date(v.savedAt || v.createdAt).toLocaleString() : ''; } catch (e) {}
+            return `<div class="prop-version-row ${active ? 'active' : ''}">
+              <span class="pv-label">${esc(versionDisplayLabel(doc, v))}</span>
+              ${time ? `<span class="card-sub">${esc(time)}</span>` : ''}
+              ${active ? `<span class="chip">${esc(t('versionActiveBadge'))}</span>` : `<button type="button" class="small" data-apply-doc-version="${esc(v.id)}">${esc(t('versionApply'))}</button>`}
+            </div>`;
+          }).join('')}</div>
+        </div>` : '';
       $('modalBody').innerHTML = `
         <div class="grid-2">
           <div><label>${esc(t('documentTitle'))}</label><input id="documentPropertyTitle" value="${esc(doc.title || '')}" /></div>
           <div><label>${esc(t('documentKind'))}</label><select id="documentPropertyKind">${DOCUMENT_KINDS.map(([value]) => `<option value="${value}" ${value === normalizeDocumentKind(doc.documentKind) ? 'selected' : ''}>${esc(documentKindLabel(value))}</option>`).join('')}</select></div>
         </div>
         <div id="documentEpisodeField"><label>${esc(t('episodeNumber'))}</label><input id="documentPropertyEpisode" type="number" min="0" step="1" value="${esc(String(doc.episode || '').replace(/[^0-9]/g, ''))}" /></div>
+        ${versionsHtml}
         <div class="row"><button id="saveDocumentPropertiesBtn" class="primary">${esc(t('saveButton'))}</button></div>
       `;
+      document.querySelectorAll('[data-apply-doc-version]').forEach(btn => btn.addEventListener('click', () => {
+        closeModal();
+        applyDocumentVersion(doc, btn.getAttribute('data-apply-doc-version'));
+      }));
       const syncEpisodeVisibility = () => {
         const field = $('documentEpisodeField');
         if (field) field.classList.toggle('hidden', $('documentPropertyKind').value !== 'episode_script');
@@ -19206,6 +19479,7 @@
     function setSidePanelOpen(side, open) {
       document.body.dataset[side === 'left' ? 'panelLeft' : 'panelRight'] = open ? 'open' : 'closed';
       try { localStorage.setItem('scenarioCanvasPanel_' + side, open ? '1' : '0'); } catch (e) {}
+      if (side === 'left' && !open) closeVersionFlyout();
     }
 
     function bindCanvasShell() {
@@ -19292,6 +19566,30 @@
       const sp = $('scriptStructurePanel');
       if (sp && window.MutationObserver) new MutationObserver(() => syncPageChrome()).observe(sp, { childList: true, subtree: true });
       $('stripDebugBtn').addEventListener('click', togglePdfOverlayDebugMode);
+      bindGlobalFileDrop();
+    }
+
+    // Drop a program settings (.json) or a document file anywhere on the app to load it.
+    // Dedicated drop zones (#dropZone, version panel) still handle their own drops first.
+    function bindGlobalFileDrop() {
+      const overlay = $('globalDropOverlay');
+      const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+      const ownZone = (e) => e.target && e.target.closest && e.target.closest('#dropZone, #documentVersionPanel');
+      let dragDepth = 0;
+      window.addEventListener('dragenter', (e) => { if (!hasFiles(e) || ownZone(e)) return; dragDepth += 1; if (overlay) overlay.classList.add('show'); });
+      window.addEventListener('dragover', (e) => { if (!hasFiles(e) || ownZone(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+      window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth && overlay) overlay.classList.remove('show'); });
+      window.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        dragDepth = 0;
+        if (overlay) overlay.classList.remove('show');
+        if (ownZone(e)) return; // dedicated zone handles it
+        e.preventDefault();
+        const file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        if (/\.json$/i.test(file.name)) loadProjectJsonFile(file);
+        else { if (!requireProjectReady()) return; importJsonOrText(file, { versionMode: 'new' }); }
+      });
     }
 
     function initCanvasShell() {
@@ -20095,7 +20393,15 @@
         await restorePdfPreviewFilesForProject(state.project);
         if (workspaceReady()) state.project.audit.push({ at: nowIso(), action: 'load_settings_file', fileName: file.name });
         if (workspaceReady()) state.project.workspace.hasUnsavedChanges = false;
+        state.activeScriptPageNo = 1;
+        closeVersionFlyout();
         syncAll(false);
+        // Loaded content can be a different size/page — re-fit the canvas and reset the
+        // side-panel scroll so the 작품·원문 pane doesn't jump to a stale offset.
+        centerCanvasView();
+        syncPageChrome();
+        const leftBody = document.querySelector('#panelLeft .pane-body');
+        if (leftBody) leftBody.scrollTop = 0;
         putSettingsAutosaveSnapshot('load_settings_file').catch(err => console.warn('settings autosave failed', err));
         pushProjectRestorePoint('load', { force: true }).catch(err => console.warn('load restore point failed', err));
         lastAutosaveAt = Date.now();
@@ -20531,6 +20837,7 @@ V（城島剛志）
         const tab = btn.getAttribute('data-middle-tab');
         state.activeMiddleTab = tab === 'materials' ? (state.lastMaterialTab || 'episodeMaterials') : tab;
         closeMaterialComposer();
+        if (tab === 'materials') closeVersionFlyout();
         renderMiddleTabs();
         renderScriptStructurePanel();
         renderStats();
