@@ -7773,9 +7773,11 @@
 
     function pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight) {
       if (!isPdfExpandedVerticalRunItem(item)) return 0;
-      // Measured runs already sit on the real glyph column; the shift only compensated for the
-      // fontSize-estimated geometry, so applying it here would re-introduce the leftward drift.
-      if (item && item.verticalRunMeasured) return 0;
+      // For measured (ttb) runs pdf.js reports the column's x-origin at the glyph INK CENTER, so the
+      // box must be pulled left by half its own width to sit centered on the column. (Zeroing the
+      // shift left the box hanging to the right of the ink; the old glyphWidth*0.68 estimate slightly
+      // overshot to the left — half-width is the exact centering.)
+      if (item && item.verticalRunMeasured) return Math.max(0, (Number(rawWidth) || Number(width) || 0) / 2);
       const glyphWidth = Math.max(0, Number(item.glyphWidthPct) || width || rawWidth || 0);
       if (!glyphWidth) return 0;
       const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text);
