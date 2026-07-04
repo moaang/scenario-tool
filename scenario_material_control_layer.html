@@ -1651,16 +1651,33 @@
     .scene-corner.bl { bottom: -11px; left: -11px; border-right: 0; border-top: 0; border-radius: 0 0 0 4px; }
     .scene-corner.br { bottom: -11px; right: -11px; border-left: 0; border-top: 0; border-radius: 0 0 4px 0; }
     body[data-pdf-debug="on"] .scene-corner { display: none; }
-    /* debug-only tools, placed BELOW the page */
-    .pdf-debug-tools { display: grid; gap: 8px; margin-top: 14px; }
-    .body-preview-workspace:not(.debug-mode) .pdf-debug-tools { display: none; }
-    .pdf-debug-tools .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    /* The "PDF preview / textLayer N" status + mode note are dev noise — never on canvas */
     .pane-center .pdf-js-status,
-    .pane-center .pdf-preview-mode-note { display: none; }
-    body[data-pdf-debug="on"] .pane-center .pdf-js-status { display: block; }
-    body[data-pdf-debug="on"] .pane-center .pdf-preview-mode-note { display: block; }
+    .pane-center .pdf-preview-mode-note { display: none !important; }
     body[data-pdf-debug="on"] .pane-center .pdf-page-surface { background: #f8f8f2; box-shadow: 0 0 0 1px var(--line); }
     body[data-pdf-debug="on"] .pane-center .pdf-page-canvas { -webkit-mask-image: none; mask-image: none; }
+
+    /* Debug tools live in a compact, independent floating window (not on the work canvas) */
+    #debugWindow {
+      position: fixed; right: 14px; bottom: 52px;
+      z-index: 45;
+      display: none;
+      width: 288px; max-height: 60vh; overflow: auto;
+      padding: 8px; gap: 6px;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      box-shadow: var(--shadow-lg);
+      font-size: 10px;
+    }
+    #debugWindow.open { display: grid; }
+    .dbg-head { display: flex; align-items: center; gap: 6px; }
+    .dbg-head .dbg-title { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+    .dbg-head .dbg-close { margin-left: auto; width: 18px; min-height: 18px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .dbg-head .dbg-close:hover { color: var(--ink); background: var(--chip); border-color: transparent; }
+    .dbg-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    #debugWindow button { min-height: 20px; padding: 1px 7px; font-size: 10px; box-shadow: none; border-radius: 6px; }
+    #debugWindow select { min-height: 20px; padding: 1px 5px; font-size: 10px; width: auto; }
+    #debugWindow .chip { font-size: 9px; padding: 1px 5px; }
+    #debugWindow textarea { min-height: 46px; font-family: var(--mono); font-size: 9.5px; padding: 5px 6px; }
     .pane-center .material-toolbar {
       width: max-content;
       max-width: 100%;
@@ -2959,6 +2976,7 @@
 
     <div id="sceneInfoBar" class="canvas-chrome hidden"></div>
     <div id="versionFlyout" class="canvas-chrome"></div>
+    <div id="debugWindow"></div>
 
     <div id="railLeft" class="side-rail side-rail-left" role="button" tabindex="0" title="펼치기">
       <svg class="rail-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h8L19 8.5V18.5a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 18.5z"/><path d="M13 4v5h6"/></svg>
@@ -15473,6 +15491,7 @@
         ${renderBodyOverlayPreview(doc, pageNo, pageBlocks, overlayBlocks)}
       `;
       el.dataset.renderKey = renderKey;
+      renderDebugWindow(doc, pageNo);
       $('scriptPageSelect').addEventListener('change', () => {
         state.activeScriptPageNo = Number($('scriptPageSelect').value) || pageNos[0] || 1;
         el.dataset.renderKey = '';
@@ -15586,30 +15605,45 @@
             <div class="pdf-preview-mode-note">${esc(hasPdfFile ? t('pdfPreviewNative') : t('pdfPreviewFallback'))}</div>
           </div>
         </div>
-        <div class="pdf-debug-tools">
-          <div class="row">
-            <button type="button" class="small" id="copyPageDebugTextBtn">${esc(t('copyPageDebugText'))}</button>
-            <button type="button" class="small" id="copyAllPageDebugTextBtn">${esc(t('copyAllPageDebugText'))}</button>
-          </div>
-          <div class="pdf-range-test-panel">
-            <div class="row">
-              <strong>${esc(t('pdfRangeTest'))}</strong>
-              <label>${esc(t('pdfExtractMode'))}</label>
-              <select id="pdfExtractModeSelect">
-                <option value="auto">${esc(t('pdfExtractAuto'))}</option>
-                <option value="horizontal">${esc(t('pdfExtractHorizontal'))}</option>
-                <option value="vertical">${esc(t('pdfExtractVertical'))}</option>
-              </select>
-              <button type="button" class="small" id="pdfExtractSelectedBtn">${esc(t('pdfExtractSelected'))}</button>
-              <button type="button" class="small" id="pdfRecomputeOverlayRectsBtn">${esc(t('pdfRecomputeOverlayRects'))}</button>
-              <button type="button" class="small" id="pdfApplyBodyBoundsBtn">${esc(t('pdfBodyBoundsApply'))}</button>
-              <button type="button" class="small" id="pdfClearBodyBoundsBtn">${esc(t('pdfBodyBoundsClear'))}</button>
-              <span class="chip" id="pdfBodyBoundsStatus">${esc(pdfBodyBoundsStatusLabel(doc))}</span>
-            </div>
-            <textarea id="pdfRangeOutput" class="pdf-range-output" readonly></textarea>
-          </div>
-        </div>
       </div>`;
+    }
+
+    // Debug tools as an independent, compact floating window (populated only in debug mode).
+    function renderDebugWindow(doc, pageNo) {
+      const win = $('debugWindow');
+      if (!win) return;
+      if (!state.pdfOverlayDebugMode || state.activeMiddleTab !== 'script') {
+        win.classList.remove('open');
+        win.innerHTML = '';
+        return;
+      }
+      win.innerHTML = `
+        <div class="dbg-head">
+          <span class="dbg-title">DEBUG</span>
+          <button type="button" class="dbg-close" id="dbgCloseBtn" title="close">&times;</button>
+        </div>
+        <div class="dbg-row">
+          <button type="button" class="small" id="copyPageDebugTextBtn">${esc(t('copyPageDebugText'))}</button>
+          <button type="button" class="small" id="copyAllPageDebugTextBtn">${esc(t('copyAllPageDebugText'))}</button>
+        </div>
+        <div class="dbg-row">
+          <select id="pdfExtractModeSelect">
+            <option value="auto">${esc(t('pdfExtractAuto'))}</option>
+            <option value="horizontal">${esc(t('pdfExtractHorizontal'))}</option>
+            <option value="vertical">${esc(t('pdfExtractVertical'))}</option>
+          </select>
+          <button type="button" class="small" id="pdfExtractSelectedBtn">${esc(t('pdfExtractSelected'))}</button>
+          <button type="button" class="small" id="pdfRecomputeOverlayRectsBtn">${esc(t('pdfRecomputeOverlayRects'))}</button>
+        </div>
+        <div class="dbg-row">
+          <button type="button" class="small" id="pdfApplyBodyBoundsBtn">${esc(t('pdfBodyBoundsApply'))}</button>
+          <button type="button" class="small" id="pdfClearBodyBoundsBtn">${esc(t('pdfBodyBoundsClear'))}</button>
+          <span class="chip" id="pdfBodyBoundsStatus">${esc(pdfBodyBoundsStatusLabel(doc))}</span>
+        </div>
+        <textarea id="pdfRangeOutput" class="pdf-range-output" readonly></textarea>`;
+      win.classList.add('open');
+      const close = $('dbgCloseBtn');
+      if (close) close.addEventListener('click', () => togglePdfOverlayDebugMode());
     }
 
     function roundDebugNumber(value) {
@@ -16774,7 +16808,10 @@
       // should actually use the width the wider center pane now gives it.
       const scale = Math.max(0.65, Math.min(2.6, availableWidth / baseViewport.width));
       const viewport = page.getViewport({ scale });
-      const dpr = 1;
+      // Render the raster at a density that follows the canvas zoom so magnifying the
+      // shell (a CSS transform) doesn't upscale a fixed bitmap into mush. Capped + stepped
+      // to avoid re-render churn; the CSS display size stays viewport.width.
+      const dpr = pdfRenderDensity();
       const ctx = canvas.getContext('2d');
       const renderKey = [doc.id, pageNo, Math.round(viewport.width), Math.round(viewport.height), Math.round(dpr * 100)].join('#');
       const targetWidth = Math.floor(viewport.width * dpr);
@@ -19433,6 +19470,7 @@
       v.x = Math.round((window.innerWidth - (scene.offsetWidth || 960) * v.z) / 2);
       v.y = 74;
       applyCanvasView();
+      if (zoomOverride) schedulePdfDensityRerender();
     }
 
     function zoomCanvasBy(k, cx, cy) {
@@ -19446,6 +19484,27 @@
       v.y = py - (py - v.y) * kk;
       v.z = nz;
       applyCanvasView();
+      schedulePdfDensityRerender();
+    }
+
+    // Raster density for the PDF canvas: track zoom (and screen DPR) so zoomed-in text
+    // stays crisp. Stepped to 0.5 and capped so we only re-render on meaningful changes.
+    function pdfRenderDensity() {
+      const base = Math.min(2, window.devicePixelRatio || 1);
+      const target = base * Math.max(1, canvasZoomFactor());
+      return Math.min(3.5, Math.max(1, Math.round(target * 2) / 2));
+    }
+
+    let pdfDensityRerenderTimer = 0;
+    function schedulePdfDensityRerender() {
+      if (document.body.dataset.centerMode === 'materials') return;
+      window.clearTimeout(pdfDensityRerenderTimer);
+      pdfDensityRerenderTimer = window.setTimeout(() => {
+        const doc = activeDocument();
+        if (doc && doc.draftSourceType === 'pdf' && state.pdfPreviewFiles && state.pdfPreviewFiles[doc.id]) {
+          renderPdfJsPageForActiveBodyPreview(doc, state.activeScriptPageNo).catch(err => console.warn('pdf density re-render failed', err));
+        }
+      }, 200);
     }
 
     function syncPageChrome() {
@@ -19609,6 +19668,7 @@
       const isMaterials = ['episodeMaterials', 'commonMaterials'].includes(state.activeMiddleTab);
       if (isMaterials) state.lastMaterialTab = state.activeMiddleTab;
       document.body.dataset.centerMode = isMaterials ? 'materials' : 'script';
+      if (isMaterials) renderDebugWindow(null, 0);
       syncPageChrome();
       document.querySelectorAll('#middleTabs .tab').forEach((btn) => {
         const tab = btn.getAttribute('data-middle-tab');
