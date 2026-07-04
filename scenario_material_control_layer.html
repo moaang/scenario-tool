@@ -1627,6 +1627,7 @@
       min-height: 0;
       background: transparent;
       box-shadow: none;
+      overflow: visible; /* let the crop-mark corners sit just outside the real page/canvas */
     }
     .pane-center .pdf-page-canvas {
       --edge: 66px;
@@ -1659,7 +1660,7 @@
 
     /* Debug tools live in a compact, independent floating window (not on the work canvas) */
     #debugWindow {
-      position: fixed; right: 14px; bottom: 52px;
+      position: fixed; left: 330px; top: 96px;
       z-index: 45;
       display: none;
       width: 288px; max-height: 60vh; overflow: auto;
@@ -1669,7 +1670,8 @@
       font-size: 10px;
     }
     #debugWindow.open { display: grid; }
-    .dbg-head { display: flex; align-items: center; gap: 6px; }
+    .dbg-head { display: flex; align-items: center; gap: 6px; cursor: move; touch-action: none; }
+    .dbg-head .dbg-grip { color: var(--faint); font-size: 11px; letter-spacing: -1px; }
     .dbg-head .dbg-title { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
     .dbg-head .dbg-close { margin-left: auto; width: 18px; min-height: 18px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted); font-size: 12px; font-weight: 800; }
     .dbg-head .dbg-close:hover { color: var(--ink); background: var(--chip); border-color: transparent; }
@@ -15588,10 +15590,10 @@
         <div class="script-page">
           <div class="card-head"><div class="card-title">${esc(t('tabScript'))} ・ Page ${esc(pageNo)}</div><div class="chips">${renderPageTags(pageBlocks)}</div></div>
           <div class="pdf-preview-stage" data-page-no="${esc(pageNo)}">
-            <span class="scene-corner tl"></span><span class="scene-corner tr"></span><span class="scene-corner bl"></span><span class="scene-corner br"></span>
             <div class="pdf-page-scroll">
               <div id="pdfPageSurface" class="pdf-page-surface${modeClass}" data-pdf-overlay-stage data-page-no="${esc(pageNo)}">
                 ${background}
+                <span class="scene-corner tl"></span><span class="scene-corner tr"></span><span class="scene-corner bl"></span><span class="scene-corner br"></span>
                 <div id="pdfLayoutGuideLayer" class="pdf-layout-guide-layer" data-pdf-layout-guide-layer></div>
                 <div id="pdfOverlayLayer" class="pdf-overlay-layer" data-pdf-overlay-layer>
                   ${renderPdfBodyBoundsOverlay(doc)}
@@ -15618,7 +15620,8 @@
         return;
       }
       win.innerHTML = `
-        <div class="dbg-head">
+        <div class="dbg-head" data-dbg-drag>
+          <span class="dbg-grip">⠿</span>
           <span class="dbg-title">DEBUG</span>
           <button type="button" class="dbg-close" id="dbgCloseBtn" title="close">&times;</button>
         </div>
@@ -15642,8 +15645,48 @@
         </div>
         <textarea id="pdfRangeOutput" class="pdf-range-output" readonly></textarea>`;
       win.classList.add('open');
+      applyDebugWindowPos();
       const close = $('dbgCloseBtn');
       if (close) close.addEventListener('click', () => togglePdfOverlayDebugMode());
+      const head = win.querySelector('[data-dbg-drag]');
+      if (head) head.addEventListener('pointerdown', beginDebugWindowDrag);
+    }
+
+    let debugWinPos = null;
+    function applyDebugWindowPos() {
+      const win = $('debugWindow');
+      if (!win) return;
+      if (!debugWinPos) {
+        try { debugWinPos = JSON.parse(localStorage.getItem('scenarioDebugWinPos') || 'null'); } catch (e) { debugWinPos = null; }
+      }
+      const w = win.offsetWidth || 288;
+      const h = win.offsetHeight || 200;
+      let p = debugWinPos || { left: 330, top: 96 };
+      p = {
+        left: Math.min(window.innerWidth - 48, Math.max(8, p.left)),
+        top: Math.min(window.innerHeight - 32, Math.max(48, p.top))
+      };
+      win.style.left = p.left + 'px';
+      win.style.top = p.top + 'px';
+      win.style.right = 'auto';
+      win.style.bottom = 'auto';
+      debugWinPos = p;
+    }
+    function beginDebugWindowDrag(ev) {
+      if (ev.target && ev.target.closest('.dbg-close')) return;
+      ev.preventDefault();
+      const win = $('debugWindow');
+      if (!win) return;
+      const rect = win.getBoundingClientRect();
+      const ox = rect.left, oy = rect.top, sx = ev.clientX, sy = ev.clientY;
+      const onMove = (e) => { debugWinPos = { left: ox + (e.clientX - sx), top: oy + (e.clientY - sy) }; applyDebugWindowPos(); };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        try { localStorage.setItem('scenarioDebugWinPos', JSON.stringify(debugWinPos)); } catch (e) {}
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
     }
 
     function roundDebugNumber(value) {
