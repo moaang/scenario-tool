@@ -17807,16 +17807,28 @@
     }
 
     // Margin notes in the bottom memo band of conte-style script pages (black ink, so the
-    // colour filter can't catch them) either form their own half-pitch columns or get
-    // line-unioned onto the bottom of a body column after a vertical gap. Split each
-    // vertical line into contiguous glyph runs; when two or more lines share a common
-    // "second run" start Y (the memo band's top edge), cut every run at/below that band.
-    // Without a consistent band, only huge single-column gaps (4+ glyphs) are cut.
+    // colour filter can't catch them) appear two ways:
+    //  a) standalone note columns — whole lines that START deep in the page while every
+    //     body column starts at the top margin band (wrapped continuations included);
+    //  b) note runs line-unioned onto the bottom of a body column after a vertical gap.
+    // (a) is cut by the start band (min line top + 15%). (b) is cut by splitting lines
+    // into contiguous glyph runs and finding the memo band: a Y where 2+ pieces of
+    // evidence (deep line starts + second-run starts) agree. Without a consistent band,
+    // only huge single-column gaps (4+ glyphs) are cut.
     function stripPdfMarginNoteRunsFromGuideLines(lines) {
       const sourceLines = (lines || []).filter(Boolean);
       if (sourceLines.length < 2) return sourceLines;
       const glyphH = 1.8;
-      const lineRuns = sourceLines.map((line) => {
+      const lineTop = (line) => Number((line.compactOverlayRect || line.overlayRect || {}).top) || 0;
+      const minTop = Math.min.apply(null, sourceLines.map(lineTop));
+      const startBand = minTop + 15;
+      const deepStarts = [];
+      const shallow = [];
+      sourceLines.forEach((line) => {
+        if (lineTop(line) > startBand) deepStarts.push(lineTop(line));
+        else shallow.push(line);
+      });
+      const lineRuns = shallow.map((line) => {
         const its = (line.items || []).slice().sort((a, b) => (Number(a.topPct) || 0) - (Number(b.topPct) || 0));
         const runs = [];
         let cur = null;
@@ -17833,8 +17845,11 @@
         });
         return runs;
       });
-      if (!lineRuns.some(runs => runs.length > 1)) return sourceLines;
       const startCounts = {};
+      deepStarts.forEach((start) => {
+        const key = Math.round(start);
+        startCounts[key] = (startCounts[key] || 0) + 1;
+      });
       lineRuns.forEach(runs => runs.slice(1).forEach((run) => {
         const key = Math.round(run.start);
         startCounts[key] = (startCounts[key] || 0) + 1;
@@ -17842,7 +17857,7 @@
       const bandKeys = Object.entries(startCounts).filter(([, count]) => count >= 2).map(([key]) => Number(key));
       const noteBand = bandKeys.length ? Math.min(...bandKeys) : null;
       const kept = [];
-      sourceLines.forEach((line, index) => {
+      shallow.forEach((line, index) => {
         const runs = lineRuns[index];
         const keptRuns = noteBand != null
           ? runs.filter(run => run.start < noteBand - 0.5)
