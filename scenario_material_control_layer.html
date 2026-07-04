@@ -15330,7 +15330,21 @@
           return;
         }
         if (item.type === 'scene') {
-          pushBlock(item, sourceReviewItemText(item), {
+          const sceneRaw = sourceReviewItemText(item);
+          if (conversionProfile.numberedSceneHeadings && isScenarioPartMembershipLine(sceneRaw)) {
+            // NGOD-style part label (アバン / Aパート): a part-membership marker, not a scene.
+            pushBlock(item, sceneRaw, {
+              type: 'section_marker',
+              zone: 'body',
+              assignableToCut: true,
+              assignDefault: 'action',
+              scenePart: scenarioPartMarkerLabel(sceneRaw),
+              confidence: 0.9,
+              evidence: ['source review part marker']
+            });
+            return;
+          }
+          pushBlock(item, sceneRaw, {
             type: 'scene_heading',
             zone: 'body',
             assignableToCut: true,
