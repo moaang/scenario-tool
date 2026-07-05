@@ -17326,7 +17326,10 @@
           .map(line => pdfLineClippedToBodyRange(line, range))
           .filter(Boolean);
         const colorLines = sourceLines.filter(line => isPdfJsOverlayLineColorNote(line, sourceLines, pageNo, bodyCandidateContext));
-        return { bodyLines, colorLines };
+        // regionLines = every grouped line clipped to the body range, COLOUR-INDEPENDENT.
+        // "Inside the top/bottom body lines it is body even in another ink" — position-only.
+        const regionLines = sourceLines.map(line => pdfLineClippedToBodyRange(line, range)).filter(Boolean);
+        return { bodyLines, colorLines, regionLines };
       }
       if (page && /^pdf-logical/.test(String(page.textSource || ''))) {
         const sourceBaseLines = page.pdfJsMergedBodyLines && page.pdfJsMergedBodyLines.length ? page.pdfJsMergedBodyLines : page.lines || [];
@@ -17339,9 +17342,10 @@
           .map(line => pdfLineClippedToBodyRange(line, range))
           .filter(Boolean);
         const colorLines = sourceColorLines.filter(line => isPdfJsOverlayLineColorNote(line, sourceLines, pageNo, bodyCandidateContext));
-        if (bodyLines.length || colorLines.length) return { bodyLines, colorLines };
+        const regionLines = sourceLines.filter(line => line && line.overlayRect).map(line => pdfLineClippedToBodyRange(line, range)).filter(Boolean);
+        if (bodyLines.length || colorLines.length) return { bodyLines, colorLines, regionLines };
       }
-      return { bodyLines: [], colorLines: [] };
+      return { bodyLines: [], colorLines: [], regionLines: [] };
     }
 
     function pdfLayoutGuideLabelEdgeClass(rect) {
@@ -17916,38 +17920,35 @@
     // SINGLE per-page line-set derivation: body lines (V) + note lines (C). Both the
     // matching pools AND the debug guide layer consume this, so what the C boxes show
     // is exactly what note matching uses — no second line source.
+    //
+    // BODY vs NOTE is decided by POSITION, not colour (user rule: between the top and
+    // bottom body lines everything is body even when printed in another ink — blue song
+    // titles, on-screen-text, emphasis). NOTES are only the out-of-body zones: the top
+    // margin above the body top-line and anything below the cut-line, PLUS deep memo-band
+    // columns that live inside the body but the start-band split separates.
     function pdfGuideLineSetsForPage(doc, pageNo, items) {
       const all = (items || []).filter(item => item && item.text);
-      // Blue-ink note glyphs are separated by colour BEFORE line grouping (the guide-line
-      // union both merges note glyphs into body lines and hard-marks every pooled item
-      // pdfScriptBodyColorProtected, which used to neutralise the later blue filter).
-      // Majority-blue pages keep everything in the body pool (body printed blue).
-      const blueItems = all.filter(item => isPdfJsBlueTextItem(item));
-      const majorityBlue = blueItems.length && blueItems.length >= all.length * 0.5;
-      const source = majorityBlue ? all : all.filter(item => !isPdfJsBlueTextItem(item));
       const range = pdfBodyRangeForPage(doc, pageNo);
-      const groups = pdfLayoutGuideLineGroupsForPage(doc, source, pageNo, range);
-      const split = splitPdfGuideLinesForOverlayMatching(groups.bodyLines || []);
-      let noteLines = split.noteLines;
-      // Note glyphs = colour/annotation-flagged items plus everything above the body
-      // top-line, all fed to ONE orientation-aware synthesiser.
-      const noteGlyphSeen = new Set();
-      const noteGlyphs = [];
-      const addNoteGlyph = (item) => {
-        if (!item || !item.text || !String(item.text).trim() || item.pdfRuby) return;
-        if (noteGlyphSeen.has(item)) return;
-        noteGlyphSeen.add(item);
-        noteGlyphs.push(item);
+      const inBody = (item) => {
+        if (!range || !range.enabled) return true;
+        const cy = Number(item && item.centerYPct);
+        if (!Number.isFinite(cy)) return true;
+        return cy >= range.top && cy <= range.bottom;
       };
-      if (!majorityBlue) blueItems.forEach(addNoteGlyph);
-      if (range && range.enabled && Number(range.top) > 0) {
-        all.forEach((item) => {
-          const centerY = Number(item && item.centerYPct);
-          if (Number.isFinite(centerY) && centerY < Number(range.top)) addNoteGlyph(item);
-        });
-      }
+      // Group only the in-body glyphs; regionLines = those lines clipped to range,
+      // colour-independent (NOT filtered by isPdfJsOverlayLineColorNote).
+      const bodyRegionItems = all.filter(inBody);
+      const groups = pdfLayoutGuideLineGroupsForPage(doc, bodyRegionItems, pageNo, range);
+      const split = splitPdfGuideLinesForOverlayMatching(groups.regionLines || groups.bodyLines || []);
+      let noteLines = split.noteLines;
+      // Out-of-body glyphs (top margin above the top-line, or below the cut-line) →
+      // one orientation-aware synthesiser (handles both vertical and horizontal notes).
+      const noteGlyphs = all.filter((item) => {
+        if (!item.text || !String(item.text).trim() || item.pdfRuby) return false;
+        return !inBody(item);
+      });
       if (noteGlyphs.length) noteLines = noteLines.concat(pdfNoteGuideLines(noteGlyphs, pageNo));
-      return { bodyLines: split.bodyLines, noteLines, source };
+      return { bodyLines: split.bodyLines, noteLines, source: bodyRegionItems };
     }
 
     // Two first-class matching pools per page: BODY (V) and margin-note/annotation (C).
