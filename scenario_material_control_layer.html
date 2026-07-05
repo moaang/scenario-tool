@@ -5418,7 +5418,15 @@
         numbers.push(num);
       });
       if (candidates < 3 || candidates < markerLocationScenes) return false;
-      return numbers.includes(1) && numbers.includes(2);
+      // A numbered-scene doc reads as a near-1-based, mostly-ascending sequence. Requiring
+      // literally {1 AND 2} was too strict — extraction can merge/miss an early scene line
+      // (NGOD #2 yields 1,3,6,7,9,10,… with 2 lost to a merge yet is obviously numbered).
+      // Accept: starts near 1 (tolerates a missing 1/2), 3+ distinct numbers, mostly ascending.
+      const uniq = Array.from(new Set(numbers)).sort((a, b) => a - b);
+      if (uniq.length < 3 || uniq[0] > 3) return false;
+      let ascending = 0;
+      for (let i = 1; i < numbers.length; i += 1) if (numbers[i] > numbers[i - 1]) ascending += 1;
+      return ascending >= (numbers.length - 1) * 0.6;
     }
 
     function numberedSceneHeadingLineNumber(raw) {
