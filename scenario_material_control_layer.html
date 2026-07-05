@@ -8498,7 +8498,42 @@
       return selectedLines.map((line, index) => Object.assign({}, line, {
         index,
         overlayRect: Object.assign({}, line.overlayRect || {}, { vertical: useVertical })
-      }));
+      })).map(stripPdfPageBottomArtifactRunFromLine).filter(Boolean);
+    }
+
+    // Page-number decorations ("— 3 —") printed at the bottom margin share the X band of a
+    // body column, so column grouping unions them into the line: the rect grows a tail down
+    // to the page edge and the dash pollutes the line text ("—とく…"). Split off any run of
+    // pure digits/dashes that sits in the bottom margin, far below the line's main run.
+    function stripPdfPageBottomArtifactRunFromLine(line) {
+      const items = line && line.items || [];
+      if (!items.length) return line;
+      const glyphH = 1.8;
+      const sorted = items.slice().sort((a, b) => (Number(a.topPct) || 0) - (Number(b.topPct) || 0));
+      const runs = [];
+      let cur = null;
+      sorted.forEach((item) => {
+        const top = Number(item.topPct) || 0;
+        const h = Number(item.heightPct) || glyphH;
+        if (cur && top - cur.end <= glyphH * 3) { cur.items.push(item); cur.end = Math.max(cur.end, top + h); }
+        else { cur = { start: top, end: top + h, items: [item] }; runs.push(cur); }
+      });
+      const isBottomArtifactRun = (run) => {
+        if (run.start <= 88) return false;
+        const text = run.items.map(i => String(i.text || '')).join('').replace(/\s+/g, '');
+        return /^[0-9０-９‐-―−─-╿－—―ー\-]{1,6}$/.test(text);
+      };
+      const kept = runs.filter(run => !isBottomArtifactRun(run));
+      if (kept.length === runs.length) return line;
+      if (!kept.length) return null;
+      const keptItems = kept.reduce((acc, run) => acc.concat(run.items), []);
+      const vertical = Boolean((line.compactOverlayRect || line.overlayRect || {}).vertical);
+      const rebuilt = pdfJsOverlayLine(keptItems, vertical);
+      if (!rebuilt || !rebuilt.text) return line;
+      return Object.assign({}, line, rebuilt, {
+        overlayRect: Object.assign({}, rebuilt.overlayRect || line.overlayRect || {}, { vertical }),
+        compactOverlayRect: rebuilt.compactOverlayRect || rebuilt.overlayRect || line.compactOverlayRect
+      });
     }
 
     function isPdfJsVerticalTextItemForColumnGrouping(item) {
@@ -12458,10 +12493,15 @@
       if (doc && doc.draftSourceType === 'pdf') {
         attachSourceReviewPageSpans(reviewItems, sourceReviewPagesFromText(sourceText));
         normalizePdfDialogInlineSpacingForReviewItems(reviewItems);
+      }
+      // Annotation/metadata note items must exist BEFORE rect attachment — they used to be
+      // appended after it and stayed rect-less (their rects then came from render-time
+      // fallbacks that matched note text into the body stream, producing giant wrong boxes).
+      appendPdfMetadataReviewItems(reviewItems, doc, options || sourceReviewOptionsForDoc(doc));
+      if (doc && doc.draftSourceType === 'pdf') {
         attachPdfOverlayRectsToReviewItems(reviewItems, doc.draftPages || []);
         applyPdfBodyBoundsToReviewItems(reviewItems, doc);
       }
-      appendPdfMetadataReviewItems(reviewItems, doc, options || sourceReviewOptionsForDoc(doc));
       return reviewItems;
     }
 
@@ -12687,23 +12727,47 @@
     }
 
     function attachPdfOverlayRectsToReviewItems(items, pages) {
+      const docLike = { draftPages: pages };
       const byPage = new Map();
       (pages || []).forEach((page) => {
         const pageNo = Number(page.pageNo || page.sourcePageIndex || 1);
-        const orderedItems = pdfPageItemsForOverlayMatching(page, { draftPages: pages });
+        const orderedItems = pdfPageItemsForOverlayMatching(page, docLike);
         byPage.set(pageNo, {
           page,
-          matcher: createPdfItemTextMatcher(orderedItems, new Set())
+          matcher: createPdfItemTextMatcher(orderedItems, new Set()),
+          noteLines: null // lazily built — note pool synthesis walks the raw glyphs
         });
       });
+      const noteLinesForEntry = (entry, pageNo) => {
+        if (entry.noteLines) return entry.noteLines;
+        const pools = pdfLayoutGuidePoolsForOverlayMatching(docLike, pageNo, entry.page && entry.page.textItems || []);
+        entry.noteLines = pools.noteLines || [];
+        return entry.noteLines;
+      };
       (items || []).forEach((item) => {
         if (!item || item.overlayRect && item.overlayRect.manual) return;
+        const noteItem = isSourceReviewPdfNoteItem(item) || item.type === 'note';
         const spans = item.pageSpans && item.pageSpans.length ? item.pageSpans : [{ pageNo: item.pageNo || 1, text: sourceReviewItemText(item), overlayRect: null }];
         let firstMatchedRect = null;
         spans.forEach((span) => {
           if (!span || span.overlayRect && span.overlayRect.manual) return;
-          const entry = byPage.get(Number(span.pageNo || item.pageNo || 1));
-          if (!entry || !entry.matcher) return;
+          const pageNo = Number(span.pageNo || item.pageNo || 1);
+          const entry = byPage.get(pageNo);
+          if (!entry) return;
+          if (noteItem) {
+            // Notes match the NOTE pool (line-containment union) only. Matching note text
+            // into the body char stream produced giant wrong rects spanning the body.
+            const inferred = inferNoteOverlayRectFromLinesForText(span.text || sourceReviewItemText(item), noteLinesForEntry(entry, pageNo));
+            if (!inferred || !inferred.rect) return;
+            span.overlayRect = Object.assign({}, inferred.rect, {
+              inferred: true,
+              manual: false,
+              coordinateSource: 'draft-page-note'
+            });
+            if (!firstMatchedRect) firstMatchedRect = span.overlayRect;
+            return;
+          }
+          if (!entry.matcher) return;
           let matched = null;
           const variants = pdfCoordinateTextVariantsForSourceReviewItem(item, span.text || sourceReviewItemText(item));
           for (const variant of variants) {
@@ -17869,6 +17933,10 @@
       if (!majorityBlue && blueItems.length) {
         noteLines = noteLines.concat(pdfBlueNoteGuideLines(blueItems, pageNo));
       }
+      // Horizontal margin notes (e.g. NGOD-style top-margin comments) never reach the body
+      // pool (clipped away by the body top-line) and carry no ink colour to key on —
+      // synthesise their lines from the out-of-body zone by Y-row clustering.
+      noteLines = noteLines.concat(pdfMarginZoneNoteGuideLines(all, pdfBodyRangeForPage(doc, pageNo), pageNo));
       let body = [];
       const bodyGuide = pdfOverlayMatchingItemsFromGuideLines(split.bodyLines);
       if (bodyGuide.length) body = pdfScriptBodyItemsForOverlayMatching(bodyGuide, doc, pageNo);
@@ -17923,6 +17991,51 @@
       return lines;
     }
 
+    // Horizontal note lines from the zone ABOVE the body top-line: group glyphs into rows
+    // by Y, then split each row into contiguous X-runs. The vertical column grouper turns
+    // horizontal writing into meaningless single-char columns, so notes written horizontally
+    // in the top margin need their own row-based synthesis to get real coordinates.
+    function pdfMarginZoneNoteGuideLines(items, range, pageNo) {
+      if (!range || !range.enabled || !(Number(range.top) > 0)) return [];
+      const glyphH = 1.8;
+      const zone = (items || []).filter((item) => {
+        if (!item || !item.text || !String(item.text).trim()) return false;
+        if (item.pdfRuby) return false;
+        const centerY = Number(item.centerYPct);
+        return Number.isFinite(centerY) && centerY < Number(range.top);
+      });
+      if (!zone.length) return [];
+      const sorted = zone.slice().sort((a, b) => (Number(a.centerYPct) || 0) - (Number(b.centerYPct) || 0));
+      const rows = [];
+      let row = null;
+      sorted.forEach((item) => {
+        const y = Number(item.centerYPct) || 0;
+        if (row && Math.abs(y - row.y) <= 1.0) { row.items.push(item); row.y = (row.y + y) / 2; }
+        else { row = { y, items: [item] }; rows.push(row); }
+      });
+      const lines = [];
+      rows.forEach((r) => {
+        const rowItems = r.items.slice().sort((a, b) => (Number(a.leftPct) || 0) - (Number(b.leftPct) || 0));
+        let run = null;
+        const runs = [];
+        rowItems.forEach((item) => {
+          const left = Number(item.leftPct) || 0;
+          const w = Number(item.widthPct) || glyphH;
+          if (run && left - run.end <= glyphH * 2.5) { run.items.push(item); run.end = Math.max(run.end, left + w); }
+          else { run = { start: left, end: left + w, items: [item] }; runs.push(run); }
+        });
+        runs.forEach((seg) => {
+          const text = seg.items.map(i => i.text).join('');
+          if (!String(text).trim() || charLen(String(text).trim()) < 2) return;
+          const top = Math.min.apply(null, seg.items.map(i => Number(i.topPct) || 0));
+          const bottom = Math.max.apply(null, seg.items.map(i => (Number(i.topPct) || 0) + (Number(i.heightPct) || glyphH)));
+          const rect = { left: seg.start, top, width: Math.max(0.8, seg.end - seg.start), height: Math.max(1, bottom - top), vertical: false };
+          lines.push({ text, items: seg.items, pageNo, overlayRect: rect, compactOverlayRect: rect });
+        });
+      });
+      return lines;
+    }
+
     // Keys of every glyph that belongs to a recognised margin-note line on this page.
     // A number inside a note (amount, year, list marker) is note content — not a printed
     // page number — so the page-number-artifact guide must not fire on it.
@@ -17943,17 +18056,47 @@
     // truncation). The rect is the union of matched lines — true measured coordinates,
     // order-insensitive, and robust to the block holding more text than this page shows.
     function inferNoteOverlayRectFromLines(block, noteLines, pageNo) {
-      const target = normalizePdfCoordinateMatchText(overlayTextForBlockPage(block, pageNo));
+      return inferNoteOverlayRectFromLinesForText(overlayTextForBlockPage(block, pageNo), noteLines);
+    }
+
+    function inferNoteOverlayRectFromLinesForText(targetText, noteLines) {
+      const target = normalizePdfCoordinateMatchText(targetText);
       if (!target || target.length < 2) return null;
       const hits = (noteLines || []).filter((line) => {
         const lineText = normalizePdfCoordinateMatchText(line && line.text || '');
         if (!lineText || lineText.length < 3) return false;
-        if (target.indexOf(lineText) >= 0) return true;
+        // Containment needs enough text to be meaningful — a 3-char fragment ("引き、")
+        // appears inside almost any long note and drags body lines into the union.
+        if (lineText.length >= 6 && target.indexOf(lineText) >= 0) return true;
         return lineText.length >= 8 && target.indexOf(lineText.slice(0, 8)) >= 0;
       });
       if (!hits.length) return null;
-      const rects = hits.map(line => line.compactOverlayRect || line.overlayRect).filter(Boolean);
-      if (!rects.length) return null;
+      const scored = hits.map(line => ({
+        rect: line.compactOverlayRect || line.overlayRect,
+        chars: normalizePdfCoordinateMatchText(line && line.text || '').length
+      })).filter(h => h.rect);
+      if (!scored.length) return null;
+      // A page can hold several note regions (top-margin paragraphs plus an in-body comment
+      // column); a blind union of every matched line spans the body and reads as one giant
+      // wrong box. Cluster matched lines by vertical proximity and union only the cluster
+      // holding the most matched text.
+      const sorted = scored.slice().sort((a, b) => (Number(a.rect.top) || 0) - (Number(b.rect.top) || 0));
+      const clusters = [];
+      let cur = null;
+      sorted.forEach((h) => {
+        const top = Number(h.rect.top) || 0;
+        const bottom = top + (Number(h.rect.height) || 0);
+        if (cur && top - cur.bottom <= 8) {
+          cur.items.push(h);
+          cur.bottom = Math.max(cur.bottom, bottom);
+          cur.chars += h.chars;
+        } else {
+          cur = { items: [h], bottom, chars: h.chars };
+          clusters.push(cur);
+        }
+      });
+      clusters.sort((a, b) => b.chars - a.chars);
+      const rects = clusters[0].items.map(h => h.rect);
       const left = Math.min.apply(null, rects.map(r => Number(r.left) || 0));
       const top = Math.min.apply(null, rects.map(r => Number(r.top) || 0));
       const right = Math.max.apply(null, rects.map(r => (Number(r.left) || 0) + (Number(r.width) || 0)));
