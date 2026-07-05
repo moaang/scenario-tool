@@ -4379,7 +4379,7 @@
       // single review-text derivation point, prepends it — but only when digit + remaining text
       // really form a numbered scene heading (rejects per-line guide digits on ordinary lines).
       const droppedDigits = pdfClippedTopMarginDigitRun(items, clippedItems, range);
-      if (droppedDigits && numberedSceneHeadingLineNumber(droppedDigits + String(clipped.text || '').trim()) !== null) {
+      if (droppedDigits && numberedSceneHeadingLineNumber(droppedDigits + String(clipped.text || '').trim(), { requireLocation: false }) !== null) {
         result.sceneNumberPrefix = droppedDigits;
       }
       return result;
@@ -5429,7 +5429,14 @@
       return ascending >= (numbers.length - 1) * 0.6;
     }
 
-    function numberedSceneHeadingLineNumber(raw) {
+    // requireLocation defaults true (used by detectNumberedSceneHeadingFormat to decide the
+    // convention is in play at all — keep that strict). Once the convention IS confirmed for
+    // the document, a numbered scene heading can name a location with no geographic/spatial
+    // keyword (e.g. "２超てんちゃんのショートムービー", "５配信映像") — requireLocation:false
+    // is used by the per-line checks below that only run when profile.numberedSceneHeadings
+    // is already true, so the punctuation/length/marker guards are enough to avoid false hits.
+    function numberedSceneHeadingLineNumber(raw, opts) {
+      const requireLocation = !opts || opts.requireLocation !== false;
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
       const match = source.match(/^([0-9０-９]{1,3})[\s　]*(\S.*)$/);
       if (!match) return null;
@@ -5437,14 +5444,14 @@
       if (!rest || charLen(rest) > 40) return null;
       if (/^[○●◯〇◎□■△▲▽▼]/.test(rest)) return null;
       if (/[。！？!?「」『』]/.test(rest)) return null;
-      if (!hasLocationSignal(rest)) return null;
+      if (requireLocation && !hasLocationSignal(rest)) return null;
       const parsed = parseInt(String(match[1]).normalize('NFKC'), 10);
       return Number.isFinite(parsed) ? parsed : null;
     }
 
     function isNumberedSceneHeadingLine(raw, profile) {
       if (!profile || !profile.numberedSceneHeadings) return false;
-      if (numberedSceneHeadingLineNumber(raw) === null) return false;
+      if (numberedSceneHeadingLineNumber(raw, { requireLocation: false }) === null) return false;
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
       if (parseDialog(source, profile)) return false;
       if (isCastSectionLine(source) || isLikelyCastEntryLine(source, profile)) return false;
@@ -6512,6 +6519,13 @@
       return norm(value).replace(SCENARIO_SECTION_LABEL_PREFIX_RE, '');
     }
 
+    // A line LEADING with ××× (or ✕✕✕) marks a shot/beat transition (cf. classifyBody's
+    // ^××× transition rule) — anchored at the start only, since extraction sometimes glues
+    // the following sentence onto the same line as the marker instead of giving it its own.
+    function isPdfTransitionMarkerLeadLine(raw) {
+      return /^[×✕]{2,}/.test(norm(raw));
+    }
+
     function isSectionMarker(raw) {
       return isScenarioSectionMarkerLine(raw);
     }
@@ -7360,7 +7374,6 @@
       const stableTopLine = pdfJsStableBodyTopLineFromCandidates((pages || []).map(page => page && page.bodyTopLineCandidatePct), (pages || []).length);
       (pages || []).forEach((page) => {
         const sourceLines = page.bodyBaseLines || page.bodySourceLines || page.lines || [];
-        page.bodyBaseLines = sourceLines;
         const pageTopCandidate = Number(page && page.bodyTopLineCandidatePct);
         const pageTopLine = stableTopLine != null && Number.isFinite(pageTopCandidate) && Math.abs(pageTopCandidate - stableTopLine) <= 1.5
           ? stableTopLine
@@ -7370,9 +7383,28 @@
           top: pageTopLine == null ? 0 : pageTopLine,
           bottom: stableCut == null ? 100 : stableCut
         };
+        // Colour-flagged lines were shunted to colorLines by the EARLY raw-parse heuristic
+        // (isPdfJsOverlayLineColorNote — content-score based, no position awareness) before
+        // the stable body range was even known. A line that sits INSIDE the now-known stable
+        // range is genuine body content printed in another ink (position over colour — the
+        // same rule already applied to the overlay guide/matching layer) — reclaim it into
+        // the body pool so it (a) becomes real body text/blocks and (b) lets
+        // appendPdfMetadataReviewItems's existing dedupe suppress the now-redundant note item.
+        // Re-sort by .index (assigned before the body/colour split) to restore reading order.
+        // IMPORTANT: fold the reclaimed lines into page.bodyBaseLines itself (not just the
+        // locally clipped view) — pdfScriptBodyReviewTextFromDraftPages (the actual source
+        // buildSourceReviewItemsForDocument uses) reads bodyBaseLines directly and would
+        // otherwise silently see the old, incomplete pool again.
+        const reclaimedColorLines = bodyRange
+          ? (page.colorLines || []).filter(line => pdfLineInsideBodyRange(line, bodyRange))
+          : [];
+        const combinedSourceLines = reclaimedColorLines.length
+          ? sourceLines.concat(reclaimedColorLines).sort((a, b) => (Number(a && a.index) || 0) - (Number(b && b.index) || 0))
+          : sourceLines;
+        page.bodyBaseLines = combinedSourceLines;
         const clippedLines = bodyRange == null
-          ? sourceLines
-          : sourceLines.map(line => pdfLineClippedToBodyRange(line, bodyRange)).filter(Boolean);
+          ? combinedSourceLines
+          : combinedSourceLines.map(line => pdfLineClippedToBodyRange(line, bodyRange)).filter(Boolean);
         const bodyLines = mergeDetachedPdfDialogModifierLines(clippedLines);
         page.lines = bodyLines;
         page.bodyCutLinePct = stableCut;
@@ -12804,9 +12836,11 @@
       const lines = mergeDetachedPdfDialogModifierLines(page && page.lines || []);
       const pageNo = Number(page && (page.pageNo || page.sourcePageIndex) || 1);
       const range = pdfBodyRangeForPage(doc || { draftPages: page ? [page] : [] }, pageNo);
-      const bodyCandidateContext = createPdfOverlayBodyCandidateContext(lines, pageNo, page && (page.rawLogicalText || page.logicalText || page.text || page.logicalLines || []));
+      // page.lines is already the position-decided body pool (applyStablePdfJsBodyCutLineToPages
+      // reclaims in-range colour-flagged lines back into it) — re-applying the old content/colour
+      // heuristic here just re-excludes exactly those reclaimed lines again, leaving them
+      // classified as real body blocks with no overlay rect. Position already decided; clip only.
       const bodyLines = (lines || [])
-        .filter(line => line && !isPdfJsOverlayLineColorNote(line, lines, pageNo, bodyCandidateContext))
         .map(line => pdfLineClippedToBodyRange(line, range))
         .filter(Boolean);
       const ordered = pdfOverlayMatchingItemsFromGuideLines(bodyLines);
@@ -13566,6 +13600,21 @@
             }
             pushSourceReviewItem(items, 'text', page.pageNo, textLines.join('\n'), orderRef);
             bodyTextInsertOpen = false;
+            continue;
+          }
+          if (isPdfTransitionMarkerLeadLine(raw)) {
+            // A ××× line marks a shot/beat transition WITHIN a scene (cf. classifyBody's
+            // ^××× transition rule). It's often extracted glued to the FOLLOWING sentence
+            // rather than on its own line, so match on the LEADING marker (not anchored at
+            // the end) and flush first — that ends whatever action beat came before it, and
+            // pushing this line (marker ± its trailing text) as its own item, bypassing the
+            // buffer, keeps the NEXT line from merging backward into it too. Net effect: the
+            // action beats on either side of ××× become distinct items/overlay boxes instead
+            // of one merged item spanning the wrong rect.
+            bodyTextInsertOpen = false;
+            flushText();
+            const hasTrailingContent = Boolean(norm(raw).replace(/^[×✕]{2,}\s*/, '').trim());
+            pushSourceReviewItem(items, hasTrailingContent && bodyStarted ? 'action' : 'text', page.pageNo, raw, orderRef);
             continue;
           }
           bodyTextInsertOpen = false;
@@ -17285,8 +17334,33 @@
           if (key) noteGlyphKeys.add(key);
         });
       });
+      // A digit that LOOKS like a page-number pattern (isPdfTextItemArtifact matches on the
+      // bare glyph text + position alone) is only a real printed page number when it sits
+      // ISOLATED — its own short line, nothing else. A digit embedded deep inside a longer
+      // line (a date "２０２４／１２／９", a page-count note "７８枚") is part of that line's
+      // ordinary content, not a page decoration, even though the lone glyph matches the same
+      // pattern. Use the containing line's own text length as the discriminator — but the
+      // sanctioned body/note lines are built from pdfJsItemsForLayoutGuide, which STRIPS
+      // artifact-flagged glyphs before grouping (that's precisely why this glyph is even a
+      // candidate here), so it never appears in sets.bodyLines/noteLines. Group the page's
+      // RAW items (including artifacts) locally, just for this containment check.
+      const rawGroupedLines = groupPdfJsBodyItemsToOverlayLines((items || []).filter(item => item && item.text && !item.pdfRuby));
+      const lineByGlyphKey = new Map();
+      rawGroupedLines.concat(sets.bodyLines || []).concat(sets.noteLines || []).forEach((line) => {
+        (line && line.items || []).forEach((item) => {
+          const key = pdfTextItemKey(item);
+          if (key && !lineByGlyphKey.has(key)) lineByGlyphKey.set(key, line);
+        });
+      });
       const pageNumberGuides = (items || [])
-        .filter(item => item && item.text && isPdfTextItemArtifact(item, pageNo) && !noteGlyphKeys.has(pdfTextItemKey(item)))
+        .filter((item) => {
+          if (!item || !item.text || !isPdfTextItemArtifact(item, pageNo)) return false;
+          const glyphKey = pdfTextItemKey(item);
+          if (noteGlyphKeys.has(glyphKey)) return false;
+          const line = lineByGlyphKey.get(glyphKey);
+          if (line && String(line.text || '').replace(/\s+/g, '').length > 6) return false;
+          return true;
+        })
         .slice(0, 16)
         .map((item) => {
           const rect = pdfTextItemOverlayRect(item);
