@@ -7677,22 +7677,50 @@
     }
 
     function mergePdfPageAnnotations(primary, secondary) {
-      const out = [];
-      const seen = new Set();
+      // The SAME physical margin note is often captured by BOTH the geometry channel
+      // (colorLines, which reads vertical columns and interleaves adjacent body text) AND
+      // the content-order logical channel — with different character ordering, so exact-text
+      // dedup keeps both and combinePdfPageAnnotations then concatenates them (the note reads
+      // twice). Dedup by character-multiset overlap instead: if a candidate shares most of
+      // its characters with an already-kept note it's the same note — keep the longer copy.
+      const kept = [];
+      const keptMs = [];
       (primary || []).concat(secondary || []).forEach((note) => {
         if (!note) return;
         const text = normalizePdfDuplicateCompareText(formatPdfAnnotationText(note) || note.text || note.href || '');
-        const key = [
-          note.role || '',
-          note.trigger || '',
-          note.href || '',
-          text
-        ].join('|');
-        if (text && seen.has(key)) return;
-        if (text) seen.add(key);
-        out.push(note);
+        if (!text) { kept.push(note); keptMs.push(null); return; }
+        const ms = pdfCharMultiset(text);
+        for (let i = 0; i < kept.length; i += 1) {
+          if (!keptMs[i]) continue;
+          if (pdfCharMultisetOverlap(ms, keptMs[i]) >= 0.72) {
+            // Same note captured twice — keep whichever copy is longer (more complete).
+            const keptText = normalizePdfDuplicateCompareText(formatPdfAnnotationText(kept[i]) || kept[i].text || kept[i].href || '');
+            if (text.length > keptText.length) { kept[i] = note; keptMs[i] = ms; }
+            return;
+          }
+        }
+        kept.push(note);
+        keptMs.push(ms);
       });
-      return out;
+      return kept;
+    }
+
+    function pdfCharMultiset(text) {
+      const map = new Map();
+      const raw = String(text || '').normalize('NFKC').replace(/\s+/g, '');
+      for (const ch of raw) map.set(ch, (map.get(ch) || 0) + 1);
+      return map;
+    }
+
+    function pdfCharMultisetOverlap(a, b) {
+      if (!a || !b || !a.size || !b.size) return 0;
+      let inter = 0;
+      let sizeA = 0;
+      a.forEach((n, ch) => { sizeA += n; inter += Math.min(n, b.get(ch) || 0); });
+      let sizeB = 0;
+      b.forEach((n) => { sizeB += n; });
+      const min = Math.min(sizeA, sizeB);
+      return min ? inter / min : 0;
     }
 
     function removePdfColorAnnotationLinesFromLogicalText(text, annotations) {
