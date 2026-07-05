@@ -17930,13 +17930,27 @@
       const groups = pdfLayoutGuideLineGroupsForPage(doc, source, pageNo, pdfBodyRangeForPage(doc, pageNo));
       const split = splitPdfGuideLinesForOverlayMatching(groups.bodyLines || []);
       let noteLines = split.noteLines;
-      if (!majorityBlue && blueItems.length) {
-        noteLines = noteLines.concat(pdfBlueNoteGuideLines(blueItems, pageNo));
+      // Note glyphs = colour/annotation-flagged items plus everything above the body
+      // top-line. ONE synthesiser handles both writing directions — feeding the same
+      // glyphs to separate blue-column and zone-row builders double-covered them and
+      // the wrong-orientation copies rendered as tall garbage boxes.
+      const range = pdfBodyRangeForPage(doc, pageNo);
+      const noteGlyphSeen = new Set();
+      const noteGlyphs = [];
+      const addNoteGlyph = (item) => {
+        if (!item || !item.text || !String(item.text).trim() || item.pdfRuby) return;
+        if (noteGlyphSeen.has(item)) return;
+        noteGlyphSeen.add(item);
+        noteGlyphs.push(item);
+      };
+      if (!majorityBlue) blueItems.forEach(addNoteGlyph);
+      if (range && range.enabled && Number(range.top) > 0) {
+        all.forEach((item) => {
+          const centerY = Number(item && item.centerYPct);
+          if (Number.isFinite(centerY) && centerY < Number(range.top)) addNoteGlyph(item);
+        });
       }
-      // Horizontal margin notes (e.g. NGOD-style top-margin comments) never reach the body
-      // pool (clipped away by the body top-line) and carry no ink colour to key on —
-      // synthesise their lines from the out-of-body zone by Y-row clustering.
-      noteLines = noteLines.concat(pdfMarginZoneNoteGuideLines(all, pdfBodyRangeForPage(doc, pageNo), pageNo));
+      if (noteGlyphs.length) noteLines = noteLines.concat(pdfNoteGuideLines(noteGlyphs, pageNo));
       let body = [];
       const bodyGuide = pdfOverlayMatchingItemsFromGuideLines(split.bodyLines);
       if (bodyGuide.length) body = pdfScriptBodyItemsForOverlayMatching(bodyGuide, doc, pageNo);
@@ -17950,87 +17964,82 @@
       return { body, noteLines };
     }
 
-    // Blue note glyphs never pass through the body line grouper, so synthesise their
-    // lines directly: cluster glyphs into vertical columns by X, then split each column
-    // into contiguous Y-runs (same run rule as the body split).
-    function pdfBlueNoteGuideLines(blueItems, pageNo) {
+    // ONE margin-note line synthesiser. Note glyphs never pass through the body line
+    // grouper, and notes are written EITHER vertically (blue margin columns) or
+    // horizontally (top-margin comment paragraphs). Cluster the glyphs into spatial
+    // regions, then group each region BOTH ways — as horizontal rows and as vertical
+    // columns — and keep the orientation that explains the region with FEWER lines
+    // (vertical writing collapses into few columns, horizontal into few rows).
+    function pdfNoteGuideLines(noteItems, pageNo) {
       const glyphH = 1.8;
-      const source = (blueItems || []).filter(item => item && item.text && String(item.text).trim());
+      const source = (noteItems || []).filter(item => item && item.text && String(item.text).trim() && !item.pdfRuby);
       if (!source.length) return [];
-      const sorted = source.slice().sort((a, b) => {
-        const ax = Number(a.centerXPct != null ? a.centerXPct : a.leftPct) || 0;
-        const bx = Number(b.centerXPct != null ? b.centerXPct : b.leftPct) || 0;
-        return ax - bx;
+      // regions: Y-bands (gap > 4) split into X-clusters (gap > 8)
+      const byY = source.slice().sort((a, b) => (Number(a.centerYPct) || 0) - (Number(b.centerYPct) || 0));
+      const bands = [];
+      let band = null;
+      byY.forEach((item) => {
+        const y = Number(item.centerYPct) || 0;
+        if (band && y - band.end <= 4) { band.items.push(item); band.end = Math.max(band.end, y); }
+        else { band = { end: y, items: [item] }; bands.push(band); }
       });
-      const columns = [];
-      let col = null;
-      sorted.forEach((item) => {
-        const x = Number(item.centerXPct != null ? item.centerXPct : item.leftPct) || 0;
-        if (col && Math.abs(x - col.x) <= 1.0) { col.items.push(item); col.x = (col.x + x) / 2; }
-        else { col = { x, items: [item] }; columns.push(col); }
+      const regions = [];
+      bands.forEach((b) => {
+        const byX = b.items.slice().sort((a, b2) => (pdfNoteGlyphX(a)) - (pdfNoteGlyphX(b2)));
+        let region = null;
+        byX.forEach((item) => {
+          const x = pdfNoteGlyphX(item);
+          if (region && x - region.end <= 8) { region.items.push(item); region.end = Math.max(region.end, x); }
+          else { region = { end: x, items: [item] }; regions.push(region); }
+        });
       });
       const lines = [];
-      columns.forEach((column) => {
-        const items = column.items.slice().sort((a, b) => (Number(a.topPct) || 0) - (Number(b.topPct) || 0));
-        let run = null;
-        const runs = [];
-        items.forEach((item) => {
-          const top = Number(item.topPct) || 0;
-          const h = Number(item.heightPct) || glyphH;
-          if (run && top - run.end <= glyphH * 1.5) { run.items.push(item); run.end = Math.max(run.end, top + h); }
-          else { run = { start: top, end: top + h, items: [item] }; runs.push(run); }
-        });
-        runs.forEach((r) => {
-          const its = r.items;
-          const left = Math.min.apply(null, its.map(i => Number(i.leftPct) || 0));
-          const right = Math.max.apply(null, its.map(i => (Number(i.leftPct) || 0) + (Number(i.widthPct) || 0)));
-          const rect = { left, top: r.start, width: Math.max(0.8, right - left), height: r.end - r.start, vertical: true };
-          lines.push({ text: its.map(i => i.text).join(''), items: its, pageNo, overlayRect: rect, compactOverlayRect: rect });
-        });
+      regions.forEach((region) => {
+        const rows = pdfNoteRegionLines(region.items, pageNo, false, glyphH);
+        const columns = pdfNoteRegionLines(region.items, pageNo, true, glyphH);
+        lines.push.apply(lines, columns.length < rows.length ? columns : rows);
       });
       return lines;
     }
 
-    // Horizontal note lines from the zone ABOVE the body top-line: group glyphs into rows
-    // by Y, then split each row into contiguous X-runs. The vertical column grouper turns
-    // horizontal writing into meaningless single-char columns, so notes written horizontally
-    // in the top margin need their own row-based synthesis to get real coordinates.
-    function pdfMarginZoneNoteGuideLines(items, range, pageNo) {
-      if (!range || !range.enabled || !(Number(range.top) > 0)) return [];
-      const glyphH = 1.8;
-      const zone = (items || []).filter((item) => {
-        if (!item || !item.text || !String(item.text).trim()) return false;
-        if (item.pdfRuby) return false;
-        const centerY = Number(item.centerYPct);
-        return Number.isFinite(centerY) && centerY < Number(range.top);
-      });
-      if (!zone.length) return [];
-      const sorted = zone.slice().sort((a, b) => (Number(a.centerYPct) || 0) - (Number(b.centerYPct) || 0));
-      const rows = [];
-      let row = null;
+    function pdfNoteGlyphX(item) {
+      return Number(item && (item.centerXPct != null ? item.centerXPct : item.leftPct)) || 0;
+    }
+
+    // Group one note region along a writing direction: vertical → X-clustered columns
+    // split into contiguous Y-runs; horizontal → Y-clustered rows split into X-runs.
+    function pdfNoteRegionLines(items, pageNo, vertical, glyphH) {
+      const mainOf = (item) => vertical ? pdfNoteGlyphX(item) : (Number(item.centerYPct) || 0);
+      const crossStart = (item) => vertical ? (Number(item.topPct) || 0) : (Number(item.leftPct) || 0);
+      const crossSize = (item) => vertical ? (Number(item.heightPct) || glyphH) : (Number(item.widthPct) || glyphH);
+      const sorted = (items || []).slice().sort((a, b) => mainOf(a) - mainOf(b));
+      const groups = [];
+      let group = null;
       sorted.forEach((item) => {
-        const y = Number(item.centerYPct) || 0;
-        if (row && Math.abs(y - row.y) <= 1.0) { row.items.push(item); row.y = (row.y + y) / 2; }
-        else { row = { y, items: [item] }; rows.push(row); }
+        const m = mainOf(item);
+        if (group && Math.abs(m - group.m) <= 1.0) { group.items.push(item); group.m = (group.m + m) / 2; }
+        else { group = { m, items: [item] }; groups.push(group); }
       });
       const lines = [];
-      rows.forEach((r) => {
-        const rowItems = r.items.slice().sort((a, b) => (Number(a.leftPct) || 0) - (Number(b.leftPct) || 0));
+      groups.forEach((g) => {
+        const its = g.items.slice().sort((a, b) => crossStart(a) - crossStart(b));
         let run = null;
         const runs = [];
-        rowItems.forEach((item) => {
-          const left = Number(item.leftPct) || 0;
-          const w = Number(item.widthPct) || glyphH;
-          if (run && left - run.end <= glyphH * 2.5) { run.items.push(item); run.end = Math.max(run.end, left + w); }
-          else { run = { start: left, end: left + w, items: [item] }; runs.push(run); }
+        its.forEach((item) => {
+          const start = crossStart(item);
+          const size = crossSize(item);
+          if (run && start - run.end <= glyphH * (vertical ? 1.5 : 2.5)) { run.items.push(item); run.end = Math.max(run.end, start + size); }
+          else { run = { start, end: start + size, items: [item] }; runs.push(run); }
         });
-        runs.forEach((seg) => {
-          const text = seg.items.map(i => i.text).join('');
-          if (!String(text).trim() || charLen(String(text).trim()) < 2) return;
-          const top = Math.min.apply(null, seg.items.map(i => Number(i.topPct) || 0));
-          const bottom = Math.max.apply(null, seg.items.map(i => (Number(i.topPct) || 0) + (Number(i.heightPct) || glyphH)));
-          const rect = { left: seg.start, top, width: Math.max(0.8, seg.end - seg.start), height: Math.max(1, bottom - top), vertical: false };
-          lines.push({ text, items: seg.items, pageNo, overlayRect: rect, compactOverlayRect: rect });
+        runs.forEach((r) => {
+          const text = r.items.map(i => i.text).join('');
+          if (!String(text).trim()) return;
+          const left = Math.min.apply(null, r.items.map(i => Number(i.leftPct) || 0));
+          const right = Math.max.apply(null, r.items.map(i => (Number(i.leftPct) || 0) + (Number(i.widthPct) || 0)));
+          const top = Math.min.apply(null, r.items.map(i => Number(i.topPct) || 0));
+          const bottom = Math.max.apply(null, r.items.map(i => (Number(i.topPct) || 0) + (Number(i.heightPct) || glyphH)));
+          const rect = { left, top, width: Math.max(0.8, right - left), height: Math.max(1, bottom - top), vertical };
+          lines.push({ text, items: r.items, pageNo, overlayRect: rect, compactOverlayRect: rect });
         });
       });
       return lines;
