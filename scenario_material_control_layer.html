@@ -12746,11 +12746,9 @@
           noteLines: null // lazily built — note pool synthesis walks the raw glyphs
         });
       });
-      const noteLinesForEntry = (entry, pageNo) => {
-        if (entry.noteLines) return entry.noteLines;
-        const pools = pdfLayoutGuidePoolsForOverlayMatching(docLike, pageNo, entry.page && entry.page.textItems || []);
-        entry.noteLines = pools.noteLines || [];
-        return entry.noteLines;
+      const setsForEntry = (entry, pageNo) => {
+        if (!entry.sets) entry.sets = pdfGuideLineSetsForPage(docLike, pageNo, entry.page && entry.page.textItems || []);
+        return entry.sets;
       };
       (items || []).forEach((item) => {
         if (!item || item.overlayRect && item.overlayRect.manual) return;
@@ -12763,9 +12761,16 @@
           const entry = byPage.get(pageNo);
           if (!entry) return;
           if (noteItem) {
-            // Notes match the NOTE pool (line-containment union) only. Matching note text
-            // into the body char stream produced giant wrong rects spanning the body.
-            const inferred = inferNoteOverlayRectFromLinesForText(span.text || sourceReviewItemText(item), noteLinesForEntry(entry, pageNo));
+            // Notes match by line-containment union (not the body char stream — that produced
+            // giant wrong rects). Try the NOTE pool first; then fall back to the BODY lines,
+            // because an in-body annotation (director comment embedded in the script, e.g.
+            // "×××わずかに時間が飛んで…") has its glyphs in the body pool now that body/note is
+            // decided by position. A note item only exists for a real annotation (the logical
+            // channel already stripped it from the body text), so this can't spuriously box body.
+            const noteText = span.text || sourceReviewItemText(item);
+            const sets = setsForEntry(entry, pageNo);
+            let inferred = inferNoteOverlayRectFromLinesForText(noteText, sets.noteLines);
+            if (!inferred || !inferred.rect) inferred = inferNoteOverlayRectFromLinesForText(noteText, sets.bodyLines);
             if (!inferred || !inferred.rect) return;
             span.overlayRect = Object.assign({}, inferred.rect, {
               inferred: true,
