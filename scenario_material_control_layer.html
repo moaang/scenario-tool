@@ -17249,8 +17249,8 @@
       const layer = $('pdfLayoutGuideLayer');
       if (!layer) return;
       const doc = activeDocument();
-      const range = pdfBodyRangeForPage(doc, pageNo);
-      const limited = pdfLayoutGuideEntriesForPage(doc, items, pageNo, range).slice(0, 260);
+      const sets = pdfGuideLineSetsForPage(doc, pageNo, items);
+      const limited = pdfLayoutGuideEntriesFromLineSets(sets).slice(0, 260);
       const lineGuides = limited.map((entry) => {
         const line = entry.line || {};
         const rect = entry.rect || {};
@@ -17263,7 +17263,15 @@
           <span class="pdf-layout-guide-label">${esc(label)}</span>
         </div>`;
       }).join('');
-      const noteGlyphKeys = pdfNoteGlyphKeySetForPage(doc, pageNo, items);
+      // Keys of every glyph in a recognised note line: a number inside a note (amount,
+      // year, list marker) is note content — the page-number-artifact guide must not fire.
+      const noteGlyphKeys = new Set();
+      (sets.noteLines || []).forEach((line) => {
+        (line && line.items || []).forEach((item) => {
+          const key = pdfTextItemKey(item);
+          if (key) noteGlyphKeys.add(key);
+        });
+      });
       const pageNumberGuides = (items || [])
         .filter(item => item && item.text && isPdfTextItemArtifact(item, pageNo) && !noteGlyphKeys.has(pdfTextItemKey(item)))
         .slice(0, 16)
@@ -17278,19 +17286,15 @@
       layer.innerHTML = lineGuides + pageNumberGuides + renderPdfBodyCutLineGuide(pageNo);
     }
 
-    function pdfLayoutGuideEntriesForPage(doc, items, pageNo, bodyRange) {
-      return pdfLayoutGuideEntriesFromLineGroups(pdfLayoutGuideLineGroupsForPage(doc, items, pageNo, bodyRange));
-    }
-
-    function pdfLayoutGuideEntriesFromLines(lines) {
-      return pdfLayoutGuideEntriesForRole(lines, 'body', 0);
-    }
-
-    function pdfLayoutGuideEntriesFromLineGroups(groups) {
-      const source = groups || {};
+    // Guide entries from the SAME line sets the matcher uses: V = body lines, C = note
+    // lines from the unified synthesiser. (The C boxes used to render raw colour-fragment
+    // lines — vertical slivers over horizontal notes and unclipped note→body spans —
+    // while matching consumed a different, correct set.)
+    function pdfLayoutGuideEntriesFromLineSets(sets) {
+      const source = sets || {};
       const bodyEntries = pdfLayoutGuideEntriesForRole(source.bodyLines || [], 'body', 0);
-      const colorEntries = pdfLayoutGuideEntriesForRole(source.colorLines || [], 'color', bodyEntries.length);
-      return bodyEntries.concat(colorEntries);
+      const noteEntries = pdfLayoutGuideEntriesForRole(source.noteLines || [], 'color', bodyEntries.length);
+      return bodyEntries.concat(noteEntries);
     }
 
     function pdfLayoutGuideEntriesForRole(lines, role, indexOffset) {
@@ -17302,11 +17306,6 @@
         const label = mode + String(roleIndex + 1).padStart(2, '0');
         return { line, index: (Number(indexOffset) || 0) + roleIndex, roleIndex, role, mode, label, vertical, rect };
       });
-    }
-
-    function pdfLayoutGuideLinesForPage(doc, items, pageNo, bodyRange) {
-      const groups = pdfLayoutGuideLineGroupsForPage(doc, items, pageNo, bodyRange);
-      return (groups.bodyLines || []).concat(groups.colorLines || []);
     }
 
     function pdfLayoutGuideLineGroupsForPage(doc, items, pageNo, bodyRange) {
@@ -17914,11 +17913,10 @@
       return { body: pdfScriptBodyItemsForOverlayMatching(pageItems, doc, targetPageNo), noteLines: [] };
     }
 
-    // Two first-class matching pools per page: BODY (V) and margin-note/annotation (C).
-    // Body blocks match against the body pool; pdf_note blocks match against the note
-    // pool. Notes are not "noise to discard" — they are recognised content whose overlay
-    // visualises coordinate coverage — but they must not pollute the body stream either.
-    function pdfLayoutGuidePoolsForOverlayMatching(doc, pageNo, items) {
+    // SINGLE per-page line-set derivation: body lines (V) + note lines (C). Both the
+    // matching pools AND the debug guide layer consume this, so what the C boxes show
+    // is exactly what note matching uses — no second line source.
+    function pdfGuideLineSetsForPage(doc, pageNo, items) {
       const all = (items || []).filter(item => item && item.text);
       // Blue-ink note glyphs are separated by colour BEFORE line grouping (the guide-line
       // union both merges note glyphs into body lines and hard-marks every pooled item
@@ -17927,14 +17925,12 @@
       const blueItems = all.filter(item => isPdfJsBlueTextItem(item));
       const majorityBlue = blueItems.length && blueItems.length >= all.length * 0.5;
       const source = majorityBlue ? all : all.filter(item => !isPdfJsBlueTextItem(item));
-      const groups = pdfLayoutGuideLineGroupsForPage(doc, source, pageNo, pdfBodyRangeForPage(doc, pageNo));
+      const range = pdfBodyRangeForPage(doc, pageNo);
+      const groups = pdfLayoutGuideLineGroupsForPage(doc, source, pageNo, range);
       const split = splitPdfGuideLinesForOverlayMatching(groups.bodyLines || []);
       let noteLines = split.noteLines;
       // Note glyphs = colour/annotation-flagged items plus everything above the body
-      // top-line. ONE synthesiser handles both writing directions — feeding the same
-      // glyphs to separate blue-column and zone-row builders double-covered them and
-      // the wrong-orientation copies rendered as tall garbage boxes.
-      const range = pdfBodyRangeForPage(doc, pageNo);
+      // top-line, all fed to ONE orientation-aware synthesiser.
       const noteGlyphSeen = new Set();
       const noteGlyphs = [];
       const addNoteGlyph = (item) => {
@@ -17951,17 +17947,26 @@
         });
       }
       if (noteGlyphs.length) noteLines = noteLines.concat(pdfNoteGuideLines(noteGlyphs, pageNo));
+      return { bodyLines: split.bodyLines, noteLines, source };
+    }
+
+    // Two first-class matching pools per page: BODY (V) and margin-note/annotation (C).
+    // Body blocks match against the body pool; pdf_note blocks match against the note
+    // pool. Notes are not "noise to discard" — they are recognised content whose overlay
+    // visualises coordinate coverage — but they must not pollute the body stream either.
+    // Note pool = LINE objects (text + rect), not a char stream: note blocks aggregate
+    // annotation text across regions/pages, so coverage-style char matching is the
+    // wrong tool — notes are matched by line-containment union instead.
+    function pdfLayoutGuidePoolsForOverlayMatching(doc, pageNo, items) {
+      const sets = pdfGuideLineSetsForPage(doc, pageNo, items);
       let body = [];
-      const bodyGuide = pdfOverlayMatchingItemsFromGuideLines(split.bodyLines);
+      const bodyGuide = pdfOverlayMatchingItemsFromGuideLines(sets.bodyLines);
       if (bodyGuide.length) body = pdfScriptBodyItemsForOverlayMatching(bodyGuide, doc, pageNo);
       else {
-        const orderedItems = orderedPdfItemsForMatching(source, pageNo);
+        const orderedItems = orderedPdfItemsForMatching(sets.source, pageNo);
         if (orderedItems.length) body = pdfScriptBodyItemsForOverlayMatching(orderedItems, doc, pageNo);
       }
-      // Note pool = LINE objects (text + rect), not a char stream: note blocks aggregate
-      // annotation text across regions/pages, so coverage-style char matching is the
-      // wrong tool — notes are matched by line-containment union instead.
-      return { body, noteLines };
+      return { body, noteLines: sets.noteLines };
     }
 
     // ONE margin-note line synthesiser. Note glyphs never pass through the body line
@@ -17995,11 +18000,58 @@
       });
       const lines = [];
       regions.forEach((region) => {
-        const rows = pdfNoteRegionLines(region.items, pageNo, false, glyphH);
-        const columns = pdfNoteRegionLines(region.items, pageNo, true, glyphH);
-        lines.push.apply(lines, columns.length < rows.length ? columns : rows);
+        lines.push.apply(lines, pdfNoteRegionLines(region.items, pageNo, pdfNoteRegionIsVertical(region.items), glyphH));
       });
       return lines;
+    }
+
+    // Orientation of a note region. First signal: item ASPECT — pdf.js emits horizontal
+    // writing as multi-char run items (width ≫ height) and vertical runs as tall items,
+    // so a majority of wide items means rows, tall items means columns. Only when the
+    // region is all near-square single glyphs fall back to nearest-neighbour direction
+    // voting (beside → horizontal, below → vertical). (Line-count comparison was fooled
+    // by left-aligned rows chaining into pseudo-columns; pure voting was fooled by
+    // multi-char row chunks whose nearest neighbour is the row below.)
+    function pdfNoteRegionIsVertical(items) {
+      let wide = 0;
+      let tall = 0;
+      (items || []).forEach((item) => {
+        const w = Number(item.widthPct) || 0;
+        const h = Number(item.heightPct) || 0;
+        if (w > h * 1.8) wide += 1;
+        else if (h > w * 1.8) tall += 1;
+      });
+      if (wide !== tall) return tall > wide;
+      return pdfNoteRegionIsVerticalByNeighbourVote(items);
+    }
+
+    function pdfNoteRegionIsVerticalByNeighbourVote(items) {
+      const pts = (items || []).slice(0, 80).map(item => ({
+        x: pdfNoteGlyphX(item),
+        y: Number.isFinite(Number(item.centerYPct))
+          ? Number(item.centerYPct)
+          : (Number(item.topPct) || 0) + (Number(item.heightPct) || 1.8) / 2
+      }));
+      if (pts.length < 2) return true;
+      let verticalVotes = 0;
+      let horizontalVotes = 0;
+      pts.forEach((p, i) => {
+        let best = -1;
+        let bestD = Infinity;
+        pts.forEach((q, j) => {
+          if (i === j) return;
+          const dx = q.x - p.x;
+          const dy = q.y - p.y;
+          const d = dx * dx + dy * dy;
+          if (d < bestD) { bestD = d; best = j; }
+        });
+        if (best < 0) return;
+        const dx = Math.abs(pts[best].x - p.x);
+        const dy = Math.abs(pts[best].y - p.y);
+        if (dy > dx * 1.2) verticalVotes += 1;
+        else if (dx > dy * 1.2) horizontalVotes += 1;
+      });
+      return verticalVotes >= horizontalVotes;
     }
 
     function pdfNoteGlyphX(item) {
@@ -18043,21 +18095,6 @@
         });
       });
       return lines;
-    }
-
-    // Keys of every glyph that belongs to a recognised margin-note line on this page.
-    // A number inside a note (amount, year, list marker) is note content — not a printed
-    // page number — so the page-number-artifact guide must not fire on it.
-    function pdfNoteGlyphKeySetForPage(doc, pageNo, items) {
-      const keys = new Set();
-      const pools = pdfLayoutGuidePoolsForOverlayMatching(doc, Number(pageNo || 1), items);
-      (pools.noteLines || []).forEach((line) => {
-        (line && line.items || []).forEach((item) => {
-          const key = pdfTextItemKey(item);
-          if (key) keys.add(key);
-        });
-      });
-      return keys;
     }
 
     // Match a pdf_note block by line containment: a note line belongs to the block when
