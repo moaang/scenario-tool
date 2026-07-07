@@ -4489,6 +4489,12 @@
       }
       state.pdfPreviewUrls[doc.id] = URL.createObjectURL(file);
       state.pdfPreviewFiles[doc.id] = file;
+      // Release the old cached pdf.js document's worker-side memory before dropping the
+      // reference — delete alone does not call destroy(), so re-importing the same document
+      // repeatedly would otherwise leak one worker document per re-import.
+      if (state.pdfJsDocuments[doc.id]) {
+        try { state.pdfJsDocuments[doc.id].destroy(); } catch (error) {}
+      }
       delete state.pdfJsDocuments[doc.id];
       Object.keys(state.pdfPageTextItems).forEach((key) => {
         if (key.startsWith(doc.id + '#')) delete state.pdfPageTextItems[key];
@@ -7254,6 +7260,7 @@
         if (logicalPages && logicalPages.length) return pdfDocumentResultFromLogicalPages(logicalPages, error);
         throw error;
       }
+      try {
       const pages = [];
       const maxPages = Math.min(pdf.numPages || 0, PDF_MAX_PAGES_TO_PARSE);
       for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
@@ -7273,7 +7280,8 @@
         }
         annotatePdfJsTextItemsFromLogicalAnnotations(textItems, logicalPage && logicalPage.annotations);
         const preSplitLogicalText = normalizePdfLogicalPageText(logicalPage && logicalPage.text);
-        const allLines = groupPdfJsTextItemsToOverlayLines(textItems, pageNo)
+        const isPortraitPage = Number(viewport.width || 0) < Number(viewport.height || 0);
+        const allLines = groupPdfJsTextItemsToOverlayLines(textItems, pageNo, isPortraitPage)
           .filter(line => !isPdfPageArtifactOverlayLine(line, pageNo));
         const bodyCandidateContext = createPdfOverlayBodyCandidateContext(allLines, pageNo, preSplitLogicalText);
         const lineGroups = splitPdfJsOverlayLinesForBodyAndAnnotations(allLines, pageNo, { bodyCandidateContext });
@@ -7333,6 +7341,13 @@
         pdfExtractionSignals: pdfSignals,
         warning: ''
       };
+      } finally {
+        // pdf.js keeps per-document caches (fonts, decoded images, page structures) alive in its
+        // worker thread until destroy() is called — dropping the JS reference alone does not free
+        // them. Without this, every PDF import (drag-drop or re-import) leaks worker memory for
+        // the life of the tab; destroy() here covers both the success and error-during-parse paths.
+        try { pdf.destroy(); } catch (error) {}
+      }
     }
 
     function pdfDocumentResultFromLogicalPages(logicalPages, error) {
@@ -8541,9 +8556,9 @@
       return keys[keyIndex] || '';
     }
 
-    function groupPdfJsTextItemsToOverlayLines(items, pageNo) {
+    function groupPdfJsTextItemsToOverlayLines(items, pageNo, isPortrait) {
       const source = pdfJsItemsForLayoutGuide(items, pageNo);
-      return groupPdfJsBodyItemsToOverlayLines(source);
+      return groupPdfJsBodyItemsToOverlayLines(source, isPortrait);
     }
 
     function pdfJsItemsForLayoutGuide(items, pageNo) {
@@ -8551,14 +8566,14 @@
       return stripPdfJsLineGuideNumberItems(source, pageNo);
     }
 
-    function groupPdfJsBodyItemsToOverlayLines(source) {
+    function groupPdfJsBodyItemsToOverlayLines(source, isPortrait) {
       if (!source.length) return [];
       const horizontal = groupPdfJsTextItemsHorizontal(source);
       const verticalAll = groupPdfJsTextItemsVertical(source);
       const verticalSource = source.filter(isPdfJsVerticalTextItemForColumnGrouping);
       const verticalStrict = verticalSource.length === source.length ? verticalAll : groupPdfJsTextItemsVertical(verticalSource);
-      const useVertical = isPdfJsPageLikelyVertical(source, horizontal, verticalAll)
-        || isPdfJsPageLikelyVertical(verticalSource, horizontal, verticalStrict);
+      const useVertical = isPdfJsPageLikelyVertical(source, horizontal, verticalAll, isPortrait)
+        || isPdfJsPageLikelyVertical(verticalSource, horizontal, verticalStrict, isPortrait);
       const vertical = useVertical && shouldUseStrictPdfJsVerticalGrouping(source, verticalStrict, verticalAll)
         ? verticalStrict
         : verticalAll;
@@ -8622,6 +8637,16 @@
       const strictUseful = (strictLines || []).filter(line => charLen(line && line.text || '') >= 2);
       const allUseful = (allLines || []).filter(line => charLen(line && line.text || '') >= 2);
       if (strictUseful.length < 4) return false;
+      // Strict grouping keeps only items individually flagged vertical (tall glyph runs). On a
+      // tategaki page whose body glyphs are near-square, that subset can collapse to just the
+      // tall fragments (line-number columns, "―――", "……") and DROP the entire dialogue while
+      // still matching on LINE COUNT (many short fragment lines ≈ few long body lines). Compare
+      // captured TEXT VOLUME too: if strict holds far less text than the full vertical grouping,
+      // it is discarding body content, not cleaning noise — never use it. (Real regression: the
+      // last page of a script lost its whole climactic dialogue this way.)
+      const strictChars = strictUseful.reduce((sum, line) => sum + charLen(line && line.text || ''), 0);
+      const allChars = allUseful.reduce((sum, line) => sum + charLen(line && line.text || ''), 0);
+      if (allChars > 0 && strictChars < allChars * 0.6) return false;
       if (strictUseful.length >= Math.max(4, allUseful.length * 0.45)) return true;
       const tallStrict = strictUseful.filter((line) => {
         const rect = line && line.overlayRect || {};
@@ -9105,7 +9130,7 @@
       return false;
     }
 
-    function isPdfJsPageLikelyVertical(items, horizontal, vertical) {
+    function isPdfJsPageLikelyVertical(items, horizontal, vertical, isPortrait) {
       const source = items || [];
       const cols = vertical || [];
       const rows = horizontal || [];
@@ -9120,11 +9145,39 @@
       const oneGlyphRatio = source.filter(item => charLen(item.text) <= 2).length / Math.max(1, source.length);
       const narrowGlyphRatio = source.filter((item) => Number(item.widthPct || 0) <= Math.max(0.8, Number(item.heightPct || 0) * 1.25)).length / Math.max(1, source.length);
       const tallRatio = tallCols.length / Math.max(1, usefulCols.length);
-      if (tallCols.length >= 6 && tallRatio >= 0.45 && oneGlyphRatio >= 0.45) return true;
-      if (tallCols.length >= 4 && collisionRows.length >= 1) return true;
-      if (tallCols.length >= 8 && narrowGlyphRatio >= 0.62) return true;
-      if (oneGlyphRatio > 0.72 && tallCols.length >= 4 && cols.length <= rows.length * 1.25) return true;
-      return false;
+
+      // A pdf.js text item that is both long (>=4 chars) and much WIDER than tall (w > h*2.2)
+      // can only come from a horizontal (left-to-right) font run — vertical Japanese script
+      // never produces that shape here (each vertical glyph is its own near-square item).
+      // Excluding note/annotation-colored items (margin comments are legitimately horizontal
+      // even on an otherwise-vertical page), if such runs dominate the page's real body text,
+      // it is prose, not a screenplay column. Validated across 16 known-vertical documents
+      // (0-90 pages each, incl. horizontal margin notes) with zero false positives; a portrait
+      // prose treatment showed 92-98% of its body in such runs. Both thresholds matter: NGOD#1
+      // p2 hit ratio 0.81 from one unflagged note but only 80 chars, well under the floor.
+      const noteFreeUseful = source.filter(item => item && item.text && charLen(item.text) >= 2
+        && !isPdfJsBlueTextItem(item) && !isPdfJsAnnotationColorTextItem(item));
+      const totalChars = noteFreeUseful.reduce((sum, item) => sum + charLen(item.text || ''), 0);
+      const wideLongChars = noteFreeUseful
+        .filter(item => charLen(item.text || '') >= 4 && Number(item.widthPct || 0) > Number(item.heightPct || 0) * 2.2)
+        .reduce((sum, item) => sum + charLen(item.text || ''), 0);
+      if (totalChars > 0 && wideLongChars >= 200 && wideLongChars / totalChars >= 0.6) return false;
+
+      const signals = [
+        tallCols.length >= 6 && tallRatio >= 0.45 && oneGlyphRatio >= 0.45,
+        tallCols.length >= 4 && collisionRows.length >= 1,
+        tallCols.length >= 8 && narrowGlyphRatio >= 0.62,
+        oneGlyphRatio > 0.72 && tallCols.length >= 4 && cols.length <= rows.length * 1.25
+      ];
+      const signalCount = signals.filter(Boolean).length;
+      if (!signalCount) return false;
+      // This tool's vertical screenplay/conte layouts are landscape two-column pages; every
+      // portrait page seen in the sample corpus was prose or a table, never a vertical script.
+      // Default a portrait page to horizontal, requiring two independent signals (not just one)
+      // to flip it back to vertical — a single signal alone false-positived on a horizontal
+      // prose document (the wideLongChars veto above now also catches that specific case, but
+      // this is a second line of defense for thinner/low-text portrait pages).
+      return isPortrait ? signalCount >= 2 : true;
     }
 
     async function readDocxText(file) {
@@ -12554,10 +12607,45 @@
       return Object.assign(defaults, doc && doc.pdfReviewOptions || {});
     }
 
+    // A closing 「」 quote immediately followed by lone sentence punctuation (e.g. …「ゼロコマ」。)
+    // proves the quote was a mid-sentence term — a device/title name in a stage direction — not
+    // spoken dialogue: real dialogue never has text after its 」. Column-grouped PDFs wrap that
+    // trailing "。" into its own line, so it surfaces as a separate punctuation-only review item
+    // right after a mis-read "dialogue". Demote the carrier to description and absorb the shard
+    // (which otherwise dangles as a rect-less fragment). Runs before page-span/rect attachment.
+    function foldTrailingPunctuationAfterQuotedDialogItems(items) {
+      if (!Array.isArray(items) || items.length < 2) return items;
+      const dialogFamily = new Set(['dialog', 'monologue', 'narration']);
+      const isPunctuationOnlyShard = (value) => {
+        const clean = norm(value).trim();
+        if (!clean || charLen(clean) > 4) return false;
+        return /^[。、．，！？!?」』）)】〕〉》・…‥ー―─－]+$/u.test(clean);
+      };
+      const endsWithCloseQuote = (value) => /[」』）)】〕〉》”"]$/u.test(String(value || '').trim());
+      for (let i = items.length - 1; i >= 1; i -= 1) {
+        const cur = items[i];
+        const prev = items[i - 1];
+        if (!cur || !prev || !dialogFamily.has(prev.type)) continue;
+        if (Number(cur.pageNo) !== Number(prev.pageNo)) continue;
+        if (!isPunctuationOnlyShard(sourceReviewItemText(cur))) continue;
+        const prevText = sourceReviewItemText(prev);
+        if (!prevText || !endsWithCloseQuote(prevText)) continue;
+        prev.type = 'action';
+        prev.speaker = '';
+        prev.modifier = '';
+        prev.modifierRaw = '';
+        prev.dialogMode = '';
+        prev.dialog = '';
+        prev.text = prevText + norm(sourceReviewItemText(cur)).trim();
+        items.splice(i, 1);
+      }
+      return items;
+    }
+
     function buildSourceReviewItemsForDocument(text, doc, options) {
       const pdfBodyText = doc && doc.draftSourceType === 'pdf' ? pdfScriptBodyReviewTextFromDraftPages(doc) : '';
       const sourceText = doc && doc.draftSourceType === 'pdf' ? cleanPdfGarbledTextLines(pdfBodyText || text) : text;
-      const reviewItems = buildSourceReviewItems(sourceText, doc);
+      const reviewItems = foldTrailingPunctuationAfterQuotedDialogItems(buildSourceReviewItems(sourceText, doc));
       if (doc && doc.draftSourceType === 'pdf') {
         attachSourceReviewPageSpans(reviewItems, sourceReviewPagesFromText(sourceText));
         normalizePdfDialogInlineSpacingForReviewItems(reviewItems);
