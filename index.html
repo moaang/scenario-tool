@@ -337,10 +337,15 @@
       padding: 5px 8px 5px 14px;
       background: var(--panel); border-radius: 999px; box-shadow: var(--shadow-chrome);
     }
-    .strip-item { display: inline-flex; align-items: center; gap: 5px; }
+    .strip-item { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; white-space: nowrap; }
     .strip-k { color: var(--faint); font-size: 10px; font-weight: 750; }
     .strip-mono { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); font-weight: 700; }
-    .strip-btn { min-height: 24px; padding: 2px 9px; border: 0; border-radius: 999px; background: transparent; box-shadow: none; gap: 5px; }
+    /* Korean/Japanese text breaks between any two characters by default (no word-break
+       protection like Latin spaces give), so a squeezed flex child can shrink itself down to a
+       single character's width and wrap into a multi-line stack instead of staying compact —
+       observed on a 375px phone viewport, where this silently inflated the whole bottom strip's
+       height. flex-shrink:0 + nowrap keep it single-line and let the strip size to its content. */
+    .strip-btn { min-height: 24px; padding: 2px 9px; border: 0; border-radius: 999px; background: transparent; box-shadow: none; gap: 5px; flex-shrink: 0; white-space: nowrap; }
     .strip-btn:hover { background: #f2f2ef; border-color: transparent; }
     .strip-dot { width: 7px; height: 7px; border-radius: 50%; background: #d3d3cb; }
     .strip-dot.on { background: var(--good); }
@@ -2569,6 +2574,29 @@
       .review-speaker-name { font-size: 18px; text-align: left; }
       .script-row.dialog { grid-template-columns: 1fr; }
       .script-row.dialog .script-speaker { justify-items: start; min-height: 0; text-align: left; }
+    }
+
+    /* Phone-width canvas chrome: the desktop topbar packs three flex zones into one 44px row
+       with the tab pill absolutely centered on top of them — on a ~375-430px phone that math
+       never works and the zones/tabs visibly overlap. Let the row wrap onto its own lines
+       instead, and pull the keyboard/mouse-only pan hint (Space+drag, Ctrl+wheel — meaningless
+       on a touchscreen) off the bottom strip it was colliding with. */
+    @media (max-width: 640px) {
+      #appTopbar {
+        height: auto; min-height: 44px;
+        flex-wrap: wrap; row-gap: 6px;
+        padding: 6px 8px;
+      }
+      .topbar-left, .topbar-right { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; row-gap: 6px; }
+      .topbar-center {
+        position: static; transform: none;
+        order: 3; width: 100%;
+        justify-content: center;
+      }
+      #appTopbar .work-select { width: auto; max-width: 34vw; }
+      #appTopbar .language-select { width: 64px; }
+      #sceneInfoBar { top: 96px; }
+      #panHint { display: none; }
     }
 
     .footer-note {
