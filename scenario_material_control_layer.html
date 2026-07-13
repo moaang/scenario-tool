@@ -16120,37 +16120,41 @@
       el.dataset.renderKey = renderKey;
       // Debug window is PDF-only; make sure any leftover is closed.
       if ($('debugWindow')) { $('debugWindow').classList.remove('open'); $('debugWindow').innerHTML = ''; }
-      // Page navigation (one page at a time, like the PDF view).
-      el.querySelectorAll('[data-docx-page]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const cur = docxReaderActivePageNo(pageNos);
-          const i = pageNos.indexOf(cur);
-          const ni = btn.getAttribute('data-docx-page') === 'prev' ? i - 1 : i + 1;
-          if (pageNos[ni] == null) return;
-          state.activeScriptPageNo = pageNos[ni];
-          hideDocxBlockPopover();
-          el.dataset.renderKey = '';
-          renderScriptStructurePanel();
+      // ONE delegated click handler on the freshly-built reader wrap. Per-node listeners were
+      // fragile (lost if the panel re-rendered between attach and click); delegation always fires.
+      const wrap = el.querySelector('.docx-reader-wrap');
+      if (wrap) {
+        wrap.addEventListener('click', (ev) => {
+          const nav = ev.target.closest('[data-docx-page]');
+          if (nav) {
+            const cur = docxReaderActivePageNo(pageNos);
+            const i = pageNos.indexOf(cur);
+            const ni = nav.getAttribute('data-docx-page') === 'prev' ? i - 1 : i + 1;
+            if (pageNos[ni] == null) return;
+            state.activeScriptPageNo = pageNos[ni];
+            hideDocxBlockPopover();
+            el.dataset.renderKey = '';
+            renderScriptStructurePanel();
+            return;
+          }
+          const memoDel = ev.target.closest('[data-dvr-memo-del]');
+          if (memoDel) {
+            ev.stopPropagation();
+            deleteRevisionNote(memoDel.getAttribute('data-dvr-memo-del'));
+            el.dataset.renderKey = '';
+            syncAll(false);
+            return;
+          }
+          const block = ev.target.closest('.dvr-block');
+          if (block) {
+            const id = block.getAttribute('data-dvr-block');
+            const wasSel = block.classList.contains('selected');
+            wrap.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
+            if (wasSel) { state.docxReaderSelectedId = ''; hideDocxBlockPopover(); }
+            else { state.docxReaderSelectedId = id; block.classList.add('selected'); showDocxBlockPopover(block, id); }
+          }
         });
-      });
-      // Tap a block → select it and float the annotate popover right at it.
-      el.querySelectorAll('[data-dvr-block]').forEach((span) => {
-        span.addEventListener('click', () => {
-          const id = span.getAttribute('data-dvr-block');
-          const wasSel = span.classList.contains('selected');
-          el.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-          if (wasSel) { state.docxReaderSelectedId = ''; hideDocxBlockPopover(); }
-          else { state.docxReaderSelectedId = id; span.classList.add('selected'); showDocxBlockPopover(span, id); }
-        });
-      });
-      el.querySelectorAll('[data-dvr-memo-del]').forEach((btn) => {
-        btn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          deleteRevisionNote(btn.getAttribute('data-dvr-memo-del'));
-          el.dataset.renderKey = '';
-          syncAll(false);
-        });
-      });
+      }
       const scroller = el.querySelector('.docx-pages-scroll');
       if (scroller) scroller.addEventListener('scroll', () => hideDocxBlockPopover(), { passive: true });
     }
@@ -16194,12 +16198,16 @@
       pop.innerHTML = `<button data-pv="retake">${esc(t('feedback'))}</button>`
         + `<button data-pv="rewrite">${esc(t('rewriteDraft'))}</button>`
         + `<button class="pv-close" data-pv="close">✕</button>`;
-      const below = br.top < 96;                          // near the top → drop the popover under the block
-      pop.classList.toggle('below', below);
-      const left = Math.max(84, Math.min(br.left + br.width / 2, window.innerWidth - 84));
+      // Always drop it just BELOW the block (blocks live in the top band, so below is always
+      // on-screen) and clamp into the viewport so it can never land off the top or the edges.
+      pop.classList.add('below');
+      const left = Math.max(90, Math.min(br.left + br.width / 2, window.innerWidth - 90));
+      let top = br.bottom + 8;
       pop.style.left = Math.round(left) + 'px';
-      pop.style.top = Math.round(below ? br.bottom + 8 : br.top - 4) + 'px';
+      pop.style.top = Math.round(top) + 'px';
       pop.classList.add('show');
+      const ph = pop.getBoundingClientRect().height || 42;
+      if (top + ph > window.innerHeight - 8) pop.style.top = Math.round(Math.max(8, window.innerHeight - ph - 8)) + 'px';
       pop.querySelector('[data-pv="retake"]').addEventListener('click', () => openAddBlockNote(id, 'retake'));
       pop.querySelector('[data-pv="rewrite"]').addEventListener('click', () => openAddBlockNote(id, 'direct_rewrite'));
       pop.querySelector('[data-pv="close"]').addEventListener('click', () => {
