@@ -1020,10 +1020,11 @@
       font-variant-numeric: tabular-nums;
     }
     .docx-pages-scroll { position: relative; }
-    /* Tap-anchored annotate popover: appears right at the tapped block so the action is where
-       the finger is, instead of a bar that scrolls off the top. */
+    /* Tap-anchored annotate popover. position:FIXED (viewport space), not absolute inside the
+       scroll box — an absolute popover was being clipped by the scroller's overflow, so it was
+       positioned correctly yet invisible. Fixed can't be clipped by an ancestor's overflow. */
     .dvr-popover {
-      position: absolute; z-index: 20;
+      position: fixed; z-index: 80;
       display: none;
       align-items: center; gap: 6px;
       padding: 6px 8px;
@@ -1034,10 +1035,12 @@
       transform: translate(-50%, -100%);
     }
     .dvr-popover.show { display: inline-flex; }
+    .dvr-popover.below { transform: translate(-50%, 0); }
     .dvr-popover::after {
       content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
       border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid var(--ink);
     }
+    .dvr-popover.below::after { top: -5px; bottom: auto; border-top: 0; border-bottom: 6px solid var(--ink); }
     .dvr-popover button {
       min-height: 30px; padding: 4px 12px;
       border: 0; border-radius: 999px;
@@ -3493,7 +3496,6 @@
         feedback: 'フィードバック',
         rewriteDraft: '修正案',
         docxReaderHint: 'ブロックをタップすると注釈を付けられます',
-        docxReaderDeselect: '選択解除',
         nameLabel: '名前',
         typeLabelTitle: 'タイプ',
         scopeLabelTitle: '素材範囲',
@@ -3801,7 +3803,6 @@
         feedback: '피드백',
         rewriteDraft: '수정안',
         docxReaderHint: '블록을 탭하면 주석을 달 수 있어요',
-        docxReaderDeselect: '선택 해제',
         nameLabel: '이름',
         typeLabelTitle: '타입',
         scopeLabelTitle: '소재 범위',
@@ -4108,7 +4109,6 @@
         feedback: 'Feedback',
         rewriteDraft: 'Rewrite',
         docxReaderHint: 'Tap a block to attach a note',
-        docxReaderDeselect: 'Deselect',
         nameLabel: 'Name',
         typeLabelTitle: 'Type',
         scopeLabelTitle: 'Material Scope',
@@ -15980,14 +15980,6 @@
       return 'action';
     }
 
-    function docxReaderBlockLabel(kind) {
-      return kind === 'scene' ? t('sourceReviewTypeScene')
-        : kind === 'dialog' ? t('sourceReviewTypeDialog')
-        : kind === 'cast' ? t('tabCharacter')
-        : kind === 'end' ? 'END'
-        : t('sourceReviewTypeAction');
-    }
-
     function docxReaderBlockPlainText(block) {
       // Raw line as written (keeps the 「」 quotes and any （modifier）); used only for the
       // short selection-bar preview, so no per-kind reshaping is needed.
@@ -16029,7 +16021,7 @@
         .map(n => n.targetId + ':' + n.noteType + ':' + n.status).join('|');
       const blockKey = blocks.map(b => [b.id, b.pageNo || 1, docxReaderBlockKind(b), b.speaker || '', (b.text || b.rawText || '').length].join(':')).join('|');
       const widthBucket = Math.round((($('scriptStructurePanel') || {}).clientWidth || 0) / 40);
-      return [doc && doc.id || '', 'docx', doc.docxPageLayout ? 'pg' : 'flow', widthBucket, blockKey, notesKey].join('#');
+      return [doc && doc.id || '', 'docx', doc.docxPageLayout ? 'pg' : 'flow', widthBucket, Number(state.activeScriptPageNo) || 1, blockKey, notesKey].join('#');
     }
 
     // Turn the docx section geometry (twips) into on-screen page metrics. The page keeps A4
@@ -16051,61 +16043,80 @@
       return { pageW, pageH, padTop, padBottom, padLeft, padRight, contentW, contentH, fontSize };
     }
 
+    function docxReaderActivePageNo(pageNos) {
+      const want = Number(state.activeScriptPageNo);
+      return pageNos.includes(want) ? want : (pageNos[0] || 1);
+    }
+
     function renderDocxVerticalReader(el, doc, blocks) {
       const renderKey = docxReaderRenderKey(doc, blocks);
-      if (el.dataset.renderKey === renderKey && el.querySelector('.docx-page, .docx-reader')) {
-        syncDocxReaderSelectionBar();
-        return;
-      }
+      if (el.dataset.renderKey === renderKey && el.querySelector('.docx-page, .docx-reader')) return;
+      hideDocxBlockPopover();
       const layout = doc.docxPageLayout;
+      const byPage = new Map();
+      blocks.forEach((b) => { const p = Number(b.pageNo || 1); if (!byPage.has(p)) byPage.set(p, []); byPage.get(p).push(b); });
+      const pageNos = Array.from(byPage.keys()).sort((a, b) => a - b);
       let inner;
-      let paged = false;
-      if (layout && layout.pgW && layout.pgH) {
-        paged = true;
+      let barHtml;
+      if (layout && layout.pgW && layout.pgH && pageNos.length) {
+        const activeNo = docxReaderActivePageNo(pageNos);
+        const idx = Math.max(0, pageNos.indexOf(activeNo));
+        const pageBlocks = byPage.get(pageNos[idx]);
         const m = docxPageDisplayMetrics(layout, (el.clientWidth || 900) - 44);
-        const byPage = new Map();
-        blocks.forEach((b) => { const p = Number(b.pageNo || 1); if (!byPage.has(p)) byPage.set(p, []); byPage.get(p).push(b); });
         const pageStyle = `min-width:${Math.round(m.pageW)}px;height:${Math.round(m.pageH)}px;padding:${Math.round(m.padTop)}px ${Math.round(m.padRight)}px ${Math.round(m.padBottom)}px ${Math.round(m.padLeft)}px;`;
         const contentStyle = `height:${Math.round(m.contentH)}px;font-size:${m.fontSize.toFixed(2)}px;line-height:1.55;`;
         const memoStyle = `top:${Math.round(m.padTop + m.contentH + 8)}px;left:${Math.round(m.padLeft)}px;right:${Math.round(m.padRight)}px;height:${Math.round(m.padBottom - 16)}px;`;
-        const pagesHtml = Array.from(byPage.keys()).sort((a, b) => a - b).map((p, idx) => {
-          const pageBlocks = byPage.get(p);
-          const body = pageBlocks.map(renderDocxReaderBlock).join('');
-          return `<div class="docx-page" style="${pageStyle}"><div class="docx-page-content" style="${contentStyle}">${body}</div>`
-            + `<div class="dvr-memo-layer" style="${memoStyle}">${renderDocxPageMemoLayer(pageBlocks)}</div>`
-            + `<div class="docx-page-no">${idx + 1}</div></div>`;
-        }).join('');
-        inner = `<div class="docx-pages-scroll"><div class="docx-pages">${pagesHtml}<div class="dvr-popover" id="dvrPopover"></div></div></div>`;
+        const body = pageBlocks.map(renderDocxReaderBlock).join('');
+        const pageCard = `<div class="docx-page" style="${pageStyle}"><div class="docx-page-content" style="${contentStyle}">${body}</div>`
+          + `<div class="dvr-memo-layer" style="${memoStyle}">${renderDocxPageMemoLayer(pageBlocks)}</div></div>`;
+        inner = `<div class="docx-pages-scroll"><div class="docx-pages">${pageCard}</div></div>`;
+        barHtml = `<button class="small" data-docx-page="prev" ${idx <= 0 ? 'disabled' : ''}>‹</button>`
+          + `<span class="drb-kind">Page ${idx + 1} / ${pageNos.length}</span>`
+          + `<button class="small" data-docx-page="next" ${idx >= pageNos.length - 1 ? 'disabled' : ''}>›</button>`
+          + `<span class="drb-spacer"></span>`
+          + `<span class="drb-hint">${esc(t('docxReaderHint'))}</span>`;
       } else {
         const body = blocks.map(renderDocxReaderBlock).join('');
         inner = `<div class="docx-reader-scroll"><div class="docx-reader">${body}</div></div>`;
+        barHtml = `<span class="drb-hint">${esc(t('docxReaderHint'))}</span>`;
       }
-      el.innerHTML = `<div class="docx-reader-wrap"><div class="docx-reader-bar" id="docxReaderBar"></div>${inner}</div>`;
+      el.innerHTML = `<div class="docx-reader-wrap"><div class="docx-reader-bar" id="docxReaderBar">${barHtml}</div>${inner}</div>`;
       el.dataset.renderKey = renderKey;
       // Debug window is PDF-only; make sure any leftover is closed.
       if ($('debugWindow')) { $('debugWindow').classList.remove('open'); $('debugWindow').innerHTML = ''; }
+      // Page navigation (one page at a time, like the PDF view).
+      el.querySelectorAll('[data-docx-page]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const cur = docxReaderActivePageNo(pageNos);
+          const i = pageNos.indexOf(cur);
+          const ni = btn.getAttribute('data-docx-page') === 'prev' ? i - 1 : i + 1;
+          if (pageNos[ni] == null) return;
+          state.activeScriptPageNo = pageNos[ni];
+          hideDocxBlockPopover();
+          el.dataset.renderKey = '';
+          renderScriptStructurePanel();
+        });
+      });
+      // Tap a block → select it and float the annotate popover right at it.
       el.querySelectorAll('[data-dvr-block]').forEach((span) => {
         span.addEventListener('click', () => {
           const id = span.getAttribute('data-dvr-block');
-          state.docxReaderSelectedId = state.docxReaderSelectedId === id ? '' : id;
+          const wasSel = span.classList.contains('selected');
           el.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-          if (state.docxReaderSelectedId) { span.classList.add('selected'); showDocxBlockPopover(el, span, id); }
-          else hideDocxBlockPopover(el);
-          syncDocxReaderSelectionBar();
+          if (wasSel) { state.docxReaderSelectedId = ''; hideDocxBlockPopover(); }
+          else { state.docxReaderSelectedId = id; span.classList.add('selected'); showDocxBlockPopover(span, id); }
         });
       });
-      // Wire memo-capsule delete buttons and hide the popover while scrolling.
       el.querySelectorAll('[data-dvr-memo-del]').forEach((btn) => {
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           deleteRevisionNote(btn.getAttribute('data-dvr-memo-del'));
-          const panel = $('scriptStructurePanel'); if (panel) panel.dataset.renderKey = '';
+          el.dataset.renderKey = '';
           syncAll(false);
         });
       });
       const scroller = el.querySelector('.docx-pages-scroll');
-      if (scroller) scroller.addEventListener('scroll', () => hideDocxBlockPopover(el), { passive: true });
-      syncDocxReaderSelectionBar();
+      if (scroller) scroller.addEventListener('scroll', () => hideDocxBlockPopover(), { passive: true });
     }
 
     // A page's notes shown as capsules in its blank bottom margin (the storyboard/memo band).
@@ -16123,60 +16134,42 @@
       return caps.join('');
     }
 
-    function hideDocxBlockPopover(el) {
-      const pop = (el || document).querySelector('#dvrPopover');
+    // Body-level, position:fixed popover so it can't be clipped by the reader's scroll overflow
+    // (an in-scroll absolute popover was positioned right but visually clipped = "nothing shows").
+    function ensureDocxPopover() {
+      let pop = document.getElementById('dvrPopover');
+      if (!pop) {
+        pop = document.createElement('div');
+        pop.id = 'dvrPopover';
+        pop.className = 'dvr-popover';
+        document.body.appendChild(pop);
+      }
+      return pop;
+    }
+
+    function hideDocxBlockPopover() {
+      const pop = document.getElementById('dvrPopover');
       if (pop) pop.classList.remove('show');
     }
 
-    function showDocxBlockPopover(el, span, id) {
-      const pop = el.querySelector('#dvrPopover');
-      const pages = el.querySelector('.docx-pages');
-      if (!pop || !pages) return;
+    function showDocxBlockPopover(span, id) {
+      const pop = ensureDocxPopover();
       const br = span.getBoundingClientRect();
-      const pr = pages.getBoundingClientRect();
-      pop.innerHTML = `
-        <button data-pv="retake">${esc(t('feedback'))}</button>
-        <button data-pv="rewrite">${esc(t('rewriteDraft'))}</button>
-        <button class="pv-close" data-pv="close">✕</button>`;
-      pop.style.left = Math.round(br.left - pr.left + br.width / 2) + 'px';
-      pop.style.top = Math.round(br.top - pr.top - 4) + 'px';
+      pop.innerHTML = `<button data-pv="retake">${esc(t('feedback'))}</button>`
+        + `<button data-pv="rewrite">${esc(t('rewriteDraft'))}</button>`
+        + `<button class="pv-close" data-pv="close">✕</button>`;
+      const below = br.top < 96;                          // near the top → drop the popover under the block
+      pop.classList.toggle('below', below);
+      const left = Math.max(84, Math.min(br.left + br.width / 2, window.innerWidth - 84));
+      pop.style.left = Math.round(left) + 'px';
+      pop.style.top = Math.round(below ? br.bottom + 8 : br.top - 4) + 'px';
       pop.classList.add('show');
       pop.querySelector('[data-pv="retake"]').addEventListener('click', () => openAddBlockNote(id, 'retake'));
       pop.querySelector('[data-pv="rewrite"]').addEventListener('click', () => openAddBlockNote(id, 'direct_rewrite'));
       pop.querySelector('[data-pv="close"]').addEventListener('click', () => {
-        hideDocxBlockPopover(el);
+        hideDocxBlockPopover();
         state.docxReaderSelectedId = '';
-        el.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-        syncDocxReaderSelectionBar();
-      });
-    }
-
-    function syncDocxReaderSelectionBar() {
-      const bar = $('docxReaderBar');
-      if (!bar) return;
-      const id = state.docxReaderSelectedId;
-      const block = id ? (state.project.sourceBlocks || []).find(b => b.id === id) : null;
-      if (!block) {
-        state.docxReaderSelectedId = '';
-        bar.innerHTML = `<span class="drb-hint">${esc(t('docxReaderHint'))}</span>`;
-        return;
-      }
-      const kind = docxReaderBlockKind(block);
-      const preview = docxReaderBlockPlainText(block).slice(0, 40);
-      bar.innerHTML = `
-        <span class="drb-kind">${esc(docxReaderBlockLabel(kind))}</span>
-        <span class="drb-sel">${esc(preview)}</span>
-        <span class="drb-spacer"></span>
-        <button class="small" id="docxNoteRetakeBtn">${esc(t('feedback'))}</button>
-        <button class="small" id="docxNoteRewriteBtn">${esc(t('rewriteDraft'))}</button>
-        <button class="small" id="docxNoteClearBtn">${esc(t('docxReaderDeselect'))}</button>`;
-      $('docxNoteRetakeBtn').addEventListener('click', () => openAddBlockNote(id, 'retake'));
-      $('docxNoteRewriteBtn').addEventListener('click', () => openAddBlockNote(id, 'direct_rewrite'));
-      $('docxNoteClearBtn').addEventListener('click', () => {
-        state.docxReaderSelectedId = '';
-        const r = $('docxReader');
-        if (r) r.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-        syncDocxReaderSelectionBar();
+        document.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
       });
     }
 
