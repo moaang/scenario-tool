@@ -16079,6 +16079,9 @@
       return { pageW, pageH, padTop, padBottom, padLeft, padRight, contentW, contentH, fontSize };
     }
 
+    // Visible build tag in the reader bar so a stale cached copy is instantly obvious.
+    const DOCX_READER_BUILD = 'r9';
+
     function docxReaderActivePageNo(pageNos) {
       const want = Number(state.activeScriptPageNo);
       return pageNos.includes(want) ? want : (pageNos[0] || 1);
@@ -16110,11 +16113,11 @@
           + `<span class="drb-kind">Page ${idx + 1} / ${pageNos.length}</span>`
           + `<button class="small" data-docx-page="next" ${idx >= pageNos.length - 1 ? 'disabled' : ''}>›</button>`
           + `<span class="drb-spacer"></span>`
-          + `<span class="drb-hint">${esc(t('docxReaderHint'))}</span>`;
+          + `<span class="drb-hint">${esc(t('docxReaderHint'))} · ${DOCX_READER_BUILD}</span>`;
       } else {
         const body = blocks.map(renderDocxReaderBlock).join('');
         inner = `<div class="docx-reader-scroll"><div class="docx-reader">${body}</div></div>`;
-        barHtml = `<span class="drb-hint">${esc(t('docxReaderHint'))}</span>`;
+        barHtml = `<span class="drb-hint">${esc(t('docxReaderHint'))} · ${DOCX_READER_BUILD}</span>`;
       }
       el.innerHTML = `<div class="docx-reader-wrap"><div class="docx-reader-bar" id="docxReaderBar">${barHtml}</div>${inner}</div>`;
       el.dataset.renderKey = renderKey;
@@ -16124,7 +16127,9 @@
       // fragile (lost if the panel re-rendered between attach and click); delegation always fires.
       const wrap = el.querySelector('.docx-reader-wrap');
       if (wrap) {
-        wrap.addEventListener('click', (ev) => {
+        // pointerdown (not click): fires immediately on press and cannot be swallowed by the
+        // browser's text-selection / click-suppression, which is what ate the tap before.
+        wrap.addEventListener('pointerdown', (ev) => {
           const nav = ev.target.closest('[data-docx-page]');
           if (nav) {
             const cur = docxReaderActivePageNo(pageNos);
@@ -16208,9 +16213,9 @@
       pop.classList.add('show');
       const ph = pop.getBoundingClientRect().height || 42;
       if (top + ph > window.innerHeight - 8) pop.style.top = Math.round(Math.max(8, window.innerHeight - ph - 8)) + 'px';
-      pop.querySelector('[data-pv="retake"]').addEventListener('click', () => openAddBlockNote(id, 'retake'));
-      pop.querySelector('[data-pv="rewrite"]').addEventListener('click', () => openAddBlockNote(id, 'direct_rewrite'));
-      pop.querySelector('[data-pv="close"]').addEventListener('click', () => {
+      pop.querySelector('[data-pv="retake"]').addEventListener('pointerdown', () => openAddBlockNote(id, 'retake'));
+      pop.querySelector('[data-pv="rewrite"]').addEventListener('pointerdown', () => openAddBlockNote(id, 'direct_rewrite'));
+      pop.querySelector('[data-pv="close"]').addEventListener('pointerdown', () => {
         hideDocxBlockPopover();
         state.docxReaderSelectedId = '';
         document.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
