@@ -988,6 +988,7 @@
     /* Paginated view: stack the document's real A4 pages top-to-bottom (scroll down like Word).
        Page pixel size + margins are computed from the docx section geometry in JS. */
     .docx-pages-scroll {
+      position: relative;
       overflow: auto;
       background: var(--chip);
       border: 1px solid var(--line-soft);
@@ -1024,31 +1025,6 @@
       font-size: 10px; font-weight: 700; color: #b9b2a2;
       font-variant-numeric: tabular-nums;
     }
-    .docx-pages-scroll { position: relative; }
-    /* The docx annotate composer reuses .pdf-feedback-composer styling; it is body-appended and
-       positioned fixed (set inline) so the scroll box's overflow can't clip it. */
-    .dvr-composer { z-index: 80; }
-    /* Notes shown as visible capsules in the page's blank memo band (the tall bottom margin),
-       so an added annotation is actually on the paper, not just a dot. */
-    .dvr-memo-layer { position: absolute; left: 0; right: 0; z-index: 6; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; pointer-events: none; }
-    .dvr-memo {
-      pointer-events: auto;
-      max-width: 46%;
-      display: flex; align-items: flex-start; gap: 6px;
-      padding: 6px 9px;
-      background: #fff;
-      border: 1px solid var(--line-strong);
-      border-left: 3px solid var(--retake);
-      border-radius: 9px;
-      box-shadow: 0 1px 5px rgba(20,18,12,.12);
-      font-size: 11.5px; line-height: 1.4; color: #3d382f;
-    }
-    .dvr-memo.note-fact { border-left-color: var(--fact); }
-    .dvr-memo.note-rewrite { border-left-color: var(--rewrite); }
-    .dvr-memo .dm-target { font-weight: 750; color: var(--ink); }
-    .dvr-memo .dm-text { color: #4a4438; }
-    .dvr-memo .dm-del { flex: none; margin-left: auto; min-height: 16px; width: 16px; padding: 0; border: 0; background: transparent; color: #b0a893; font-weight: 800; cursor: pointer; box-shadow: none; }
-    .dvr-memo .dm-del:hover { color: var(--retake); }
     /* Fallback (no page geometry): one continuous vertical flow. */
     .docx-reader-scroll { overflow-x: auto; overflow-y: hidden; background: #fff; border: 1px solid var(--line-soft); border-radius: 12px; padding: 24px 28px; }
     .docx-reader {
@@ -1057,34 +1033,16 @@
       font-size: 15px; line-height: 2.05; color: #1b1b18; letter-spacing: .02em;
       -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none;
     }
+    /* Block text is the page background under the clickable overlay boxes; not selectable. */
     .dvr-block {
-      cursor: pointer;
-      border-radius: 5px;
-      padding: 1px 2px;
-      /* keep the highlight/padding intact when a long block wraps across a column break */
-      -webkit-box-decoration-break: clone;
-      box-decoration-break: clone;
-      transition: background .12s ease;
-      /* a tap must register as a click, not start a text selection or a double-tap zoom */
-      touch-action: manipulation;
+      -webkit-box-decoration-break: clone; box-decoration-break: clone;
       -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
     }
-    .dvr-block:hover { background: rgba(0, 0, 0, .05); }
-    .dvr-block.selected { background: var(--focus-tint); box-shadow: inset 0 0 0 1.5px var(--focus); }
     .dvr-scene { font-weight: 800; }
     .dvr-speaker { font-weight: 750; }
     .dvr-action { color: #46433b; }
     .dvr-cast { color: #6a5b3e; font-weight: 650; }
     .dvr-end { font-weight: 800; opacity: .66; }
-    /* Annotated blocks carry a colored side rule (retake=red, fact=green, rewrite=blue). */
-    .dvr-block.has-note { box-shadow: inset 2.5px 0 0 var(--retake); }
-    .dvr-block.has-note.note-fact { box-shadow: inset 2.5px 0 0 var(--fact); }
-    .dvr-block.has-note.note-rewrite { box-shadow: inset 2.5px 0 0 var(--rewrite); }
-    .dvr-block.has-note.selected { box-shadow: inset 0 0 0 1.5px var(--focus); }
-    .dvr-note-dot {
-      font-size: 10px; font-weight: 800; vertical-align: 2px;
-      color: var(--retake);
-    }
     .pdf-overlay-layer {
       position: absolute;
       inset: 0;
@@ -4297,7 +4255,6 @@
 
     const state = {
       uiLanguage: activeUiLanguage,
-      docxReaderSelectedId: '',
       activeBlockTab: '',
       activeMiddleTab: 'script',
       activeScriptPageNo: 1,
@@ -15990,21 +15947,8 @@
       return 'action';
     }
 
-    function docxReaderBlockPlainText(block) {
-      // Raw line as written (keeps the 「」 quotes and any （modifier）); used only for the
-      // short selection-bar preview, so no per-kind reshaping is needed.
-      return String(block.rawText || block.text || '').replace(/\s+/g, ' ').trim();
-    }
-
     function renderDocxReaderBlock(block) {
       const kind = docxReaderBlockKind(block);
-      const notes = notesFor('block', block.id).filter(n => n.status !== 'done');
-      const noteClass = notes.length
-        ? ' has-note' + (notes.some(n => n.noteType === 'fact') && !notes.some(n => n.noteType === 'retake' || n.noteType === 'direct_rewrite') ? ' note-fact'
-          : notes.every(n => n.noteType === 'direct_rewrite') ? ' note-rewrite' : '')
-        : '';
-      const selected = state.docxReaderSelectedId === block.id ? ' selected' : '';
-      const dot = notes.length ? `<span class="dvr-note-dot">●${notes.length > 1 ? notes.length : ''}</span>` : '';
       let inner;
       if (kind === 'dialog') {
         // rawText already carries the 「」 quotes and any （modifier）; just tint the speaker name
@@ -16020,9 +15964,10 @@
       }
       // Each block sits on its own vertical line/column (how a printed vertical script reads:
       // one speech / one direction per line, right to left); scene headings get an extra blank
-      // line before them as an act break.
+      // line before them as an act break. Selection/notes are drawn by the overlay boxes + the
+      // PDF feedback layer on top, so the text itself is just the page background here.
       const lead = kind === 'scene' ? '<br>' : '';
-      return `${lead}<span class="dvr-block dvr-${kind}${noteClass}${selected}" data-dvr-block="${esc(block.id)}">${dot}${inner}</span><br>`;
+      return `${lead}<span class="dvr-block dvr-${kind}" data-dvr-block="${esc(block.id)}">${inner}</span><br>`;
     }
 
     function docxReaderRenderKey(doc, blocks) {
@@ -16054,35 +15999,47 @@
     }
 
     // Visible build tag in the reader bar so a stale cached copy is instantly obvious.
-    const DOCX_READER_BUILD = 'r10';
+    const DOCX_READER_BUILD = 'r11';
 
     function docxReaderActivePageNo(pageNos) {
       const want = Number(state.activeScriptPageNo);
       return pageNos.includes(want) ? want : (pageNos[0] || 1);
     }
 
+    // Full unification with the PDF view: draw the docx page as a .pdf-page-surface holding the
+    // vertical text, then lay transparent .pdf-overlay-box "nodes" over each block and reuse the
+    // WHOLE PDF annotation stack (bindBodyOverlayInteractions → box click opens the PDF feedback
+    // composer, renderPdfFeedbackLayer draws the vertical note capsules + leader lines in the
+    // margins). Same UI/behaviour as PDF; only the page background is text instead of a canvas.
     function renderDocxVerticalReader(el, doc, blocks) {
       const renderKey = docxReaderRenderKey(doc, blocks);
       if (el.dataset.renderKey === renderKey && el.querySelector('.docx-page, .docx-reader')) return;
-      hideDocxBlockPopover();
+      closePdfFeedbackComposer();
       const layout = doc.docxPageLayout;
       const byPage = new Map();
       blocks.forEach((b) => { const p = Number(b.pageNo || 1); if (!byPage.has(p)) byPage.set(p, []); byPage.get(p).push(b); });
       const pageNos = Array.from(byPage.keys()).sort((a, b) => a - b);
       let inner;
       let barHtml;
+      let paged = false;
+      let activePageNo = 1;
+      let pageBlocks = [];
       if (layout && layout.pgW && layout.pgH && pageNos.length) {
-        const activeNo = docxReaderActivePageNo(pageNos);
-        const idx = Math.max(0, pageNos.indexOf(activeNo));
-        const pageBlocks = byPage.get(pageNos[idx]);
-        const m = docxPageDisplayMetrics(layout, (el.clientWidth || 900) - 44);
-        const pageStyle = `min-width:${Math.round(m.pageW)}px;height:${Math.round(m.pageH)}px;padding:${Math.round(m.padTop)}px ${Math.round(m.padRight)}px ${Math.round(m.padBottom)}px ${Math.round(m.padLeft)}px;`;
-        const contentStyle = `height:${Math.round(m.contentH)}px;font-size:${m.fontSize.toFixed(2)}px;line-height:1.55;`;
-        const memoStyle = `top:${Math.round(m.padTop + m.contentH + 8)}px;left:${Math.round(m.padLeft)}px;right:${Math.round(m.padRight)}px;height:${Math.round(m.padBottom - 16)}px;`;
+        paged = true;
+        activePageNo = docxReaderActivePageNo(pageNos);
+        const idx = Math.max(0, pageNos.indexOf(activePageNo));
+        pageBlocks = byPage.get(pageNos[idx]);
+        const m = docxPageDisplayMetrics(layout, (el.clientWidth || 900) - 64);
+        const surfStyle = `width:${Math.round(m.pageW)}px;height:${Math.round(m.pageH)}px;min-height:0;background:#fff;`;
+        const contentStyle = `position:absolute;top:${Math.round(m.padTop)}px;right:${Math.round(m.padRight)}px;`
+          + `width:${Math.round(m.contentW)}px;height:${Math.round(m.contentH)}px;font-size:${m.fontSize.toFixed(2)}px;line-height:1.55;`;
         const body = pageBlocks.map(renderDocxReaderBlock).join('');
-        const pageCard = `<div class="docx-page" style="${pageStyle}"><div class="docx-page-content" style="${contentStyle}">${body}</div>`
-          + `<div class="dvr-memo-layer" style="${memoStyle}">${renderDocxPageMemoLayer(pageBlocks)}</div></div>`;
-        inner = `<div class="docx-pages-scroll"><div class="docx-pages">${pageCard}</div></div>`;
+        inner = `<div class="docx-pages-scroll"><div class="docx-pages">
+            <div class="docx-page pdf-page-surface" id="pdfPageSurface" data-page-no="${esc(activePageNo)}" style="${surfStyle}">
+              <div class="docx-page-content" style="${contentStyle}">${body}</div>
+              <div class="pdf-overlay-layer" id="pdfOverlayLayer" data-pdf-overlay-layer></div>
+              <div class="pdf-feedback-layer" id="pdfFeedbackLayer" data-pdf-feedback-layer></div>
+            </div></div></div>`;
         barHtml = `<button class="small" data-docx-page="prev" ${idx <= 0 ? 'disabled' : ''}>‹</button>`
           + `<span class="drb-kind">Page ${idx + 1} / ${pageNos.length}</span>`
           + `<button class="small" data-docx-page="next" ${idx >= pageNos.length - 1 ? 'disabled' : ''}>›</button>`
@@ -16095,138 +16052,57 @@
       }
       el.innerHTML = `<div class="docx-reader-wrap"><div class="docx-reader-bar" id="docxReaderBar">${barHtml}</div>${inner}</div>`;
       el.dataset.renderKey = renderKey;
-      // Debug window is PDF-only; make sure any leftover is closed.
       if ($('debugWindow')) { $('debugWindow').classList.remove('open'); $('debugWindow').innerHTML = ''; }
-      // ONE delegated click handler on the freshly-built reader wrap. Per-node listeners were
-      // fragile (lost if the panel re-rendered between attach and click); delegation always fires.
+      // Page nav (delegated; survives re-render).
       const wrap = el.querySelector('.docx-reader-wrap');
       if (wrap) {
-        // pointerdown (not click): fires immediately on press and cannot be swallowed by the
-        // browser's text-selection / click-suppression, which is what ate the tap before.
         wrap.addEventListener('pointerdown', (ev) => {
           const nav = ev.target.closest('[data-docx-page]');
-          if (nav) {
-            const cur = docxReaderActivePageNo(pageNos);
-            const i = pageNos.indexOf(cur);
-            const ni = nav.getAttribute('data-docx-page') === 'prev' ? i - 1 : i + 1;
-            if (pageNos[ni] == null) return;
-            state.activeScriptPageNo = pageNos[ni];
-            hideDocxBlockPopover();
-            el.dataset.renderKey = '';
-            renderScriptStructurePanel();
-            return;
-          }
-          const memoDel = ev.target.closest('[data-dvr-memo-del]');
-          if (memoDel) {
-            ev.stopPropagation();
-            deleteRevisionNote(memoDel.getAttribute('data-dvr-memo-del'));
-            el.dataset.renderKey = '';
-            syncAll(false);
-            return;
-          }
-          const block = ev.target.closest('.dvr-block');
-          if (block) {
-            const id = block.getAttribute('data-dvr-block');
-            const wasSel = block.classList.contains('selected');
-            wrap.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-            if (wasSel) { state.docxReaderSelectedId = ''; hideDocxBlockPopover(); }
-            else { state.docxReaderSelectedId = id; block.classList.add('selected'); showDocxBlockComposer(block, id); }
-          }
+          if (!nav) return;
+          const cur = docxReaderActivePageNo(pageNos);
+          const i = pageNos.indexOf(cur);
+          const ni = nav.getAttribute('data-docx-page') === 'prev' ? i - 1 : i + 1;
+          if (pageNos[ni] == null) return;
+          state.activeScriptPageNo = pageNos[ni];
+          closePdfFeedbackComposer();
+          el.dataset.renderKey = '';
+          renderScriptStructurePanel();
         });
       }
+      // Measure each rendered block and lay a transparent overlay box (node) over it, then hand
+      // off to the shared PDF annotation wiring — identical composer, note capsules and leader lines.
+      if (paged) buildDocxOverlayBoxes(el, pageBlocks, activePageNo);
     }
 
-    // A page's notes shown as capsules in its blank bottom margin (the storyboard/memo band).
-    function renderDocxPageMemoLayer(pageBlocks) {
-      const caps = [];
-      pageBlocks.forEach((block) => {
-        notesFor('block', block.id).filter(n => n.status !== 'done').forEach((note) => {
-          const cls = note.noteType === 'fact' ? ' note-fact' : note.noteType === 'direct_rewrite' ? ' note-rewrite' : '';
-          const kind = docxReaderBlockKind(block);
-          const target = docxReaderBlockPlainText(block).slice(0, 14);
-          caps.push(`<div class="dvr-memo${cls}"><span class="dm-target">${esc(target)}</span><span class="dm-text">${esc(note.text)}</span>`
-            + `<button class="dm-del" data-dvr-memo-del="${esc(note.id)}" title="${esc(t('deleteNote'))}">×</button></div>`);
-        });
+    function buildDocxOverlayBoxes(el, pageBlocks, pageNo) {
+      const surface = el.querySelector('#pdfPageSurface');
+      const overlay = el.querySelector('#pdfOverlayLayer');
+      if (!surface || !overlay) return;
+      const sr = surface.getBoundingClientRect();
+      if (!sr.width || !sr.height) return;
+      const byId = new Map(pageBlocks.map(b => [b.id, b]));
+      const boxes = [];
+      el.querySelectorAll('.docx-page-content .dvr-block').forEach((span) => {
+        const id = span.getAttribute('data-dvr-block');
+        const block = byId.get(id);
+        if (!block) return;
+        const r = span.getBoundingClientRect();
+        const left = Math.max(0, (r.left - sr.left) / sr.width * 100);
+        const top = Math.max(0, (r.top - sr.top) / sr.height * 100);
+        const width = Math.min(100 - left, r.width / sr.width * 100);
+        const height = Math.min(100 - top, r.height / sr.height * 100);
+        // Keep an overlayRect on the block so the feedback layer / composer can read its geometry.
+        block.overlayRect = { left, top, width, height, vertical: true, coordinateSource: 'rendered-pdfjs-v21' };
+        const kind = docxReaderBlockKind(block);
+        const typeClass = kind === 'dialog' ? 'dialog' : kind === 'scene' ? 'scene_heading' : kind === 'cast' ? 'cast_entry' : kind === 'end' ? 'end_marker' : 'action';
+        const label = kind === 'dialog' ? 'DIALOG' : kind === 'scene' ? 'SCENE' : kind === 'cast' ? 'CAST' : kind === 'end' ? 'END' : 'ACTION';
+        const speakerStyle = kind === 'dialog' ? characterColorStyle(block.speaker || block.characterName || 'unknown-speaker') : '';
+        boxes.push(`<div class="pdf-overlay-box ${typeClass} vertical" data-overlay-block="${esc(id)}" data-overlay-page-no="${esc(pageNo)}" `
+          + `style="${speakerStyle};left:${left.toFixed(2)}%;top:${top.toFixed(2)}%;width:${width.toFixed(2)}%;height:${height.toFixed(2)}%">`
+          + `<div class="pdf-overlay-tools"><span class="pdf-overlay-tag" title="${esc(label)}">${esc(label)}</span></div></div>`);
       });
-      return caps.join('');
-    }
-
-    // Tapping a block opens the SAME inline feedback composer the PDF view uses — three note-type
-    // buttons (修正注釈 / 修正案 / 確定情報) + a textarea + Cancel/Add — so the annotation UI matches
-    // the PDF side. Reuses the .pdf-feedback-composer classes for identical styling; only the
-    // placement differs (fixed viewport space, clamped, since the docx reader has no page layer).
-    function hideDocxBlockPopover() {
-      document.querySelectorAll('.dvr-composer').forEach((el) => {
-        if (el._outside) document.removeEventListener('pointerdown', el._outside, true);
-        el.remove();
-      });
-    }
-
-    function showDocxBlockComposer(span, id) {
-      hideDocxBlockPopover();
-      const block = (state.project.sourceBlocks || []).find(b => b.id === id);
-      const targetText = block ? displayPdfBlockText(block.rawText || block.text || '').slice(0, 40) : id;
-      const wrap = document.createElement('div');
-      wrap.className = 'pdf-feedback-composer dvr-composer';
-      const composer = { noteType: 'retake' };
-      wrap.innerHTML = `
-        <div class="pdf-feedback-composer-target" title="${esc(targetText)}">${esc(targetText)}</div>
-        <div class="pdf-feedback-composer-type">
-          <button type="button" class="retake active" data-fb-type="retake">${esc(t('noteRetake'))}</button>
-          <button type="button" class="direct_rewrite" data-fb-type="direct_rewrite">${esc(t('rewriteDraft'))}</button>
-          <button type="button" class="fact" data-fb-type="fact">${esc(t('noteFact'))}</button>
-        </div>
-        <textarea placeholder="${esc(t('pdfFeedbackComposerPlaceholder'))}"></textarea>
-        <div class="pdf-feedback-composer-actions">
-          <button type="button" class="small ghost" data-fb-cancel>${esc(t('pdfFeedbackComposerCancel'))}</button>
-          <button type="button" class="small save retake" data-fb-save>${esc(t('pdfFeedbackComposerSave'))}</button>
-        </div>`;
-      document.body.appendChild(wrap);
-      // fixed placement near the block, clamped into the viewport
-      const br = span.getBoundingClientRect();
-      const cw = wrap.offsetWidth || 248;
-      const ch = wrap.offsetHeight || 160;
-      let left = Math.min(Math.max(8, br.left + br.width / 2 - cw / 2), window.innerWidth - cw - 8);
-      let top = br.bottom + 8;
-      if (top + ch > window.innerHeight - 8) top = br.top - ch - 8;
-      if (top < 8) top = 8;
-      wrap.style.position = 'fixed';
-      wrap.style.left = Math.round(left) + 'px';
-      wrap.style.top = Math.round(top) + 'px';
-      const ta = wrap.querySelector('textarea');
-      const saveBtn = wrap.querySelector('[data-fb-save]');
-      const setType = (type) => {
-        composer.noteType = type;
-        wrap.querySelectorAll('[data-fb-type]').forEach(b => b.classList.toggle('active', b.getAttribute('data-fb-type') === type));
-        saveBtn.className = 'small save ' + type;
-      };
-      const closeC = () => {
-        if (wrap._outside) document.removeEventListener('pointerdown', wrap._outside, true);
-        wrap.remove();
-        state.docxReaderSelectedId = '';
-        document.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-      };
-      const commit = () => {
-        const text = ta.value.trim();
-        if (!text) { closeC(); return; }
-        addRevisionNote('block', id, composer.noteType, text);
-        const panel = $('scriptStructurePanel'); if (panel) panel.dataset.renderKey = '';
-        closeC();
-        syncAll(false);
-      };
-      wrap.querySelectorAll('[data-fb-type]').forEach(b => b.addEventListener('pointerdown', (e) => { e.preventDefault(); setType(b.getAttribute('data-fb-type')); ta.focus(); }));
-      wrap.querySelector('[data-fb-cancel]').addEventListener('pointerdown', (e) => { e.preventDefault(); closeC(); });
-      saveBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); commit(); });
-      ta.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commit(); }
-        if (ev.key === 'Escape') { ev.preventDefault(); closeC(); }
-      });
-      const onDocDown = (e) => {
-        if (e.target.closest('.dvr-composer') || e.target.closest('.dvr-block')) return;
-        closeC();
-      };
-      wrap._outside = onDocDown;
-      setTimeout(() => { document.addEventListener('pointerdown', onDocDown, true); ta.focus(); }, 0);
+      overlay.innerHTML = boxes.join('');
+      bindBodyOverlayInteractions();
     }
 
     function renderScriptStructurePanel() {
