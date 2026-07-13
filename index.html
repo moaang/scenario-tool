@@ -957,6 +957,78 @@
       writing-mode: vertical-rl;
       text-orientation: mixed;
     }
+
+    /* ── DOCX vertical reader ──────────────────────────────────────────────
+       A .docx source is already classified into scene/dialogue/cast/action blocks
+       by the SAME shared classifier the PDF path uses; this surface just flows those
+       blocks as one continuous 縦書き (vertical-rl, right-to-left) script. No pdf.js,
+       no page image, no overlay geometry — every block is a plain inline element that
+       annotations attach to by block id, exactly like the PDF overlay boxes do. */
+    .docx-reader-wrap { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+    .docx-reader-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 7px 12px;
+      background: var(--panel);
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+      font-size: 11.5px;
+    }
+    .docx-reader-bar .drb-hint { color: var(--muted); font-weight: 650; }
+    .docx-reader-bar .drb-sel {
+      color: var(--ink); font-weight: 750;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw;
+    }
+    .docx-reader-bar .drb-kind {
+      flex: none; padding: 2px 8px; border-radius: 999px;
+      font-size: 9.5px; font-weight: 800; letter-spacing: .02em;
+      background: var(--chip); color: var(--ink-soft);
+    }
+    .docx-reader-bar .drb-spacer { flex: 1 1 auto; }
+    .docx-reader-scroll {
+      overflow-x: auto; overflow-y: hidden;
+      background: #f8f8f2;
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      padding: 24px 28px;
+    }
+    /* Fixed block-flow height forces top-to-bottom lines to wrap into fresh columns to the
+       left (dense, real-script packing); the container just grows wider and scrolls sideways. */
+    .docx-reader {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      height: 60vh;
+      font-family: "Yu Gothic", "Meiryo", "Noto Sans JP", "Hiragino Sans", sans-serif;
+      font-size: 15px;
+      line-height: 2.05;
+      color: #1b1b18;
+      letter-spacing: .02em;
+    }
+    .dvr-block {
+      cursor: pointer;
+      border-radius: 5px;
+      padding: 1px 2px;
+      /* keep the highlight/padding intact when a long block wraps across a column break */
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+      transition: background .12s ease;
+    }
+    .dvr-block:hover { background: rgba(0, 0, 0, .05); }
+    .dvr-block.selected { background: var(--focus-tint); box-shadow: inset 0 0 0 1.5px var(--focus); }
+    .dvr-scene { font-weight: 800; }
+    .dvr-speaker { font-weight: 750; }
+    .dvr-action { color: #46433b; }
+    .dvr-cast { color: #6a5b3e; font-weight: 650; }
+    .dvr-end { font-weight: 800; opacity: .66; }
+    /* Annotated blocks carry a colored side rule (retake=red, fact=green, rewrite=blue). */
+    .dvr-block.has-note { box-shadow: inset 2.5px 0 0 var(--retake); }
+    .dvr-block.has-note.note-fact { box-shadow: inset 2.5px 0 0 var(--fact); }
+    .dvr-block.has-note.note-rewrite { box-shadow: inset 2.5px 0 0 var(--rewrite); }
+    .dvr-block.has-note.selected { box-shadow: inset 0 0 0 1.5px var(--focus); }
+    .dvr-note-dot {
+      font-size: 10px; font-weight: 800; vertical-align: 2px;
+      color: var(--retake);
+    }
     .pdf-overlay-layer {
       position: absolute;
       inset: 0;
@@ -3350,6 +3422,8 @@
         noExtractedPlace: '抽出された場所なし',
         feedback: 'フィードバック',
         rewriteDraft: '修正案',
+        docxReaderHint: 'ブロックをタップすると注釈を付けられます',
+        docxReaderDeselect: '選択解除',
         nameLabel: '名前',
         typeLabelTitle: 'タイプ',
         scopeLabelTitle: '素材範囲',
@@ -3656,6 +3730,8 @@
         noExtractedPlace: '추출된 장소 없음',
         feedback: '피드백',
         rewriteDraft: '수정안',
+        docxReaderHint: '블록을 탭하면 주석을 달 수 있어요',
+        docxReaderDeselect: '선택 해제',
         nameLabel: '이름',
         typeLabelTitle: '타입',
         scopeLabelTitle: '소재 범위',
@@ -3961,6 +4037,8 @@
         noExtractedPlace: 'No extracted places',
         feedback: 'Feedback',
         rewriteDraft: 'Rewrite',
+        docxReaderHint: 'Tap a block to attach a note',
+        docxReaderDeselect: 'Deselect',
         nameLabel: 'Name',
         typeLabelTitle: 'Type',
         scopeLabelTitle: 'Material Scope',
@@ -4160,6 +4238,7 @@
 
     const state = {
       uiLanguage: activeUiLanguage,
+      docxReaderSelectedId: '',
       activeBlockTab: '',
       activeMiddleTab: 'script',
       activeScriptPageNo: 1,
@@ -15792,6 +15871,127 @@
       syncAll();
     }
 
+    // ── DOCX vertical reader ──────────────────────────────────────────────
+    // The blocks are the same shared source blocks the PDF path and the left list use, so
+    // annotations (revisionNotes) attach by block id with zero geometry. This just draws them
+    // as a continuous 縦書き script and lets a tapped block drive the existing note composer.
+    function docxReaderBlockKind(block) {
+      if (block.type === 'end_marker' || block.zone === 'body_end') return 'end';
+      if (block.type === 'scene_heading') return 'scene';
+      if (block.type === 'dialog' || block.speaker) return 'dialog';
+      if (block.zone === 'cast_list' || block.zone === 'front_matter'
+        || ['cast_entry', 'cast_section', 'cast_note', 'front_summary', 'front_title', 'front_episode_title', 'front_draft_status'].includes(block.type)) return 'cast';
+      return 'action';
+    }
+
+    function docxReaderBlockLabel(kind) {
+      return kind === 'scene' ? t('sourceReviewTypeScene')
+        : kind === 'dialog' ? t('sourceReviewTypeDialog')
+        : kind === 'cast' ? t('tabCharacter')
+        : kind === 'end' ? 'END'
+        : t('sourceReviewTypeAction');
+    }
+
+    function docxReaderBlockPlainText(block) {
+      // Raw line as written (keeps the 「」 quotes and any （modifier）); used only for the
+      // short selection-bar preview, so no per-kind reshaping is needed.
+      return String(block.rawText || block.text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function renderDocxReaderBlock(block) {
+      const kind = docxReaderBlockKind(block);
+      const notes = notesFor('block', block.id).filter(n => n.status !== 'done');
+      const noteClass = notes.length
+        ? ' has-note' + (notes.some(n => n.noteType === 'fact') && !notes.some(n => n.noteType === 'retake' || n.noteType === 'direct_rewrite') ? ' note-fact'
+          : notes.every(n => n.noteType === 'direct_rewrite') ? ' note-rewrite' : '')
+        : '';
+      const selected = state.docxReaderSelectedId === block.id ? ' selected' : '';
+      const dot = notes.length ? `<span class="dvr-note-dot">●${notes.length > 1 ? notes.length : ''}</span>` : '';
+      let inner;
+      if (kind === 'dialog') {
+        // rawText already carries the 「」 quotes and any （modifier）; just tint the speaker name
+        // rather than re-wrapping (which double-quoted the line and dropped the modifier).
+        const speaker = block.speaker || block.characterName || '';
+        const raw = displayPdfBlockText(String(block.rawText || block.text || ''));
+        const style = characterColorStyle(speaker || 'unknown-speaker');
+        inner = (speaker && raw.startsWith(speaker))
+          ? `<span class="dvr-speaker" style="${style}">${esc(speaker)}</span>${esc(raw.slice(speaker.length))}`
+          : esc(raw);
+      } else {
+        inner = esc(String(block.text || block.rawText || '')).replace(/\n+/g, '　');
+      }
+      // Each block sits on its own vertical line/column (how a printed vertical script reads:
+      // one speech / one direction per line, right to left); scene headings get an extra blank
+      // line before them as an act break.
+      const lead = kind === 'scene' ? '<br>' : '';
+      return `${lead}<span class="dvr-block dvr-${kind}${noteClass}${selected}" data-dvr-block="${esc(block.id)}">${dot}${inner}</span><br>`;
+    }
+
+    function docxReaderRenderKey(doc, blocks) {
+      const notesKey = (state.project.revisionNotes || [])
+        .filter(n => n.targetType === 'block')
+        .map(n => n.targetId + ':' + n.noteType + ':' + n.status).join('|');
+      const blockKey = blocks.map(b => [b.id, docxReaderBlockKind(b), b.speaker || '', (b.text || b.rawText || '').length].join(':')).join('|');
+      return [doc && doc.id || '', 'docx', blockKey, notesKey].join('#');
+    }
+
+    function renderDocxVerticalReader(el, doc, blocks) {
+      const renderKey = docxReaderRenderKey(doc, blocks);
+      if (el.dataset.renderKey === renderKey && el.querySelector('.docx-reader')) {
+        syncDocxReaderSelectionBar();
+        return;
+      }
+      const body = blocks.map(renderDocxReaderBlock).join('');
+      el.innerHTML = `
+        <div class="docx-reader-wrap">
+          <div class="docx-reader-bar" id="docxReaderBar"></div>
+          <div class="docx-reader-scroll"><div class="docx-reader" id="docxReader">${body}</div></div>
+        </div>`;
+      el.dataset.renderKey = renderKey;
+      // Debug window / PDF feedback layer are PDF-only; make sure any leftover is closed.
+      if ($('debugWindow')) { $('debugWindow').classList.remove('open'); $('debugWindow').innerHTML = ''; }
+      const reader = $('docxReader');
+      reader.querySelectorAll('[data-dvr-block]').forEach((span) => {
+        span.addEventListener('click', () => {
+          const id = span.getAttribute('data-dvr-block');
+          state.docxReaderSelectedId = state.docxReaderSelectedId === id ? '' : id;
+          reader.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
+          if (state.docxReaderSelectedId) span.classList.add('selected');
+          syncDocxReaderSelectionBar();
+        });
+      });
+      syncDocxReaderSelectionBar();
+    }
+
+    function syncDocxReaderSelectionBar() {
+      const bar = $('docxReaderBar');
+      if (!bar) return;
+      const id = state.docxReaderSelectedId;
+      const block = id ? (state.project.sourceBlocks || []).find(b => b.id === id) : null;
+      if (!block) {
+        state.docxReaderSelectedId = '';
+        bar.innerHTML = `<span class="drb-hint">${esc(t('docxReaderHint'))}</span>`;
+        return;
+      }
+      const kind = docxReaderBlockKind(block);
+      const preview = docxReaderBlockPlainText(block).slice(0, 40);
+      bar.innerHTML = `
+        <span class="drb-kind">${esc(docxReaderBlockLabel(kind))}</span>
+        <span class="drb-sel">${esc(preview)}</span>
+        <span class="drb-spacer"></span>
+        <button class="small" id="docxNoteRetakeBtn">${esc(t('feedback'))}</button>
+        <button class="small" id="docxNoteRewriteBtn">${esc(t('rewriteDraft'))}</button>
+        <button class="small" id="docxNoteClearBtn">${esc(t('docxReaderDeselect'))}</button>`;
+      $('docxNoteRetakeBtn').addEventListener('click', () => openAddBlockNote(id, 'retake'));
+      $('docxNoteRewriteBtn').addEventListener('click', () => openAddBlockNote(id, 'direct_rewrite'));
+      $('docxNoteClearBtn').addEventListener('click', () => {
+        state.docxReaderSelectedId = '';
+        const r = $('docxReader');
+        if (r) r.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
+        syncDocxReaderSelectionBar();
+      });
+    }
+
     function renderScriptStructurePanel() {
       const el = $('scriptStructurePanel');
       if (!el) return;
@@ -15815,6 +16015,9 @@
         .slice()
         .sort((a, b) => (a.pageNo || 0) - (b.pageNo || 0) || (a.globalOrder || a.order || 0) - (b.globalOrder || b.order || 0));
       if (!blocks.length) { el.innerHTML = `<div class="empty">${esc(t('noSourceBlocks'))}</div>`; return; }
+      // DOCX has clean, already-classified text and no page geometry — flow it as a continuous
+      // vertical reader instead of running the whole pdf.js / overlay-rect / debug machinery.
+      if (doc.draftSourceType === 'docx') { renderDocxVerticalReader(el, doc, blocks); return; }
       const pageEntries = scriptPreviewPageEntries(doc, blocks);
       const pageNos = pageEntries.map(([pageNo]) => Number(pageNo));
       if (!pageNos.includes(Number(state.activeScriptPageNo))) state.activeScriptPageNo = pageNos[0] || 1;
