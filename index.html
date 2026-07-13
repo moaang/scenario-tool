@@ -1012,6 +1012,11 @@
       letter-spacing: .02em;
       box-sizing: border-box;
       overflow: visible;
+      /* This is a tap-to-annotate surface like the PDF overlay, NOT copyable text. Without
+         this, a tap on the vertical text starts a native text selection (the gray highlight)
+         and swallows the click, so block selection + the annotate popover never fired on touch. */
+      -webkit-user-select: none; -moz-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
     }
     .docx-page-no {
       position: absolute; left: 50%; transform: translateX(-50%);
@@ -1076,6 +1081,7 @@
       writing-mode: vertical-rl; text-orientation: mixed; height: 60vh;
       font-family: "Yu Gothic", "Meiryo", "Noto Sans JP", "Hiragino Sans", sans-serif;
       font-size: 15px; line-height: 2.05; color: #1b1b18; letter-spacing: .02em;
+      -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none;
     }
     .dvr-block {
       cursor: pointer;
@@ -1085,6 +1091,9 @@
       -webkit-box-decoration-break: clone;
       box-decoration-break: clone;
       transition: background .12s ease;
+      /* a tap must register as a click, not start a text selection or a double-tap zoom */
+      touch-action: manipulation;
+      -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
     }
     .dvr-block:hover { background: rgba(0, 0, 0, .05); }
     .dvr-block.selected { background: var(--focus-tint); box-shadow: inset 0 0 0 1.5px var(--focus); }
