@@ -3505,6 +3505,8 @@
         feedback: 'フィードバック',
         rewriteDraft: '修正案',
         docxReaderHint: 'ブロックをタップすると注釈を付けられます',
+        deleteMaterial: '削除',
+        deleteMaterialConfirm: 'この素材カードを削除しますか？',
         nameLabel: '名前',
         typeLabelTitle: 'タイプ',
         scopeLabelTitle: '素材範囲',
@@ -3812,6 +3814,8 @@
         feedback: '피드백',
         rewriteDraft: '수정안',
         docxReaderHint: '블록을 탭하면 주석을 달 수 있어요',
+        deleteMaterial: '삭제',
+        deleteMaterialConfirm: '이 소재카드를 삭제할까요?',
         nameLabel: '이름',
         typeLabelTitle: '타입',
         scopeLabelTitle: '소재 범위',
@@ -4118,6 +4122,8 @@
         feedback: 'Feedback',
         rewriteDraft: 'Rewrite',
         docxReaderHint: 'Tap a block to attach a note',
+        deleteMaterial: 'Delete',
+        deleteMaterialConfirm: 'Delete this material card?',
         nameLabel: 'Name',
         typeLabelTitle: 'Type',
         scopeLabelTitle: 'Material Scope',
@@ -5494,6 +5500,27 @@
       state.project.audit.push({ at: nowIso(), action: 'add_revision_note', targetType, targetId, noteType: note.noteType });
       markProjectChanged('add_revision_note');
       return note;
+    }
+
+    function deleteEntity(entityId) {
+      const id = String(entityId || '');
+      const entity = (state.project.entities || []).find(e => e.id === id);
+      if (!entity) return false;
+      state.project.entities = (state.project.entities || []).filter(e => e.id !== id);
+      state.project.settingClaims = (state.project.settingClaims || []).filter(c => c.targetId !== id);
+      state.project.revisionNotes = (state.project.revisionNotes || [])
+        .filter(n => !(n.targetType === 'entity' && n.targetId === id))
+        .map(n => Object.assign({}, n, { linkedEntityIds: (n.linkedEntityIds || []).filter(x => x !== id) }));
+      state.project.consistencyRules = (state.project.consistencyRules || [])
+        .map(r => Object.assign({}, r, { targetEntityIds: (r.targetEntityIds || []).filter(x => x !== id) }))
+        .filter(r => (r.targetEntityIds || []).length);
+      (state.project.sourceBlocks || []).forEach((b) => {
+        if (Array.isArray(b.linkedEntityIds)) b.linkedEntityIds = b.linkedEntityIds.filter(x => x !== id);
+      });
+      state.project.audit.push({ at: nowIso(), action: 'delete_entity', entityId: id, name: entity.name });
+      markProjectChanged('delete_entity');
+      syncAll(false);
+      return true;
     }
 
     function deleteRevisionNote(noteId) {
@@ -20096,6 +20123,7 @@
               <button class="small" data-annotate-entity="${esc(e.id)}">${esc(t('materialAddNote'))}</button>
               <button class="small" data-annotate-setting="${esc(e.id)}">${esc(t('addSettingBlock'))}</button>
               <button class="small" data-edit-entity="${esc(e.id)}">${esc(t('detail'))}</button>
+              <button class="small danger" data-delete-entity="${esc(e.id)}">${esc(t('deleteMaterial'))}</button>
             </div>
           </div>
         </div>`;
@@ -20124,6 +20152,9 @@
       bindEntityInputs();
       bindJumpLinks();
       document.querySelectorAll('[data-edit-entity]').forEach(el => el.addEventListener('click', () => openEntityModal(el.getAttribute('data-edit-entity'))));
+      document.querySelectorAll('[data-delete-entity]').forEach(el => el.addEventListener('click', () => {
+        if (confirm(t('deleteMaterialConfirm'))) deleteEntity(el.getAttribute('data-delete-entity'));
+      }));
       document.querySelectorAll('[data-annotate-entity]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-annotate-entity'), { mode: 'retake' })));
       document.querySelectorAll('[data-annotate-setting]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-annotate-setting'), { mode: 'setting' })));
       document.querySelectorAll('[data-edit-entity-note]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-note-entity'), { noteId: el.getAttribute('data-edit-entity-note') })));
@@ -22059,6 +22090,14 @@ V（城島剛志）
       if (/\.json$/i.test(file.name)) {
         await loadProjectJsonFile(file);
         return;
+      }
+      // A full script belongs to an EPISODE document, not the shared "作品共通 / project common"
+      // doc. Importing onto project-common makes its auto-extracted characters project-scoped —
+      // which document deletion can never remove (they pile up as "materials that won't delete") —
+      // and the script view refuses to render (wrong document kind, so blocks aren't tappable).
+      // Route the import onto a fresh episode document instead.
+      if (activeDocument().documentKind === 'project_common') {
+        addSubDocument('root');
       }
       try {
         const result = /\.pdf$/i.test(file.name)
