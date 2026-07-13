@@ -995,7 +995,7 @@
       padding: 22px;
       max-height: 74vh;
     }
-    .docx-pages { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    .docx-pages { position: relative; display: flex; flex-direction: column; align-items: center; gap: 20px; }
     .docx-page {
       position: relative;
       flex: none;
@@ -1019,6 +1019,54 @@
       font-size: 10px; font-weight: 700; color: #b9b2a2;
       font-variant-numeric: tabular-nums;
     }
+    .docx-pages-scroll { position: relative; }
+    /* Tap-anchored annotate popover: appears right at the tapped block so the action is where
+       the finger is, instead of a bar that scrolls off the top. */
+    .dvr-popover {
+      position: absolute; z-index: 20;
+      display: none;
+      align-items: center; gap: 6px;
+      padding: 6px 8px;
+      background: var(--ink); color: #fff;
+      border-radius: 999px;
+      box-shadow: 0 6px 20px rgba(20, 18, 12, .3);
+      white-space: nowrap;
+      transform: translate(-50%, -100%);
+    }
+    .dvr-popover.show { display: inline-flex; }
+    .dvr-popover::after {
+      content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+      border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid var(--ink);
+    }
+    .dvr-popover button {
+      min-height: 30px; padding: 4px 12px;
+      border: 0; border-radius: 999px;
+      background: rgba(255,255,255,.14); color: #fff;
+      font-size: 12px; font-weight: 700; box-shadow: none; cursor: pointer;
+    }
+    .dvr-popover button.pv-close { background: transparent; padding: 4px 8px; opacity: .7; }
+    .dvr-popover button:hover { background: rgba(255,255,255,.26); }
+    /* Notes shown as visible capsules in the page's blank memo band (the tall bottom margin),
+       so an added annotation is actually on the paper, not just a dot. */
+    .dvr-memo-layer { position: absolute; left: 0; right: 0; z-index: 6; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; pointer-events: none; }
+    .dvr-memo {
+      pointer-events: auto;
+      max-width: 46%;
+      display: flex; align-items: flex-start; gap: 6px;
+      padding: 6px 9px;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-left: 3px solid var(--retake);
+      border-radius: 9px;
+      box-shadow: 0 1px 5px rgba(20,18,12,.12);
+      font-size: 11.5px; line-height: 1.4; color: #3d382f;
+    }
+    .dvr-memo.note-fact { border-left-color: var(--fact); }
+    .dvr-memo.note-rewrite { border-left-color: var(--rewrite); }
+    .dvr-memo .dm-target { font-weight: 750; color: var(--ink); }
+    .dvr-memo .dm-text { color: #4a4438; }
+    .dvr-memo .dm-del { flex: none; margin-left: auto; min-height: 16px; width: 16px; padding: 0; border: 0; background: transparent; color: #b0a893; font-weight: 800; cursor: pointer; box-shadow: none; }
+    .dvr-memo .dm-del:hover { color: var(--retake); }
     /* Fallback (no page geometry): one continuous vertical flow. */
     .docx-reader-scroll { overflow-x: auto; overflow-y: hidden; background: #fff; border: 1px solid var(--line-soft); border-radius: 12px; padding: 24px 28px; }
     .docx-reader {
@@ -16011,17 +16059,23 @@
       }
       const layout = doc.docxPageLayout;
       let inner;
+      let paged = false;
       if (layout && layout.pgW && layout.pgH) {
+        paged = true;
         const m = docxPageDisplayMetrics(layout, (el.clientWidth || 900) - 44);
         const byPage = new Map();
         blocks.forEach((b) => { const p = Number(b.pageNo || 1); if (!byPage.has(p)) byPage.set(p, []); byPage.get(p).push(b); });
         const pageStyle = `min-width:${Math.round(m.pageW)}px;height:${Math.round(m.pageH)}px;padding:${Math.round(m.padTop)}px ${Math.round(m.padRight)}px ${Math.round(m.padBottom)}px ${Math.round(m.padLeft)}px;`;
         const contentStyle = `height:${Math.round(m.contentH)}px;font-size:${m.fontSize.toFixed(2)}px;line-height:1.55;`;
+        const memoStyle = `top:${Math.round(m.padTop + m.contentH + 8)}px;left:${Math.round(m.padLeft)}px;right:${Math.round(m.padRight)}px;height:${Math.round(m.padBottom - 16)}px;`;
         const pagesHtml = Array.from(byPage.keys()).sort((a, b) => a - b).map((p, idx) => {
-          const body = byPage.get(p).map(renderDocxReaderBlock).join('');
-          return `<div class="docx-page" style="${pageStyle}"><div class="docx-page-content" style="${contentStyle}">${body}</div><div class="docx-page-no">${idx + 1}</div></div>`;
+          const pageBlocks = byPage.get(p);
+          const body = pageBlocks.map(renderDocxReaderBlock).join('');
+          return `<div class="docx-page" style="${pageStyle}"><div class="docx-page-content" style="${contentStyle}">${body}</div>`
+            + `<div class="dvr-memo-layer" style="${memoStyle}">${renderDocxPageMemoLayer(pageBlocks)}</div>`
+            + `<div class="docx-page-no">${idx + 1}</div></div>`;
         }).join('');
-        inner = `<div class="docx-pages-scroll"><div class="docx-pages">${pagesHtml}</div></div>`;
+        inner = `<div class="docx-pages-scroll"><div class="docx-pages">${pagesHtml}<div class="dvr-popover" id="dvrPopover"></div></div></div>`;
       } else {
         const body = blocks.map(renderDocxReaderBlock).join('');
         inner = `<div class="docx-reader-scroll"><div class="docx-reader">${body}</div></div>`;
@@ -16035,11 +16089,66 @@
           const id = span.getAttribute('data-dvr-block');
           state.docxReaderSelectedId = state.docxReaderSelectedId === id ? '' : id;
           el.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
-          if (state.docxReaderSelectedId) span.classList.add('selected');
+          if (state.docxReaderSelectedId) { span.classList.add('selected'); showDocxBlockPopover(el, span, id); }
+          else hideDocxBlockPopover(el);
           syncDocxReaderSelectionBar();
         });
       });
+      // Wire memo-capsule delete buttons and hide the popover while scrolling.
+      el.querySelectorAll('[data-dvr-memo-del]').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          deleteRevisionNote(btn.getAttribute('data-dvr-memo-del'));
+          const panel = $('scriptStructurePanel'); if (panel) panel.dataset.renderKey = '';
+          syncAll(false);
+        });
+      });
+      const scroller = el.querySelector('.docx-pages-scroll');
+      if (scroller) scroller.addEventListener('scroll', () => hideDocxBlockPopover(el), { passive: true });
       syncDocxReaderSelectionBar();
+    }
+
+    // A page's notes shown as capsules in its blank bottom margin (the storyboard/memo band).
+    function renderDocxPageMemoLayer(pageBlocks) {
+      const caps = [];
+      pageBlocks.forEach((block) => {
+        notesFor('block', block.id).filter(n => n.status !== 'done').forEach((note) => {
+          const cls = note.noteType === 'fact' ? ' note-fact' : note.noteType === 'direct_rewrite' ? ' note-rewrite' : '';
+          const kind = docxReaderBlockKind(block);
+          const target = docxReaderBlockPlainText(block).slice(0, 14);
+          caps.push(`<div class="dvr-memo${cls}"><span class="dm-target">${esc(target)}</span><span class="dm-text">${esc(note.text)}</span>`
+            + `<button class="dm-del" data-dvr-memo-del="${esc(note.id)}" title="${esc(t('deleteNote'))}">×</button></div>`);
+        });
+      });
+      return caps.join('');
+    }
+
+    function hideDocxBlockPopover(el) {
+      const pop = (el || document).querySelector('#dvrPopover');
+      if (pop) pop.classList.remove('show');
+    }
+
+    function showDocxBlockPopover(el, span, id) {
+      const pop = el.querySelector('#dvrPopover');
+      const pages = el.querySelector('.docx-pages');
+      if (!pop || !pages) return;
+      const br = span.getBoundingClientRect();
+      const pr = pages.getBoundingClientRect();
+      pop.innerHTML = `
+        <button data-pv="retake">${esc(t('feedback'))}</button>
+        <button data-pv="rewrite">${esc(t('rewriteDraft'))}</button>
+        <button class="pv-close" data-pv="close">✕</button>`;
+      pop.style.left = Math.round(br.left - pr.left + br.width / 2) + 'px';
+      pop.style.top = Math.round(br.top - pr.top - 4) + 'px';
+      pop.classList.add('show');
+      pop.querySelector('[data-pv="retake"]').addEventListener('click', () => openAddBlockNote(id, 'retake'));
+      pop.querySelector('[data-pv="rewrite"]').addEventListener('click', () => openAddBlockNote(id, 'direct_rewrite'));
+      pop.querySelector('[data-pv="close"]').addEventListener('click', () => {
+        hideDocxBlockPopover(el);
+        state.docxReaderSelectedId = '';
+        el.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
+        syncDocxReaderSelectionBar();
+      });
     }
 
     function syncDocxReaderSelectionBar() {
