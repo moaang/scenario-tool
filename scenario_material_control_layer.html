@@ -985,24 +985,46 @@
       background: var(--chip); color: var(--ink-soft);
     }
     .docx-reader-bar .drb-spacer { flex: 1 1 auto; }
-    .docx-reader-scroll {
-      overflow-x: auto; overflow-y: hidden;
-      background: #f8f8f2;
+    /* Paginated view: stack the document's real A4 pages top-to-bottom (scroll down like Word).
+       Page pixel size + margins are computed from the docx section geometry in JS. */
+    .docx-pages-scroll {
+      overflow: auto;
+      background: var(--chip);
       border: 1px solid var(--line-soft);
       border-radius: 12px;
-      padding: 24px 28px;
+      padding: 22px;
+      max-height: 74vh;
     }
-    /* Fixed block-flow height forces top-to-bottom lines to wrap into fresh columns to the
-       left (dense, real-script packing); the container just grows wider and scrolls sideways. */
-    .docx-reader {
+    .docx-pages { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    .docx-page {
+      position: relative;
+      flex: none;
+      background: #fff;                 /* white paper */
+      box-shadow: 0 2px 10px rgba(20, 18, 12, .16);
+      border: 1px solid #e7e4da;
+      box-sizing: border-box;
+    }
+    .docx-page-content {
       writing-mode: vertical-rl;
       text-orientation: mixed;
-      height: 60vh;
       font-family: "Yu Gothic", "Meiryo", "Noto Sans JP", "Hiragino Sans", sans-serif;
-      font-size: 15px;
-      line-height: 2.05;
       color: #1b1b18;
       letter-spacing: .02em;
+      box-sizing: border-box;
+      overflow: visible;
+    }
+    .docx-page-no {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      bottom: 6px;
+      font-size: 10px; font-weight: 700; color: #b9b2a2;
+      font-variant-numeric: tabular-nums;
+    }
+    /* Fallback (no page geometry): one continuous vertical flow. */
+    .docx-reader-scroll { overflow-x: auto; overflow-y: hidden; background: #fff; border: 1px solid var(--line-soft); border-radius: 12px; padding: 24px 28px; }
+    .docx-reader {
+      writing-mode: vertical-rl; text-orientation: mixed; height: 60vh;
+      font-family: "Yu Gothic", "Meiryo", "Noto Sans JP", "Hiragino Sans", sans-serif;
+      font-size: 15px; line-height: 2.05; color: #1b1b18; letter-spacing: .02em;
     }
     .dvr-block {
       cursor: pointer;
@@ -7340,8 +7362,8 @@
         return { type: 'txt', text, warning: '' };
       }
       if (name.endsWith('.docx')) {
-        const text = await readDocxText(file);
-        return { type: 'docx', text, warning: '' };
+        const docxResult = await readDocxText(file);
+        return { type: 'docx', text: docxResult.text, docxPageLayout: docxResult.pageLayout, warning: '' };
       }
       if (name.endsWith('.pdf')) {
         return readPdfDocumentWithPdfJs(file);
@@ -9294,7 +9316,29 @@
       const buffer = await file.arrayBuffer();
       const xml = await extractZipText(buffer, 'word/document.xml');
       if (!xml) throw new Error('word/document.xml not found in DOCX.');
-      return docxXmlToText(xml);
+      return { text: docxXmlToText(xml), pageLayout: parseDocxPageLayout(xml) };
+    }
+
+    // Reproduce the source document's real page geometry (A4 landscape, tall bottom margin for a
+    // storyboard/conte layout, vertical writing) so the reader can lay text out on the same paper
+    // instead of one crammed column stack. All measurements are in OOXML twips (1440/inch).
+    function parseDocxPageLayout(xml) {
+      const source = String(xml || '');
+      const sect = (source.match(/<w:sectPr[ >][\s\S]*?<\/w:sectPr>/) || [])[0] || source;
+      const num = (re) => { const m = sect.match(re); return m ? Number(m[1]) : 0; };
+      const pgW = num(/<w:pgSz\b[^>]*\bw:w="(\d+)"/);
+      const pgH = num(/<w:pgSz\b[^>]*\bw:h="(\d+)"/);
+      if (!pgW || !pgH) return null;
+      return {
+        pgW, pgH,
+        orient: (sect.match(/<w:pgSz\b[^>]*\bw:orient="(\w+)"/) || [])[1] || (pgW > pgH ? 'landscape' : 'portrait'),
+        marTop: num(/<w:pgMar\b[^>]*\bw:top="(-?\d+)"/),
+        marRight: num(/<w:pgMar\b[^>]*\bw:right="(-?\d+)"/),
+        marBottom: num(/<w:pgMar\b[^>]*\bw:bottom="(-?\d+)"/),
+        marLeft: num(/<w:pgMar\b[^>]*\bw:left="(-?\d+)"/),
+        vertical: /<w:textDirection\b[^>]*w:val="tbRl"/.test(sect),
+        linePitch: num(/<w:docGrid\b[^>]*\bw:linePitch="(\d+)"/)
+      };
     }
 
     async function extractZipText(buffer, targetName) {
@@ -9337,6 +9381,10 @@
 
     function docxXmlToText(xml) {
       return String(xml || '')
+        // Word records where it last paginated (lastRenderedPageBreak) and any hard page break;
+        // turn both into form feeds so sourceReviewPagesFromText splits on the document's real pages.
+        .replace(/<w:lastRenderedPageBreak\s*\/?>/g, '\f')
+        .replace(/<w:br\b[^>]*\bw:type="page"[^>]*\/?>/g, '\f')
         .replace(/<w:tab\/>/g, '\t')
         .replace(/<w:br\/>/g, '\n')
         .replace(/<\/w:p>/g, '\n')
@@ -15931,31 +15979,62 @@
       const notesKey = (state.project.revisionNotes || [])
         .filter(n => n.targetType === 'block')
         .map(n => n.targetId + ':' + n.noteType + ':' + n.status).join('|');
-      const blockKey = blocks.map(b => [b.id, docxReaderBlockKind(b), b.speaker || '', (b.text || b.rawText || '').length].join(':')).join('|');
-      return [doc && doc.id || '', 'docx', blockKey, notesKey].join('#');
+      const blockKey = blocks.map(b => [b.id, b.pageNo || 1, docxReaderBlockKind(b), b.speaker || '', (b.text || b.rawText || '').length].join(':')).join('|');
+      const widthBucket = Math.round((($('scriptStructurePanel') || {}).clientWidth || 0) / 40);
+      return [doc && doc.id || '', 'docx', doc.docxPageLayout ? 'pg' : 'flow', widthBucket, blockKey, notesKey].join('#');
+    }
+
+    // Turn the docx section geometry (twips) into on-screen page metrics. The page keeps A4
+    // proportions and the real margins, so the tall bottom margin stays blank as memo space;
+    // font size is derived from the grid's columns-per-page so text roughly fills like Word.
+    function docxPageDisplayMetrics(layout, availWidth) {
+      const pageW = Math.max(300, Math.min(availWidth || 900, 1080));
+      const pageH = pageW * layout.pgH / Math.max(1, layout.pgW);
+      const frac = (n, d) => d ? Math.max(0, n) / d : 0;
+      const padTop = pageH * frac(layout.marTop, layout.pgH);
+      const padBottom = pageH * frac(layout.marBottom, layout.pgH);
+      const padLeft = pageW * frac(layout.marLeft, layout.pgW);
+      const padRight = pageW * frac(layout.marRight, layout.pgW);
+      const contentW = Math.max(40, pageW - padLeft - padRight);
+      const contentH = Math.max(40, pageH - padTop - padBottom);
+      const twipsW = Math.max(1, layout.pgW - layout.marLeft - layout.marRight);
+      const cols = layout.linePitch ? Math.max(4, Math.round(twipsW / layout.linePitch)) : Math.max(6, Math.round(contentW / 26));
+      const fontSize = Math.max(8, (contentW / cols) / 1.66);
+      return { pageW, pageH, padTop, padBottom, padLeft, padRight, contentW, contentH, fontSize };
     }
 
     function renderDocxVerticalReader(el, doc, blocks) {
       const renderKey = docxReaderRenderKey(doc, blocks);
-      if (el.dataset.renderKey === renderKey && el.querySelector('.docx-reader')) {
+      if (el.dataset.renderKey === renderKey && el.querySelector('.docx-page, .docx-reader')) {
         syncDocxReaderSelectionBar();
         return;
       }
-      const body = blocks.map(renderDocxReaderBlock).join('');
-      el.innerHTML = `
-        <div class="docx-reader-wrap">
-          <div class="docx-reader-bar" id="docxReaderBar"></div>
-          <div class="docx-reader-scroll"><div class="docx-reader" id="docxReader">${body}</div></div>
-        </div>`;
+      const layout = doc.docxPageLayout;
+      let inner;
+      if (layout && layout.pgW && layout.pgH) {
+        const m = docxPageDisplayMetrics(layout, (el.clientWidth || 900) - 44);
+        const byPage = new Map();
+        blocks.forEach((b) => { const p = Number(b.pageNo || 1); if (!byPage.has(p)) byPage.set(p, []); byPage.get(p).push(b); });
+        const pageStyle = `min-width:${Math.round(m.pageW)}px;height:${Math.round(m.pageH)}px;padding:${Math.round(m.padTop)}px ${Math.round(m.padRight)}px ${Math.round(m.padBottom)}px ${Math.round(m.padLeft)}px;`;
+        const contentStyle = `height:${Math.round(m.contentH)}px;font-size:${m.fontSize.toFixed(2)}px;line-height:1.55;`;
+        const pagesHtml = Array.from(byPage.keys()).sort((a, b) => a - b).map((p, idx) => {
+          const body = byPage.get(p).map(renderDocxReaderBlock).join('');
+          return `<div class="docx-page" style="${pageStyle}"><div class="docx-page-content" style="${contentStyle}">${body}</div><div class="docx-page-no">${idx + 1}</div></div>`;
+        }).join('');
+        inner = `<div class="docx-pages-scroll"><div class="docx-pages">${pagesHtml}</div></div>`;
+      } else {
+        const body = blocks.map(renderDocxReaderBlock).join('');
+        inner = `<div class="docx-reader-scroll"><div class="docx-reader">${body}</div></div>`;
+      }
+      el.innerHTML = `<div class="docx-reader-wrap"><div class="docx-reader-bar" id="docxReaderBar"></div>${inner}</div>`;
       el.dataset.renderKey = renderKey;
-      // Debug window / PDF feedback layer are PDF-only; make sure any leftover is closed.
+      // Debug window is PDF-only; make sure any leftover is closed.
       if ($('debugWindow')) { $('debugWindow').classList.remove('open'); $('debugWindow').innerHTML = ''; }
-      const reader = $('docxReader');
-      reader.querySelectorAll('[data-dvr-block]').forEach((span) => {
+      el.querySelectorAll('[data-dvr-block]').forEach((span) => {
         span.addEventListener('click', () => {
           const id = span.getAttribute('data-dvr-block');
           state.docxReaderSelectedId = state.docxReaderSelectedId === id ? '' : id;
-          reader.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
+          el.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
           if (state.docxReaderSelectedId) span.classList.add('selected');
           syncDocxReaderSelectionBar();
         });
@@ -21888,6 +21967,7 @@ V（城島剛志）
           await putPdfPreviewFileCache(doc, file).catch(err => console.warn('pdf preview cache save failed', err));
         }
         doc.draftPages = result.pages || [];
+        doc.docxPageLayout = result.docxPageLayout || null;
         doc.pageMetadata = sourcePagesToPageMetadata(doc.draftPages);
         doc.pdfAnnotations = result.pdfAnnotations || pdfAnnotationsFromPages(doc.draftPages);
         doc.pdfExtractionSignals = result.pdfExtractionSignals || pdfReviewSignalsFromAnnotations(doc.pdfAnnotations);
