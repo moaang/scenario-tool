@@ -1025,35 +1025,9 @@
       font-variant-numeric: tabular-nums;
     }
     .docx-pages-scroll { position: relative; }
-    /* Tap-anchored annotate popover. position:FIXED (viewport space), not absolute inside the
-       scroll box — an absolute popover was being clipped by the scroller's overflow, so it was
-       positioned correctly yet invisible. Fixed can't be clipped by an ancestor's overflow. */
-    .dvr-popover {
-      position: fixed; z-index: 80;
-      display: none;
-      align-items: center; gap: 6px;
-      padding: 6px 8px;
-      background: var(--ink); color: #fff;
-      border-radius: 999px;
-      box-shadow: 0 6px 20px rgba(20, 18, 12, .3);
-      white-space: nowrap;
-      transform: translate(-50%, -100%);
-    }
-    .dvr-popover.show { display: inline-flex; }
-    .dvr-popover.below { transform: translate(-50%, 0); }
-    .dvr-popover::after {
-      content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
-      border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid var(--ink);
-    }
-    .dvr-popover.below::after { top: -5px; bottom: auto; border-top: 0; border-bottom: 6px solid var(--ink); }
-    .dvr-popover button {
-      min-height: 30px; padding: 4px 12px;
-      border: 0; border-radius: 999px;
-      background: rgba(255,255,255,.14); color: #fff;
-      font-size: 12px; font-weight: 700; box-shadow: none; cursor: pointer;
-    }
-    .dvr-popover button.pv-close { background: transparent; padding: 4px 8px; opacity: .7; }
-    .dvr-popover button:hover { background: rgba(255,255,255,.26); }
+    /* The docx annotate composer reuses .pdf-feedback-composer styling; it is body-appended and
+       positioned fixed (set inline) so the scroll box's overflow can't clip it. */
+    .dvr-composer { z-index: 80; }
     /* Notes shown as visible capsules in the page's blank memo band (the tall bottom margin),
        so an added annotation is actually on the paper, not just a dot. */
     .dvr-memo-layer { position: absolute; left: 0; right: 0; z-index: 6; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; pointer-events: none; }
@@ -16080,7 +16054,7 @@
     }
 
     // Visible build tag in the reader bar so a stale cached copy is instantly obvious.
-    const DOCX_READER_BUILD = 'r9';
+    const DOCX_READER_BUILD = 'r10';
 
     function docxReaderActivePageNo(pageNos) {
       const want = Number(state.activeScriptPageNo);
@@ -16156,12 +16130,10 @@
             const wasSel = block.classList.contains('selected');
             wrap.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
             if (wasSel) { state.docxReaderSelectedId = ''; hideDocxBlockPopover(); }
-            else { state.docxReaderSelectedId = id; block.classList.add('selected'); showDocxBlockPopover(block, id); }
+            else { state.docxReaderSelectedId = id; block.classList.add('selected'); showDocxBlockComposer(block, id); }
           }
         });
       }
-      const scroller = el.querySelector('.docx-pages-scroll');
-      if (scroller) scroller.addEventListener('scroll', () => hideDocxBlockPopover(), { passive: true });
     }
 
     // A page's notes shown as capsules in its blank bottom margin (the storyboard/memo band).
@@ -16179,47 +16151,82 @@
       return caps.join('');
     }
 
-    // Body-level, position:fixed popover so it can't be clipped by the reader's scroll overflow
-    // (an in-scroll absolute popover was positioned right but visually clipped = "nothing shows").
-    function ensureDocxPopover() {
-      let pop = document.getElementById('dvrPopover');
-      if (!pop) {
-        pop = document.createElement('div');
-        pop.id = 'dvrPopover';
-        pop.className = 'dvr-popover';
-        document.body.appendChild(pop);
-      }
-      return pop;
-    }
-
+    // Tapping a block opens the SAME inline feedback composer the PDF view uses — three note-type
+    // buttons (修正注釈 / 修正案 / 確定情報) + a textarea + Cancel/Add — so the annotation UI matches
+    // the PDF side. Reuses the .pdf-feedback-composer classes for identical styling; only the
+    // placement differs (fixed viewport space, clamped, since the docx reader has no page layer).
     function hideDocxBlockPopover() {
-      const pop = document.getElementById('dvrPopover');
-      if (pop) pop.classList.remove('show');
+      document.querySelectorAll('.dvr-composer').forEach((el) => {
+        if (el._outside) document.removeEventListener('pointerdown', el._outside, true);
+        el.remove();
+      });
     }
 
-    function showDocxBlockPopover(span, id) {
-      const pop = ensureDocxPopover();
+    function showDocxBlockComposer(span, id) {
+      hideDocxBlockPopover();
+      const block = (state.project.sourceBlocks || []).find(b => b.id === id);
+      const targetText = block ? displayPdfBlockText(block.rawText || block.text || '').slice(0, 40) : id;
+      const wrap = document.createElement('div');
+      wrap.className = 'pdf-feedback-composer dvr-composer';
+      const composer = { noteType: 'retake' };
+      wrap.innerHTML = `
+        <div class="pdf-feedback-composer-target" title="${esc(targetText)}">${esc(targetText)}</div>
+        <div class="pdf-feedback-composer-type">
+          <button type="button" class="retake active" data-fb-type="retake">${esc(t('noteRetake'))}</button>
+          <button type="button" class="direct_rewrite" data-fb-type="direct_rewrite">${esc(t('rewriteDraft'))}</button>
+          <button type="button" class="fact" data-fb-type="fact">${esc(t('noteFact'))}</button>
+        </div>
+        <textarea placeholder="${esc(t('pdfFeedbackComposerPlaceholder'))}"></textarea>
+        <div class="pdf-feedback-composer-actions">
+          <button type="button" class="small ghost" data-fb-cancel>${esc(t('pdfFeedbackComposerCancel'))}</button>
+          <button type="button" class="small save retake" data-fb-save>${esc(t('pdfFeedbackComposerSave'))}</button>
+        </div>`;
+      document.body.appendChild(wrap);
+      // fixed placement near the block, clamped into the viewport
       const br = span.getBoundingClientRect();
-      pop.innerHTML = `<button data-pv="retake">${esc(t('feedback'))}</button>`
-        + `<button data-pv="rewrite">${esc(t('rewriteDraft'))}</button>`
-        + `<button class="pv-close" data-pv="close">✕</button>`;
-      // Always drop it just BELOW the block (blocks live in the top band, so below is always
-      // on-screen) and clamp into the viewport so it can never land off the top or the edges.
-      pop.classList.add('below');
-      const left = Math.max(90, Math.min(br.left + br.width / 2, window.innerWidth - 90));
+      const cw = wrap.offsetWidth || 248;
+      const ch = wrap.offsetHeight || 160;
+      let left = Math.min(Math.max(8, br.left + br.width / 2 - cw / 2), window.innerWidth - cw - 8);
       let top = br.bottom + 8;
-      pop.style.left = Math.round(left) + 'px';
-      pop.style.top = Math.round(top) + 'px';
-      pop.classList.add('show');
-      const ph = pop.getBoundingClientRect().height || 42;
-      if (top + ph > window.innerHeight - 8) pop.style.top = Math.round(Math.max(8, window.innerHeight - ph - 8)) + 'px';
-      pop.querySelector('[data-pv="retake"]').addEventListener('pointerdown', () => openAddBlockNote(id, 'retake'));
-      pop.querySelector('[data-pv="rewrite"]').addEventListener('pointerdown', () => openAddBlockNote(id, 'direct_rewrite'));
-      pop.querySelector('[data-pv="close"]').addEventListener('pointerdown', () => {
-        hideDocxBlockPopover();
+      if (top + ch > window.innerHeight - 8) top = br.top - ch - 8;
+      if (top < 8) top = 8;
+      wrap.style.position = 'fixed';
+      wrap.style.left = Math.round(left) + 'px';
+      wrap.style.top = Math.round(top) + 'px';
+      const ta = wrap.querySelector('textarea');
+      const saveBtn = wrap.querySelector('[data-fb-save]');
+      const setType = (type) => {
+        composer.noteType = type;
+        wrap.querySelectorAll('[data-fb-type]').forEach(b => b.classList.toggle('active', b.getAttribute('data-fb-type') === type));
+        saveBtn.className = 'small save ' + type;
+      };
+      const closeC = () => {
+        if (wrap._outside) document.removeEventListener('pointerdown', wrap._outside, true);
+        wrap.remove();
         state.docxReaderSelectedId = '';
         document.querySelectorAll('.dvr-block.selected').forEach(n => n.classList.remove('selected'));
+      };
+      const commit = () => {
+        const text = ta.value.trim();
+        if (!text) { closeC(); return; }
+        addRevisionNote('block', id, composer.noteType, text);
+        const panel = $('scriptStructurePanel'); if (panel) panel.dataset.renderKey = '';
+        closeC();
+        syncAll(false);
+      };
+      wrap.querySelectorAll('[data-fb-type]').forEach(b => b.addEventListener('pointerdown', (e) => { e.preventDefault(); setType(b.getAttribute('data-fb-type')); ta.focus(); }));
+      wrap.querySelector('[data-fb-cancel]').addEventListener('pointerdown', (e) => { e.preventDefault(); closeC(); });
+      saveBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); commit(); });
+      ta.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commit(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); closeC(); }
       });
+      const onDocDown = (e) => {
+        if (e.target.closest('.dvr-composer') || e.target.closest('.dvr-block')) return;
+        closeC();
+      };
+      wrap._outside = onDocDown;
+      setTimeout(() => { document.addEventListener('pointerdown', onDocDown, true); ta.focus(); }, 0);
     }
 
     function renderScriptStructurePanel() {
