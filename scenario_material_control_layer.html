@@ -1585,11 +1585,16 @@
       /* nowrap: without it the vertical badge wraps its last kanji into a second
          column, which reads as the character drifting left */
       white-space: nowrap;
+      /* flex-shrink:0: badge/del sit in a vertical (orthogonal) flex column inside
+         head; without this the flex algorithm can compress the badge below the
+         width its own text needs, pushing the last glyph past its box edge. */
+      flex-shrink: 0;
     }
     .pdf-feedback-note.fact .pdf-feedback-note-badge { background: var(--fact); }
     .pdf-feedback-note.direct_rewrite .pdf-feedback-note-badge { background: var(--rewrite); }
     .pdf-feedback-note-del {
       min-height: 14px; width: 14px;
+      flex-shrink: 0;
       padding: 0;
       border: 0;
       background: transparent;
@@ -19190,11 +19195,19 @@
         const head = note.querySelector('.pdf-feedback-note-head');
         if (!txt) return;
         note.style.width = '';
+        // head is vertical-rl nested inside note's horizontal flex column — an orthogonal
+        // flex item. Leaving its cross-size on "auto" makes its final box depend on the
+        // engine's orthogonal-flow auto-sizing pass; pin it to a measured px value (like
+        // note's own width below) so the badge always renders at a definite size instead
+        // of whatever auto-sizing happens to resolve to.
+        if (head) head.style.width = '';
         txt.style.maxHeight = maxPx + 'px';
+        const headW = head ? head.offsetWidth : 0;
+        if (head) head.style.width = headW + 'px';
         const cs = getComputedStyle(note);
         const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
           + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
-        note.style.width = Math.ceil(Math.max(txt.offsetWidth, head ? head.offsetWidth : 0) + pad) + 'px';
+        note.style.width = Math.ceil(Math.max(txt.offsetWidth, headW) + pad) + 'px';
       });
     }
 
