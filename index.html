@@ -1912,12 +1912,11 @@
     .chip-add:hover { color: var(--ink); border-color: var(--line-strong); }
     .entity-tag-picker {
       position: fixed; z-index: 5000; background: var(--panel); border: 1px solid var(--line);
-      border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px; display: grid; gap: 1px;
-      max-height: 240px; overflow: auto; min-width: 120px;
+      border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px;
+      display: flex; align-items: center; gap: 4px;
     }
-    .entity-tag-picker button { display: block; width: 100%; text-align: left; padding: 5px 10px; border: 0; background: none; box-shadow: none; cursor: pointer; border-radius: 6px; font-size: 11.5px; white-space: nowrap; }
-    .entity-tag-picker button:hover { background: var(--chip); }
-    .entity-tag-picker-empty { padding: 5px 10px; color: var(--muted); font-size: 11px; }
+    .entity-tag-input { min-height: 26px; width: 150px; padding: 3px 8px; font-size: 11.5px; margin: 0; }
+    .entity-tag-add-btn { min-height: 26px; padding: 0 8px; font-size: 13px; line-height: 1; cursor: pointer; }
     .material-card-rows { display: grid; gap: 4px; padding: 7px 9px 0; }
     .material-card-rows .annotation-row-text[data-edit-entity-note], .material-card-rows .annotation-row-text[data-edit-entity-claim] { cursor: pointer; }
     .material-card-rows .annotation-row-text[data-edit-entity-note]:hover, .material-card-rows .annotation-row-text[data-edit-entity-claim]:hover { text-decoration: underline dotted; }
@@ -3400,6 +3399,7 @@
         summaryPlaceholder: '概要を入力…',
         addSummary: '+ 概要',
         addTagLabel: '+ タグ',
+        addTagPlaceholder: 'タグを入力…',
         deleteTagHint: 'タグを削除',
         versionLabel: '版',
         versionLatest: '最新',
@@ -3718,6 +3718,7 @@
         summaryPlaceholder: '요약 입력…',
         addSummary: '+ 요약',
         addTagLabel: '+ 태그',
+        addTagPlaceholder: '태그 입력…',
         deleteTagHint: '태그 삭제',
         versionLabel: '버전',
         versionLatest: '최신',
@@ -4035,6 +4036,7 @@
         summaryPlaceholder: 'Enter summary…',
         addSummary: '+ Summary',
         addTagLabel: '+ Tag',
+        addTagPlaceholder: 'Enter tag…',
         deleteTagHint: 'Remove tag',
         versionLabel: 'Version',
         versionLatest: 'Latest',
@@ -5670,26 +5672,33 @@
       if (e.target.closest('[data-add-tag]')) return;
       closeEntityTagPicker();
     }
+    // Free-text tag entry: a small floating input anchored to the + chip. Enter (or the ↵
+    // button) adds what was typed; Escape / clicking away cancels. No predefined list.
     function openEntityTagPicker(entityId, anchor) {
       const entity = (state.project.entities || []).find(e => e.id === entityId);
       if (!entity || !anchor) return;
       closeEntityTagPicker();
-      const present = new Set(entity.tags || []);
-      const options = tagOptionsForEntity(entity).filter(([value]) => !present.has(value));
       const menu = document.createElement('div');
-      menu.className = 'entity-tag-picker';
-      menu.innerHTML = options.map(([value, label]) => `<button type="button" data-pick-tag="${esc(value)}">${esc(label)}</button>`).join('')
-        || `<div class="entity-tag-picker-empty">—</div>`;
+      menu.className = 'entity-tag-picker entity-tag-input-wrap';
+      menu.innerHTML = `<input type="text" class="entity-tag-input" placeholder="${esc(t('addTagPlaceholder'))}" /><button type="button" class="entity-tag-add-btn" title="${esc(t('addButton'))}">&#8629;</button>`;
       document.body.appendChild(menu);
       const r = anchor.getBoundingClientRect();
-      const mw = menu.offsetWidth || 160, mh = menu.offsetHeight || 40;
+      const mw = menu.offsetWidth || 180, mh = menu.offsetHeight || 34;
       menu.style.left = Math.max(4, Math.min(window.innerWidth - mw - 8, r.left)) + 'px';
       menu.style.top = Math.max(4, Math.min(window.innerHeight - mh - 8, r.bottom + 4)) + 'px';
       entityTagPickerEl = menu;
-      menu.querySelectorAll('[data-pick-tag]').forEach(btn => btn.addEventListener('click', () => {
+      const input = menu.querySelector('.entity-tag-input');
+      const commit = () => {
+        const val = norm(input.value);
         closeEntityTagPicker();
-        addEntityTagById(entityId, btn.getAttribute('data-pick-tag'));
-      }));
+        if (val) addEntityTagById(entityId, val);
+      };
+      menu.querySelector('.entity-tag-add-btn').addEventListener('click', commit);
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); closeEntityTagPicker(); }
+      });
+      input.focus();
       setTimeout(() => document.addEventListener('pointerdown', entityTagPickerOutside, true), 0);
     }
 
