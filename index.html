@@ -1603,6 +1603,16 @@
       cursor: pointer;
     }
     .pdf-feedback-note-del:hover { opacity: 1; }
+    /* Page-level floating notes reuse the exact same capsule; only the context menu is new UI. */
+    .page-note-context-menu {
+      position: fixed; z-index: 5000; background: #fff; border: 1px solid rgba(0,0,0,.18);
+      border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.22); padding: 4px; font-size: 12px;
+    }
+    .page-note-context-menu button {
+      display: block; width: 100%; text-align: left; padding: 6px 12px; border: 0;
+      background: none; cursor: pointer; border-radius: 6px; white-space: nowrap; font-size: 12px;
+    }
+    .page-note-context-menu button:hover { background: rgba(0,0,0,.07); }
     .pdf-feedback-note-text {
       writing-mode: vertical-rl;
       text-orientation: mixed;
@@ -3380,6 +3390,8 @@
         pdfFeedbackComposerPlaceholder: '修正案・フィードバックを入力…',
         pdfFeedbackComposerSave: '追加',
         pdfFeedbackComposerCancel: 'キャンセル',
+        pageNoteAddMenu: 'ここにページ注釈を追加',
+        pageNoteTarget: 'p.{page} ページ全体',
         pdfFeedbackHint: 'ブロックをクリックしてフィードバックを追加',
         copyAllPageDebugText: '全ページデバッグをコピー',
         copyAllPageDebugTextBusy: '全ページコピー中...',
@@ -3687,6 +3699,8 @@
         pdfFeedbackComposerPlaceholder: '수정안/피드백 입력…',
         pdfFeedbackComposerSave: '추가',
         pdfFeedbackComposerCancel: '취소',
+        pageNoteAddMenu: '여기에 페이지 주석 추가',
+        pageNoteTarget: 'p.{page} 페이지 전체',
         pdfFeedbackHint: '블록을 클릭하면 피드백을 달 수 있음',
         copyAllPageDebugText: '전체 페이지 디버그 복사',
         copyAllPageDebugTextBusy: '전체 페이지 복사중...',
@@ -3993,6 +4007,8 @@
         pdfFeedbackComposerPlaceholder: 'Type feedback / revision…',
         pdfFeedbackComposerSave: 'Add',
         pdfFeedbackComposerCancel: 'Cancel',
+        pageNoteAddMenu: 'Add page note here',
+        pageNoteTarget: 'p.{page} whole page',
         pdfFeedbackHint: 'Click a block to attach feedback',
         copyAllPageDebugText: 'Copy All Page Debug',
         copyAllPageDebugTextBusy: 'Copying All Pages...',
@@ -15968,8 +15984,8 @@
 
     function docxReaderRenderKey(doc, blocks) {
       const notesKey = (state.project.revisionNotes || [])
-        .filter(n => n.targetType === 'block')
-        .map(n => n.targetId + ':' + n.noteType + ':' + n.status).join('|');
+        .filter(n => n.targetType === 'block' || n.targetType === 'page')
+        .map(n => n.targetId + ':' + n.noteType + ':' + n.status + ':' + String(n.text || '').length).join('|');
       const blockKey = blocks.map(b => [b.id, b.pageNo || 1, docxReaderBlockKind(b), b.speaker || '', (b.text || b.rawText || '').length].join(':')).join('|');
       const widthBucket = Math.round((($('scriptStructurePanel') || {}).clientWidth || 0) / 40);
       return [doc && doc.id || '', 'docx', doc.docxPageLayout ? 'pg' : 'flow', widthBucket, Number(state.activeScriptPageNo) || 1, blockKey, notesKey].join('#');
@@ -19377,13 +19393,15 @@
         entries.push({ blockId, rect, notes });
       });
       layer.innerHTML = '';
-      if (!entries.length) { bindRevisionNoteDeleteButtons(); return; }
-      // Vertical JP script reads right→left: give right-hand columns first pick of space.
-      entries.sort((a, b) => (b.rect.left + b.rect.width) - (a.rect.left + a.rect.width));
       const layerH = layer.clientHeight || 1;
       const layerW = layer.clientWidth || 1;
       const band = pdfFeedbackContentBand();
       const occupied = [];
+      // Free-floating page notes go first: they own their saved spot, block capsules route around them.
+      renderPageFeedbackNotes(layer, occupied, layerW, layerH);
+      if (!entries.length) { bindRevisionNoteDeleteButtons(); return; }
+      // Vertical JP script reads right→left: give right-hand columns first pick of space.
+      entries.sort((a, b) => (b.rect.left + b.rect.width) - (a.rect.left + a.rect.width));
       const buildStack = (entry) => {
         const stack = document.createElement('div');
         stack.className = 'pdf-feedback-note-stack';
@@ -19469,6 +19487,230 @@
       });
       bindRevisionNoteDeleteButtons();
     }
+
+
+    // ---- Page-level floating notes: same capsule UI, anchored to the page itself (no leader line). ----
+    function pdfFeedbackCurrentPageInfo() {
+      const doc = activeDocument();
+      if (!doc) return null;
+      const surface = document.getElementById('pdfPageSurface');
+      const fromSurface = surface ? Number(surface.getAttribute('data-page-no')) : NaN;
+      const pageNo = Number.isFinite(fromSurface) && fromSurface > 0 ? fromSurface : (Number(state.activeScriptPageNo) || 1);
+      return { doc, pageNo, key: doc.id + '#p' + pageNo };
+    }
+
+    function parsePageNoteTarget(targetId) {
+      const m = String(targetId || '').match(/^(.*)#p(\d+)$/);
+      return m ? { docId: m[1], pageNo: Number(m[2]) || 1 } : null;
+    }
+
+    function pageNotesForCurrentPage() {
+      const info = pdfFeedbackCurrentPageInfo();
+      if (!info) return [];
+      return (state.project.revisionNotes || []).filter(n => n.targetType === 'page' && n.targetId === info.key);
+    }
+
+    function beginPageNoteStackDrag(ev, stack, note) {
+      if (state.pdfOverlayDebugMode) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const layer = $('pdfFeedbackLayer');
+      if (!layer) return;
+      const lw = layer.clientWidth || 1, lh = layer.clientHeight || 1;
+      const startX = ev.clientX, startY = ev.clientY;
+      const startLeft = parseFloat(stack.style.left) || 0;
+      const startTop = parseFloat(stack.style.top) || 0;
+      const wPct = stack.offsetWidth / lw * 100, hPct = stack.offsetHeight / lh * 100;
+      let moved = false, pendingX = startX, pendingY = startY, raf = 0;
+      const applyFrame = () => {
+        raf = 0;
+        const z = canvasZoomFactor();
+        const dl = (pendingX - startX) / z / lw * 100;
+        const dt = (pendingY - startY) / z / lh * 100;
+        stack.style.left = Math.max(0.2, Math.min(100 - wPct - 0.2, startLeft + dl)) + '%';
+        stack.style.top = Math.max(0.2, Math.min(100 - hPct - 0.2, startTop + dt)) + '%';
+      };
+      const onMove = (e) => {
+        if (!moved && Math.abs(e.clientX - startX) < 3 && Math.abs(e.clientY - startY) < 3) return;
+        if (!moved) { moved = true; stack.classList.add('dragging'); }
+        pendingX = e.clientX; pendingY = e.clientY;
+        if (!raf) raf = requestAnimationFrame(applyFrame);
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        if (raf) { cancelAnimationFrame(raf); applyFrame(); }
+        stack.classList.remove('dragging');
+        if (!moved) return;
+        const txt = stack.querySelector('.pdf-feedback-note-text');
+        const maxPx = txt ? parseFloat(txt.style.maxHeight) || null : null;
+        note.pdfPos = { left: parseFloat(stack.style.left) || 0, top: parseFloat(stack.style.top) || 0, maxPx };
+        markProjectChanged('move_feedback_note');
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    }
+
+    // Draw the floating page notes onto the feedback layer. Each note is its own stack so it can
+    // be dragged independently; the rects it claims are pushed into `occupied` so block-note
+    // auto-placement routes around them.
+    function renderPageFeedbackNotes(layer, occupied, layerW, layerH) {
+      const notes = pageNotesForCurrentPage();
+      notes.forEach((note, index) => {
+        const stack = document.createElement('div');
+        stack.className = 'pdf-feedback-note-stack page-float';
+        stack.setAttribute('data-page-note-stack', note.id);
+        stack.innerHTML = pdfFeedbackNoteStackHtml([note]);
+        stack.style.visibility = 'hidden';
+        layer.appendChild(stack);
+        const saved = note.pdfPos || null;
+        applyPdfNoteCapsuleSize(stack, (saved && saved.maxPx) || Math.max(96, layerH * 0.3));
+        const wPct = stack.offsetWidth / layerW * 100, hPct = stack.offsetHeight / layerH * 100;
+        const left = saved ? saved.left : (2 + (index % 5) * 5);
+        const top = saved ? saved.top : (2 + (index % 4) * 8);
+        stack.style.left = Math.max(0.2, Math.min(100 - wPct - 0.2, left)) + '%';
+        stack.style.top = Math.max(0.2, Math.min(100 - hPct - 0.2, top)) + '%';
+        stack.style.visibility = '';
+        occupied.push({
+          left: parseFloat(stack.style.left) || 0,
+          top: parseFloat(stack.style.top) || 0,
+          width: wPct,
+          height: hPct
+        });
+        if (!note.pdfPos) note.pdfPos = { left: parseFloat(stack.style.left) || 0, top: parseFloat(stack.style.top) || 0, maxPx: null };
+        stack.querySelectorAll('.pdf-feedback-note-head').forEach((head) => {
+          head.addEventListener('pointerdown', (ev) => {
+            if (ev.target.closest('[data-delete-revision-note]')) return;
+            beginPageNoteStackDrag(ev, stack, note);
+          });
+        });
+        stack.querySelectorAll('.pdf-feedback-note-text').forEach((txt) => {
+          txt.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            openPdfPageFeedbackComposer(null, note.id);
+          });
+        });
+      });
+      return notes.length;
+    }
+
+    function openPdfPageFeedbackComposer(posPct, editNoteId) {
+      const info = pdfFeedbackCurrentPageInfo();
+      const layer = $('pdfFeedbackLayer');
+      if (!info || !layer) return;
+      closePdfFeedbackComposer();
+      const editNote = editNoteId ? (state.project.revisionNotes || []).find(n => n.id === editNoteId) : null;
+      const anchorPos = posPct || (editNote && editNote.pdfPos) || { left: 30, top: 6 };
+      state.pdfFeedbackComposer = { blockId: '', pageKey: info.key, pagePos: anchorPos, noteType: editNote ? (editNote.noteType || 'retake') : 'retake', noteId: editNote ? editNote.id : null };
+      const targetText = t('pageNoteTarget', { page: info.pageNo });
+      const wrap = document.createElement('div');
+      wrap.className = 'pdf-feedback-composer';
+      wrap.style.visibility = 'hidden';
+      wrap.innerHTML = `
+        <div class="pdf-feedback-composer-target" title="${esc(targetText)}">${esc(targetText)}</div>
+        <div class="pdf-feedback-composer-type">
+          <button type="button" class="retake active" data-fb-type="retake">${esc(t('noteRetake'))}</button>
+          <button type="button" class="direct_rewrite" data-fb-type="direct_rewrite">${esc(t('rewriteDraft'))}</button>
+          <button type="button" class="fact" data-fb-type="fact">${esc(t('noteFact'))}</button>
+        </div>
+        <textarea placeholder="${esc(t('pdfFeedbackComposerPlaceholder'))}"></textarea>
+        <div class="pdf-feedback-composer-actions">
+          <button type="button" class="small ghost" data-fb-cancel>${esc(t('pdfFeedbackComposerCancel'))}</button>
+          <button type="button" class="small save retake" data-fb-save>${esc(t('pdfFeedbackComposerSave'))}</button>
+        </div>`;
+      layer.appendChild(wrap);
+      const layerW = layer.clientWidth || 1;
+      const layerH = layer.clientHeight || 1;
+      const wPct = (wrap.offsetWidth / layerW) * 100;
+      const hPct = (wrap.offsetHeight / layerH) * 100;
+      wrap.style.left = Math.max(0.2, Math.min(100 - wPct - 0.2, anchorPos.left)) + '%';
+      wrap.style.top = Math.max(0.2, Math.min(100 - hPct - 0.2, anchorPos.top)) + '%';
+      wrap.style.visibility = '';
+      const ta = wrap.querySelector('textarea');
+      const saveBtn = wrap.querySelector('[data-fb-save]');
+      const setType = (type) => {
+        state.pdfFeedbackComposer.noteType = type;
+        wrap.querySelectorAll('[data-fb-type]').forEach(b => b.classList.toggle('active', b.getAttribute('data-fb-type') === type));
+        saveBtn.className = 'small save ' + type;
+      };
+      if (editNote) { ta.value = editNote.text || ''; setType(editNote.noteType || 'retake'); }
+      wrap.querySelectorAll('[data-fb-type]').forEach(b => b.addEventListener('click', () => { setType(b.getAttribute('data-fb-type')); ta.focus(); }));
+      wrap.querySelector('[data-fb-cancel]').addEventListener('click', closePdfFeedbackComposer);
+      const commit = () => {
+        const text = ta.value.trim();
+        if (!text) { closePdfFeedbackComposer(); return; }
+        const editing = state.pdfFeedbackComposer.noteId
+          ? (state.project.revisionNotes || []).find(n => n.id === state.pdfFeedbackComposer.noteId)
+          : null;
+        if (editing) {
+          editing.text = norm(text);
+          editing.noteType = state.pdfFeedbackComposer.noteType;
+          editing.color = editing.noteType === 'fact' ? 'green' : 'red';
+          state.project.audit.push({ at: nowIso(), action: 'edit_revision_note', noteId: editing.id, targetType: 'page', targetId: editing.targetId });
+          markProjectChanged('edit_revision_note_inline');
+        } else {
+          const note = addRevisionNote('page', state.pdfFeedbackComposer.pageKey, state.pdfFeedbackComposer.noteType, text);
+          if (note) note.pdfPos = { left: state.pdfFeedbackComposer.pagePos.left, top: state.pdfFeedbackComposer.pagePos.top, maxPx: null };
+          markProjectChanged('add_revision_note_inline');
+        }
+        closePdfFeedbackComposer();
+        const panel = $('scriptStructurePanel');
+        if (panel) panel.dataset.renderKey = '';
+        syncAll(false);
+      };
+      saveBtn.addEventListener('click', commit);
+      ta.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commit(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); closePdfFeedbackComposer(); }
+      });
+      const onDocDown = (e) => {
+        if (e.target.closest('.pdf-feedback-composer')) return;
+        closePdfFeedbackComposer();
+      };
+      wrap._outside = onDocDown;
+      setTimeout(() => { document.addEventListener('pointerdown', onDocDown, true); ta.focus(); }, 0);
+    }
+
+    // Right-click anywhere on the page surface -> "add page note here".
+    let pageNoteMenuEl = null;
+    function closePageNoteContextMenu() {
+      if (pageNoteMenuEl) { pageNoteMenuEl.remove(); pageNoteMenuEl = null; }
+      document.removeEventListener('pointerdown', pageNoteMenuOutside, true);
+    }
+    function pageNoteMenuOutside(e) {
+      if (pageNoteMenuEl && e.target.closest('.page-note-context-menu')) return;
+      closePageNoteContextMenu();
+    }
+    function bindPageNoteContextMenu() {
+      if (document._pageNoteCtxBound) return;
+      document._pageNoteCtxBound = true;
+      document.addEventListener('contextmenu', (ev) => {
+        const surface = ev.target.closest('#pdfPageSurface');
+        if (!surface) return;
+        if (state.pdfOverlayDebugMode) return;
+        ev.preventDefault();
+        closePageNoteContextMenu();
+        const menu = document.createElement('div');
+        menu.className = 'page-note-context-menu';
+        menu.innerHTML = `<button type="button">${esc(t('pageNoteAddMenu'))}</button>`;
+        document.body.appendChild(menu);
+        const mw = menu.offsetWidth || 180, mh = menu.offsetHeight || 36;
+        menu.style.left = Math.max(4, Math.min(window.innerWidth - mw - 8, ev.clientX)) + 'px';
+        menu.style.top = Math.max(4, Math.min(window.innerHeight - mh - 8, ev.clientY)) + 'px';
+        pageNoteMenuEl = menu;
+        const sr = surface.getBoundingClientRect();
+        const pos = {
+          left: Math.max(0.2, Math.min(94, (ev.clientX - sr.left) / Math.max(1, sr.width) * 100)),
+          top: Math.max(0.2, Math.min(94, (ev.clientY - sr.top) / Math.max(1, sr.height) * 100))
+        };
+        menu.querySelector('button').addEventListener('click', () => {
+          closePageNoteContextMenu();
+          openPdfPageFeedbackComposer(pos, null);
+        });
+        setTimeout(() => document.addEventListener('pointerdown', pageNoteMenuOutside, true), 0);
+      });
+    }
+    bindPageNoteContextMenu();
 
     function openPdfFeedbackComposer(blockId, editNoteId) {
       if (!blockId) return;
@@ -20199,15 +20441,23 @@
       // Compact rows: type badge + text + target excerpt. Internal ids, target type
       // and raw timestamps stay in the data — they are noise on screen.
       $('conflictList').innerHTML = notes.map(n => {
+        const pageTarget = n.targetType === 'page' ? parsePageNoteTarget(n.targetId) : null;
         const target = n.targetType === 'entity'
           ? state.project.entities.find(e => e.id === n.targetId)
-          : state.project.sourceBlocks.find(b => b.id === n.targetId);
-        const rawTitle = target ? (target.name || displayPdfBlockText(target.rawText || target.text || '') || target.id) : '';
+          : n.targetType === 'page'
+            ? null
+            : state.project.sourceBlocks.find(b => b.id === n.targetId);
+        const pageDoc = pageTarget ? (state.project.documents || []).find(d => d.id === pageTarget.docId) : null;
+        const rawTitle = pageTarget
+          ? ((pageDoc ? (pageDoc.title || pageDoc.id) + ' ' : '') + t('pageNoteTarget', { page: pageTarget.pageNo }))
+          : (target ? (target.name || displayPdfBlockText(target.rawText || target.text || '') || target.id) : '');
         const title = String(rawTitle || '').replace(/\s+/g, ' ').slice(0, 26);
         const type = n.noteType === 'fact' ? 'fact' : n.noteType === 'direct_rewrite' ? 'direct_rewrite' : 'retake';
         const targetHtml = n.targetType === 'block'
           ? `<span class="annotation-row-target" data-jump-block="${esc(n.targetId)}" title="${esc(rawTitle)}">${esc(title)}</span>`
-          : (title ? `<span class="annotation-row-target" title="${esc(rawTitle)}">${esc(title)}</span>` : '');
+          : pageTarget
+            ? `<span class="annotation-row-target" data-jump-page="${esc(pageTarget.pageNo)}" data-jump-doc="${esc(pageTarget.docId)}" title="${esc(rawTitle)}">${esc(title)}</span>`
+            : (title ? `<span class="annotation-row-target" title="${esc(rawTitle)}">${esc(title)}</span>` : '');
         const linked = (n.linkedEntityIds || []).map(id => state.project.entities.find(e => e.id === id)).filter(Boolean).map(e => `<span class="chip type-${esc(e.type)}">${esc(e.name)}</span>`).join('');
         return `<div class="annotation-row ${type} ${n.status === 'done' ? 'done' : ''}">
           <span class="annotation-row-badge">${esc(noteLabel(n))}</span>
@@ -20222,6 +20472,15 @@
         </div>`;
       }).join('');
       bindJumpLinks();
+      document.querySelectorAll('[data-jump-page]').forEach(el => el.addEventListener('click', () => {
+        const docId = el.getAttribute('data-jump-doc');
+        const pageNo = Number(el.getAttribute('data-jump-page')) || 1;
+        if (docId && state.project.activeDocumentId !== docId && (state.project.documents || []).some(d => d.id === docId)) switchActiveDocument(docId);
+        state.activeScriptPageNo = pageNo;
+        const panel = $('scriptStructurePanel');
+        if (panel) panel.dataset.renderKey = '';
+        renderScriptStructurePanel();
+      }));
       document.querySelectorAll('[data-close-note]').forEach(el => el.addEventListener('click', () => {
         const note = state.project.revisionNotes.find(x => x.id === el.getAttribute('data-close-note'));
         if (note) note.status = note.status === 'done' ? 'open' : 'done';
