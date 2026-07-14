@@ -292,10 +292,6 @@
     .rs-meta { font-size: 9.5px; color: var(--muted); font-weight: 600; }
     .restore-foot { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line-soft); }
     .restore-foot .small { flex: 1; }
-    .restore-foot-col { display: grid; gap: 6px; padding: 8px; border-top: 1px solid var(--line-soft); }
-    .restore-foot-col .restore-foot { padding: 0; border-top: 0; }
-    #restoreChangeDirBtn { justify-content: flex-start; }
-    #restoreChangeDirBtn .rs-dir { color: var(--muted); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* Global file-drop overlay (drop a settings .json or a document anywhere) */
     #globalDropOverlay {
       position: fixed; inset: 0; z-index: 70;
@@ -3106,7 +3102,7 @@
         <input id="projectFileInput" type="file" accept=".json" hidden="">
         <button id="saveSettingsBtn" class="small" data-requires-project="" data-i18n="saveSnapshot">저장</button>
         <div class="restore-wrap">
-          <button id="restoreBtn" class="small" data-requires-project="" data-i18n="restorePoints">복원</button>
+          <button id="restoreBtn" class="small" data-requires-project="" data-i18n="loadMenuBtn">불러오기</button>
           <div id="restorePopover" class="restore-popover hidden"></div>
         </div>
         <select id="languageSelect" class="language-select" aria-label="Language">
@@ -3213,6 +3209,7 @@
         addWork: '作品を追加',
         reset: '初期化',
         saveSnapshot: '保存',
+        loadMenuBtn: '読込',
         restorePoints: '復元',
         restoreEmpty: '保存された復元ポイントがありません',
         slotMeta: 'ブロック {blocks} ・ 注釈 {notes}',
@@ -3220,15 +3217,12 @@
         restoreReasonAuto: '自動',
         restoreReasonLoad: '読込',
         restoreReasonBeforeRestore: '復元前',
-        exportJson: 'ファイル書き出し',
         importJson: 'ファイル読込',
         savedToast: '復元ポイントを保存しました',
         savedToastFail: '変更がないためスキップ',
         restoredToast: '復元しました',
         exportedToast: '設定ファイルを保存しました',
         exportFail: '書き出し失敗（データ過大）',
-        savedToDirToast: '{name} に保存しました',
-        changeSaveDir: '保存先フォルダを変更',
         importedToast: '読み込みました',
         paneSourceBlocks: '作品・原文',
         paneNotesShare: '注釈・共有',
@@ -3522,6 +3516,7 @@
         addWork: '작품 추가',
         reset: '초기화',
         saveSnapshot: '저장',
+        loadMenuBtn: '불러오기',
         restorePoints: '복원',
         restoreEmpty: '저장된 복원 지점이 없습니다',
         slotMeta: '블록 {blocks} · 주석 {notes}',
@@ -3529,15 +3524,12 @@
         restoreReasonAuto: '자동',
         restoreReasonLoad: '불러옴',
         restoreReasonBeforeRestore: '복원 전',
-        exportJson: '파일로 내보내기',
         importJson: '파일에서 불러오기',
         savedToast: '복원 지점을 저장했습니다',
         savedToastFail: '변경이 없어 저장을 건너뜀',
         restoredToast: '복원했습니다',
         exportedToast: '설정 파일을 저장했습니다',
         exportFail: '내보내기 실패(데이터 과대)',
-        savedToDirToast: '{name}에 저장했습니다',
-        changeSaveDir: '저장 폴더 변경',
         importedToast: '불러왔습니다',
         paneSourceBlocks: '작품 · 원문',
         paneNotesShare: '주석 · 공유',
@@ -3830,6 +3822,7 @@
         addWork: 'Add Work',
         reset: 'Reset',
         saveSnapshot: 'Save',
+        loadMenuBtn: 'Load',
         restorePoints: 'Restore',
         restoreEmpty: 'No restore points saved yet',
         slotMeta: 'Blocks {blocks} · Notes {notes}',
@@ -3837,15 +3830,12 @@
         restoreReasonAuto: 'Auto',
         restoreReasonLoad: 'Loaded',
         restoreReasonBeforeRestore: 'Pre-restore',
-        exportJson: 'Export file',
         importJson: 'Import file',
         savedToast: 'Restore point saved',
         savedToastFail: 'No changes — save skipped',
         restoredToast: 'Restored',
         exportedToast: 'Settings file saved',
         exportFail: 'Export failed (data too large)',
-        savedToDirToast: 'Saved to {name}',
-        changeSaveDir: 'Change save folder',
         importedToast: 'Imported',
         paneSourceBlocks: 'Work · Source',
         paneNotesShare: 'Notes · Share',
@@ -5249,9 +5239,8 @@
       await putSettingsAutosaveSnapshot('manual_save').catch(err => console.warn('settings autosave failed', err));
       lastAutosaveAt = Date.now();
       updateSaveStatus();
-      // 저장 = keep a restore point AND write the settings JSON to the remembered directory
-      // (asks once for a folder, then reuses it silently on later saves).
-      await saveSettingsToDirectory(false);
+      // 저장 = keep a restore point AND download the current settings as a JSON file.
+      exportSettingsJsonFile();
       syncAll(false);
     }
 
@@ -21559,16 +21548,11 @@
           </span>
         </button>`;
       }).join('') || `<div class="restore-empty">${esc(t('restoreEmpty'))}</div>`;
-      const savedDirName = (() => { try { return localStorage.getItem('scenarioSaveDirName') || ''; } catch (e) { return ''; } })();
       pop.innerHTML = `
         <div class="restore-head">${esc(t('restorePoints'))}</div>
         <div class="restore-list">${rows}</div>
-        <div class="restore-foot restore-foot-col">
-          ${fsAccessSupported() ? `<button type="button" class="small" id="restoreChangeDirBtn">${esc(t('changeSaveDir'))}${savedDirName ? ` <span class="rs-dir">· ${esc(savedDirName)}</span>` : ''}</button>` : ''}
-          <div class="restore-foot">
-            <button type="button" class="small" id="restoreExportBtn">${esc(t('exportJson'))}</button>
-            <button type="button" class="small" id="restoreImportBtn">${esc(t('importJson'))}</button>
-          </div>
+        <div class="restore-foot">
+          <button type="button" class="small" id="restoreImportBtn">${esc(t('importJson'))}</button>
         </div>`;
       pop.querySelectorAll('[data-restore-slot]').forEach(btn => btn.addEventListener('click', async () => {
         const slotId = btn.getAttribute('data-restore-slot');
@@ -21576,9 +21560,6 @@
         const ok = await restoreProjectSlot(slotId);
         if (ok) toast(t('restoredToast'));
       }));
-      const changeDir = $('restoreChangeDirBtn');
-      if (changeDir) changeDir.addEventListener('click', () => { closeRestorePopover(); saveSettingsToDirectory(true); });
-      $('restoreExportBtn').addEventListener('click', () => { closeRestorePopover(); exportSettingsJsonFile(); });
       $('restoreImportBtn').addEventListener('click', () => { closeRestorePopover(); $('projectFileInput').click(); });
     }
 
@@ -21629,76 +21610,7 @@
       catch (e) { console.warn('settings serialize failed', e); return null; }
     }
 
-    // ---- Save to a chosen directory (File System Access) with a remembered location ----
-    const SAVE_DIR_DB = 'scenario_material_control_save_dir_v1';
-    const SAVE_DIR_STORE = 'handles';
-    const SAVE_DIR_KEY = 'dir';
-    let savedDirHandle = null;
-
-    function fsAccessSupported() { return typeof window.showDirectoryPicker === 'function' && !!window.indexedDB; }
-
-    function openSaveDirDb() {
-      return new Promise((resolve, reject) => {
-        const req = window.indexedDB.open(SAVE_DIR_DB, 1);
-        req.onupgradeneeded = () => req.result.createObjectStore(SAVE_DIR_STORE);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-    async function putSavedDirHandle(handle) {
-      const db = await openSaveDirDb();
-      await new Promise((res, rej) => { const tx = db.transaction(SAVE_DIR_STORE, 'readwrite'); tx.objectStore(SAVE_DIR_STORE).put(handle, SAVE_DIR_KEY); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-      db.close();
-    }
-    async function getSavedDirHandle() {
-      const db = await openSaveDirDb();
-      const h = await new Promise((res, rej) => { const tx = db.transaction(SAVE_DIR_STORE, 'readonly'); const rq = tx.objectStore(SAVE_DIR_STORE).get(SAVE_DIR_KEY); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => rej(rq.error); });
-      db.close();
-      return h;
-    }
-    async function verifyDirPermission(handle, request) {
-      if (!handle || !handle.queryPermission) return true;
-      const opts = { mode: 'readwrite' };
-      if ((await handle.queryPermission(opts)) === 'granted') return true;
-      if (request && handle.requestPermission) return (await handle.requestPermission(opts)) === 'granted';
-      return false;
-    }
-    async function ensureSaveDirHandle(forcePick) {
-      if (!fsAccessSupported()) return null;
-      if (!forcePick) {
-        if (!savedDirHandle) { try { savedDirHandle = await getSavedDirHandle(); } catch (e) { savedDirHandle = null; } }
-        if (savedDirHandle && await verifyDirPermission(savedDirHandle, true)) return savedDirHandle;
-      }
-      try {
-        const picked = await window.showDirectoryPicker({ id: 'scenario-save-dir', mode: 'readwrite', startIn: savedDirHandle || undefined });
-        if (!(await verifyDirPermission(picked, true))) return null;
-        savedDirHandle = picked;
-        await putSavedDirHandle(picked).catch(() => {});
-        try { localStorage.setItem('scenarioSaveDirName', picked.name || ''); } catch (e) {}
-        return picked;
-      } catch (e) { return null; } // AbortError: user cancelled the picker
-    }
-    async function writeSettingsToDir(dir, text) {
-      const fileHandle = await dir.getFileHandle(projectJsonFilename(), { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(text);
-      await writable.close();
-    }
-
-    // Save to the remembered directory (or download as a fallback). forcePick=true always asks.
-    async function saveSettingsToDirectory(forcePick) {
-      const text = buildSettingsJsonText();
-      if (text == null) { toast(t('exportFail')); return false; }
-      if (!fsAccessSupported()) { downloadBlob(text, projectJsonFilename(), 'application/json;charset=utf-8'); toast(t('exportedToast')); return true; }
-      const dir = await ensureSaveDirHandle(forcePick);
-      if (!dir) return false; // cancelled / permission denied
-      try { await writeSettingsToDir(dir, text); }
-      catch (e) { console.warn('write settings failed', e); toast(t('exportFail')); return false; }
-      toast(t('savedToDirToast', { name: dir.name || '' }));
-      return true;
-    }
-
-    // Kept for the restore popover's explicit "download file" action.
+    // Save settings as a plain downloaded JSON file (no folder-linking — just export/import).
     function exportSettingsJsonFile() {
       const text = buildSettingsJsonText();
       if (text == null) { toast(t('exportFail')); return false; }
