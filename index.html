@@ -227,6 +227,7 @@
     .topbar-center { position: absolute; left: 50%; transform: translateX(-50%); gap: 8px; }
     .topbar-right { margin-left: auto; }
     #appTopbar button.small { min-height: 24px; padding: 2px 8px; font-size: 10.5px; box-shadow: none; }
+    #appTopbar button.icon-btn { padding: 2px 7px; font-size: 13px; line-height: 1; font-weight: 700; }
     #appTopbar .work-select { width: 132px; min-height: 26px; padding: 2px 6px; font-size: 11.5px; }
     #appTopbar .language-select { width: 82px; min-height: 24px; padding: 1px 6px; font-size: 10.5px; }
     /* id selectors: must beat the generic .tabs grid (declared later in this sheet) */
@@ -1898,11 +1899,28 @@
     .pill-select.authority-hard { color: #721f18; background: #f9e7e4; border-color: #e9b8b0; }
     .pill-select.authority-soft { color: #684311; background: #fbf0d9; border-color: #e3c58b; }
     .pill-select.authority-draft { color: #31596c; background: #e8f3f7; border-color: #b8d3df; }
-    .material-card-summary { padding: 7px 9px 0; font-size: 11.5px; line-height: 1.55; color: var(--ink); }
-    .material-card-tags { padding: 7px 9px 0; }
+    .material-card-summary { padding: 7px 9px 0; font-size: 11.5px; line-height: 1.55; color: var(--ink); cursor: text; border-radius: 6px; }
+    .material-card-summary:hover { background: var(--chip); }
+    .material-card-summary.is-empty { cursor: pointer; }
+    .material-summary-add { color: var(--muted); font-weight: 650; font-size: 11px; }
+    .material-summary-edit { width: 100%; min-height: 52px; margin: 0; font-size: 11.5px; line-height: 1.5; resize: vertical; }
+    .material-card-tags { padding: 7px 9px 0; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+    .removable-tag { display: inline-flex; align-items: center; gap: 3px; padding-right: 3px; }
+    .chip-x { min-height: 0; padding: 0 2px; margin: 0; border: 0; background: none; box-shadow: none; color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer; border-radius: 4px; }
+    .chip-x:hover { color: var(--danger); background: transparent; }
+    .chip-add { cursor: pointer; color: var(--muted); font-weight: 650; border-style: dashed; }
+    .chip-add:hover { color: var(--ink); border-color: var(--line-strong); }
+    .entity-tag-picker {
+      position: fixed; z-index: 5000; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px; display: grid; gap: 1px;
+      max-height: 240px; overflow: auto; min-width: 120px;
+    }
+    .entity-tag-picker button { display: block; width: 100%; text-align: left; padding: 5px 10px; border: 0; background: none; box-shadow: none; cursor: pointer; border-radius: 6px; font-size: 11.5px; white-space: nowrap; }
+    .entity-tag-picker button:hover { background: var(--chip); }
+    .entity-tag-picker-empty { padding: 5px 10px; color: var(--muted); font-size: 11px; }
     .material-card-rows { display: grid; gap: 4px; padding: 7px 9px 0; }
-    .material-card-rows .annotation-row-text[data-edit-entity-note] { cursor: pointer; }
-    .material-card-rows .annotation-row-text[data-edit-entity-note]:hover { text-decoration: underline dotted; }
+    .material-card-rows .annotation-row-text[data-edit-entity-note], .material-card-rows .annotation-row-text[data-edit-entity-claim] { cursor: pointer; }
+    .material-card-rows .annotation-row-text[data-edit-entity-note]:hover, .material-card-rows .annotation-row-text[data-edit-entity-claim]:hover { text-decoration: underline dotted; }
     .material-card-foot {
       display: flex;
       justify-content: space-between;
@@ -3110,6 +3128,8 @@
       </div>
       <div class="topbar-zone topbar-right">
         <input id="projectFileInput" type="file" accept=".json" hidden="">
+        <button id="undoBtn" class="small icon-btn" data-requires-project="" data-i18n-title="undoTitle" title="Undo" disabled>&#8630;</button>
+        <button id="redoBtn" class="small icon-btn" data-requires-project="" data-i18n-title="redoTitle" title="Redo" disabled>&#8631;</button>
         <button id="saveSettingsBtn" class="small" data-requires-project="" data-i18n="saveSnapshot">저장</button>
         <div class="restore-wrap">
           <button id="restoreBtn" class="small" data-requires-project="" data-i18n="loadMenuBtn">불러오기</button>
@@ -3162,11 +3182,14 @@
   <script>
     'use strict';
 
-    const AUTHORITY = ['hard', 'soft', 'draft'];
+    // Authority is a two-state confirmed/tentative flag (確定/仮). 'draft' is a legacy value
+    // that no longer appears in any picker; editableAuthorityValue() folds it into 'soft' (仮)
+    // for display, so old data keeps working without a migration pass.
+    const AUTHORITY = ['hard', 'soft'];
     const AUTHORITY_LABEL = {
       hard: '確定',
-      soft: '暫定',
-      draft: '草案'
+      soft: '仮',
+      draft: '仮'
     };
     const ENTITY_TYPES = ['character', 'organization', 'place', 'technology'];
     const EDIT_ENTITY_TYPES = ['character', 'organization', 'place', 'technology', 'unclassified'];
@@ -3360,15 +3383,24 @@
         claimMemo: 'メモ',
         authorityHard: '確定',
         authorityHiddenHard: '非表示確定',
-        authoritySoft: '暫定',
-        authorityDraft: '草案',
+        authoritySoft: '仮',
+        authorityDraft: '仮',
         authorityInferred: '推定',
         authorityException: '例外',
         noteDirectRewrite: '直接修正',
         noteQuestion: '確認必要',
-        noteFact: '確定情報',
+        noteFact: 'メモ',
         noteRetake: '修正注釈',
         deleteNote: '注釈削除',
+        undoTitle: '元に戻す (Ctrl+Z)',
+        redoTitle: 'やり直し (Ctrl+Y)',
+        editClaimHint: 'クリックして設定ブロックを編集',
+        deleteClaim: '設定ブロック削除',
+        editSummaryHint: 'クリックして概要を編集',
+        summaryPlaceholder: '概要を入力…',
+        addSummary: '+ 概要',
+        addTagLabel: '+ タグ',
+        deleteTagHint: 'タグを削除',
         versionLabel: '版',
         versionLatest: '最新',
         versionBase: '比較元',
@@ -3669,15 +3701,24 @@
         claimMemo: '메모',
         authorityHard: '확정',
         authorityHiddenHard: '비표시 확정',
-        authoritySoft: '잠정',
-        authorityDraft: '초안',
+        authoritySoft: '임시',
+        authorityDraft: '임시',
         authorityInferred: '추정',
         authorityException: '예외',
         noteDirectRewrite: '직접수정',
         noteQuestion: '확인필요',
-        noteFact: '확정정보',
+        noteFact: '메모',
         noteRetake: '수정주석',
         deleteNote: '주석 삭제',
+        undoTitle: '되돌리기 (Ctrl+Z)',
+        redoTitle: '다시 실행 (Ctrl+Y)',
+        editClaimHint: '클릭하면 설정블록 편집',
+        deleteClaim: '설정블록 삭제',
+        editSummaryHint: '클릭하면 요약 편집',
+        summaryPlaceholder: '요약 입력…',
+        addSummary: '+ 요약',
+        addTagLabel: '+ 태그',
+        deleteTagHint: '태그 삭제',
         versionLabel: '버전',
         versionLatest: '최신',
         versionBase: '비교 원본',
@@ -3983,9 +4024,18 @@
         authorityException: 'Exception',
         noteDirectRewrite: 'Direct Rewrite',
         noteQuestion: 'Needs Check',
-        noteFact: 'Fixed Fact',
+        noteFact: 'Memo',
         noteRetake: 'Retake Note',
         deleteNote: 'Delete Note',
+        undoTitle: 'Undo (Ctrl+Z)',
+        redoTitle: 'Redo (Ctrl+Y)',
+        editClaimHint: 'Click to edit setting block',
+        deleteClaim: 'Delete setting block',
+        editSummaryHint: 'Click to edit summary',
+        summaryPlaceholder: 'Enter summary…',
+        addSummary: '+ Summary',
+        addTagLabel: '+ Tag',
+        deleteTagHint: 'Remove tag',
         versionLabel: 'Version',
         versionLatest: 'Latest',
         versionBase: 'Compare From',
@@ -4213,9 +4263,6 @@
       return t(UI_LABEL_KEYS.type[type] || '') || type || '';
     }
 
-    function settingBlockTypeLabel(value) {
-      return t(UI_LABEL_KEYS.settingBlock[value] || '') || value || '';
-    }
 
     function tagOptionLabel(value, fallback) {
       const raw = String(value || '');
@@ -4248,6 +4295,9 @@
       });
       document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
         el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
+      });
+      document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+        el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
       });
       const languageSelect = document.getElementById('languageSelect');
       if (languageSelect) {
@@ -4295,6 +4345,80 @@
       settings: blankSettings(),
       project: blankProject()
     };
+
+    // ---- Undo / redo: snapshot-based, action-level, in-memory only ----------------------
+    // The whole project is a plain JSON tree that gets deep-cloned for restore points already,
+    // so undo just keeps a bounded stack of those clones. undoBaseline is the project as of the
+    // last committed step; markProjectChanged() schedules a debounced commit so a burst of edits
+    // (e.g. typing) collapses into ONE undo step instead of one-per-keystroke.
+    const UNDO_MAX = 60;
+    const UNDO_COMMIT_DELAY = 350;
+    const undoState = { stack: [], redo: [], baseline: null, timer: 0, suspended: 0 };
+    function undoClone(project) { try { return JSON.stringify(project); } catch (e) { return null; } }
+    function undoResetBaseline() {
+      clearTimeout(undoState.timer); undoState.timer = 0;
+      undoState.baseline = workspaceReady() ? undoClone(state.project) : null;
+    }
+    function undoResetAll() {
+      undoState.stack.length = 0; undoState.redo.length = 0;
+      undoResetBaseline(); updateUndoRedoButtons();
+    }
+    function undoScheduleCommit() {
+      if (undoState.suspended || !workspaceReady()) return;
+      if (undoState.baseline == null) { undoResetBaseline(); return; }
+      clearTimeout(undoState.timer);
+      undoState.timer = setTimeout(undoCommitStep, UNDO_COMMIT_DELAY);
+    }
+    function undoCommitStep() {
+      clearTimeout(undoState.timer); undoState.timer = 0;
+      if (undoState.suspended || !workspaceReady()) return;
+      const now = undoClone(state.project);
+      if (now == null || now === undoState.baseline) return;
+      undoState.stack.push(undoState.baseline);
+      if (undoState.stack.length > UNDO_MAX) undoState.stack.shift();
+      undoState.redo.length = 0;
+      undoState.baseline = now;
+      updateUndoRedoButtons();
+    }
+    async function undoApplySnapshot(json) {
+      const workId = activeWorkId();
+      const work = ensureProjectShape(JSON.parse(json));
+      const idx = (state.settings.works || []).findIndex(w => w.workspace && w.workspace.workId === (work.workspace && work.workspace.workId));
+      if (idx >= 0) state.settings.works[idx] = work; else state.settings.works.push(work);
+      state.settings.activeWorkId = work.workspace.workId;
+      state.project = work;
+      syncLegacySourceDocument(state.project, activeDocument());
+      loadActiveDocumentToInput();
+      try { await restorePdfPreviewFilesForProject(state.project); } catch (e) {}
+      undoState.suspended++;
+      try { syncAll(false); } finally { undoState.suspended--; }
+      putSettingsAutosaveSnapshot('undo_redo').catch(() => {});
+    }
+    async function performUndo() {
+      undoCommitStep();
+      if (!undoState.stack.length) return;
+      const cur = undoClone(state.project);
+      const prev = undoState.stack.pop();
+      if (cur != null) undoState.redo.push(cur);
+      await undoApplySnapshot(prev);
+      undoState.baseline = undoClone(state.project);
+      updateUndoRedoButtons();
+    }
+    async function performRedo() {
+      undoCommitStep();
+      if (!undoState.redo.length) return;
+      const cur = undoClone(state.project);
+      const next = undoState.redo.pop();
+      if (cur != null) undoState.stack.push(cur);
+      await undoApplySnapshot(next);
+      undoState.baseline = undoClone(state.project);
+      updateUndoRedoButtons();
+    }
+    function updateUndoRedoButtons() {
+      const u = $('undoBtn'), r = $('redoBtn');
+      if (u) u.disabled = !undoState.stack.length;
+      if (r) r.disabled = !undoState.redo.length;
+    }
 
     function blankSettings() {
       return {
@@ -4863,6 +4987,7 @@
       restorePdfPreviewFilesForProject(state.project).then((restored) => {
         if (restored) syncAll(false);
       }).catch(err => console.warn('pdf preview cache restore failed', err));
+      undoResetAll();
       scheduleSettingsAutosave('set_active_work');
     }
 
@@ -5243,6 +5368,7 @@
       state.shareOutputDirty = true;
       state.jsonOutputDirty = true;
       updateSaveStatus();
+      undoScheduleCommit();
       scheduleSettingsAutosave(reason || 'edit');
     }
 
@@ -5464,6 +5590,107 @@
       markProjectChanged('delete_entity');
       syncAll(false);
       return true;
+    }
+
+    // Delete one setting block (claim); also unlink it from the owning entity's fixedFactIds.
+    function deleteClaim(claimId) {
+      const id = String(claimId || '');
+      const claim = (state.project.settingClaims || []).find(c => c.id === id);
+      if (!claim) return false;
+      state.project.settingClaims = (state.project.settingClaims || []).filter(c => c.id !== id);
+      (state.project.entities || []).forEach((ent) => {
+        if (Array.isArray(ent.fixedFactIds)) ent.fixedFactIds = ent.fixedFactIds.filter(x => x !== id);
+      });
+      state.project.audit.push({ at: nowIso(), action: 'delete_setting_block', claimId: id, targetId: claim.targetId });
+      markProjectChanged('delete_setting_block');
+      syncAll(false);
+      return true;
+    }
+
+    // Inline-edit an entity's summary in place: swap the card's summary line for a textarea,
+    // commit on blur / Cmd+Enter, cancel on Escape.
+    function editEntitySummaryInline(entityId, el) {
+      const entity = (state.project.entities || []).find(e => e.id === entityId);
+      if (!entity || !el || el.querySelector('textarea')) return;
+      const ta = document.createElement('textarea');
+      ta.className = 'material-summary-edit';
+      ta.value = entity.summary || '';
+      ta.placeholder = t('summaryPlaceholder');
+      el.innerHTML = '';
+      el.appendChild(ta);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = ta.value.length;
+      let done = false;
+      const commit = (save) => {
+        if (done) return; done = true;
+        if (save) {
+          const next = norm(ta.value);
+          if (next !== (entity.summary || '')) {
+            entity.summary = next;
+            state.project.audit.push({ at: nowIso(), action: 'edit_entity_summary', entityId });
+            markProjectChanged('edit_entity_summary');
+          }
+        }
+        syncAll(false);
+      };
+      ta.addEventListener('blur', () => commit(true));
+      ta.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commit(true); }
+        if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+      });
+    }
+
+    function removeEntityTag(entityId, tag) {
+      const entity = (state.project.entities || []).find(e => e.id === entityId);
+      if (!entity) return;
+      entity.tags = (entity.tags || []).filter(x => x !== tag);
+      state.project.audit.push({ at: nowIso(), action: 'remove_entity_tag', entityId, tag });
+      markProjectChanged('remove_entity_tag');
+      syncAll(false);
+    }
+
+    function addEntityTagById(entityId, tag) {
+      const entity = (state.project.entities || []).find(e => e.id === entityId);
+      const clean = norm(tag);
+      if (!entity || !clean) return;
+      entity.tags = uniq((entity.tags || []).concat(clean));
+      state.project.audit.push({ at: nowIso(), action: 'add_entity_tag', entityId, tag: clean });
+      markProjectChanged('add_entity_tag');
+      syncAll(false);
+    }
+
+    // Small floating picker of predefined tags not already on the entity, anchored to the + chip.
+    let entityTagPickerEl = null;
+    function closeEntityTagPicker() {
+      if (entityTagPickerEl) { entityTagPickerEl.remove(); entityTagPickerEl = null; }
+      document.removeEventListener('pointerdown', entityTagPickerOutside, true);
+    }
+    function entityTagPickerOutside(e) {
+      if (entityTagPickerEl && e.target.closest('.entity-tag-picker')) return;
+      if (e.target.closest('[data-add-tag]')) return;
+      closeEntityTagPicker();
+    }
+    function openEntityTagPicker(entityId, anchor) {
+      const entity = (state.project.entities || []).find(e => e.id === entityId);
+      if (!entity || !anchor) return;
+      closeEntityTagPicker();
+      const present = new Set(entity.tags || []);
+      const options = tagOptionsForEntity(entity).filter(([value]) => !present.has(value));
+      const menu = document.createElement('div');
+      menu.className = 'entity-tag-picker';
+      menu.innerHTML = options.map(([value, label]) => `<button type="button" data-pick-tag="${esc(value)}">${esc(label)}</button>`).join('')
+        || `<div class="entity-tag-picker-empty">—</div>`;
+      document.body.appendChild(menu);
+      const r = anchor.getBoundingClientRect();
+      const mw = menu.offsetWidth || 160, mh = menu.offsetHeight || 40;
+      menu.style.left = Math.max(4, Math.min(window.innerWidth - mw - 8, r.left)) + 'px';
+      menu.style.top = Math.max(4, Math.min(window.innerHeight - mh - 8, r.bottom + 4)) + 'px';
+      entityTagPickerEl = menu;
+      menu.querySelectorAll('[data-pick-tag]').forEach(btn => btn.addEventListener('click', () => {
+        closeEntityTagPicker();
+        addEntityTagById(entityId, btn.getAttribute('data-pick-tag'));
+      }));
+      setTimeout(() => document.addEventListener('pointerdown', entityTagPickerOutside, true), 0);
     }
 
     function deleteRevisionNote(noteId) {
@@ -7233,6 +7460,7 @@
       loadActiveDocumentToInput();
       markProjectChanged('confirm_source_review');
       syncAll();
+      undoResetAll();
     }
 
     function normalizeImportedBlocks(blocks) {
@@ -15130,7 +15358,7 @@
         const entity = upsertEntity(project, clean, card.type, '', 1, 'confirmed');
         if (!entity) return;
         setEntityScope(entity, 'document', doc.id);
-        entity.authority = authorityRank(entity.authority || 'inferred') < authorityRank('draft') ? 'draft' : entity.authority;
+        entity.authority = authorityRank(entity.authority || 'inferred') < authorityRank('soft') ? 'soft' : entity.authority;
         entity.tags = uniq((entity.tags || []).concat(card.tags || [], ['source:manual']));
       });
       linkBlocksToExtractedEntities(project);
@@ -20224,8 +20452,11 @@
       const claimRows = claims.map(c => `<div class="annotation-row fact">
           <span class="annotation-row-badge">${esc(claimLabel(c))}</span>
           <div class="annotation-row-main">
-            <div class="annotation-row-text">${esc(c.text)}</div>
+            <div class="annotation-row-text" data-edit-entity-claim="${esc(c.id)}" data-claim-entity="${esc(e.id)}" title="${esc(t('editClaimHint'))}">${esc(c.text)}</div>
             <div class="annotation-row-meta"><span class="annotation-row-target">${esc(authorityLabel(c.authority))}</span></div>
+          </div>
+          <div class="annotation-row-actions">
+            <button type="button" data-delete-claim="${esc(c.id)}" title="${esc(t('deleteClaim'))}">×</button>
           </div>
         </div>`).join('');
       const noteRows = notes.map(n => `<div class="annotation-row ${esc(n.noteType || 'retake')} ${n.status === 'done' ? 'done' : ''}">
@@ -20248,8 +20479,8 @@
             <select class="pill-select" data-entity-field="scope" data-entity-id="${esc(e.id)}" title="${esc(t('scopeLabelTitle'))}">${ENTITY_SCOPE_OPTIONS.map(([value]) => `<option value="${value}" ${value === (e.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select>
             <select class="pill-select authority-${esc(authValue)}" data-entity-field="authority" data-entity-id="${esc(e.id)}" title="${esc(t('authorityTitle'))}">${AUTHORITY.map(a => `<option value="${a}" ${a === authValue ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select>
           </div>
-          ${e.summary ? `<div class="material-card-summary">${esc(e.summary)}</div>` : ''}
-          ${tags.length ? `<div class="material-card-tags chips">${tags.map(tag => `<span class="chip">${esc(tagLabel(tag))}</span>`).join('')}</div>` : ''}
+          <div class="material-card-summary${e.summary ? '' : ' is-empty'}" data-edit-summary="${esc(e.id)}" title="${esc(t('editSummaryHint'))}">${e.summary ? esc(e.summary) : `<span class="material-summary-add">${esc(t('addSummary'))}</span>`}</div>
+          <div class="material-card-tags chips">${tags.map(tag => `<span class="chip removable-tag">${esc(tagLabel(tag))}<button type="button" class="chip-x" data-delete-tag="${esc(tag)}" data-tag-entity="${esc(e.id)}" title="${esc(t('deleteTagHint'))}">×</button></span>`).join('')}<button type="button" class="chip chip-add" data-add-tag="${esc(e.id)}">${esc(t('addTagLabel'))}</button></div>
           ${(claimRows || noteRows) ? `<div class="material-card-rows">${claimRows}${noteRows}</div>` : ''}
           <div class="material-card-foot">
             <span class="material-refs">${refs.length ? `${esc(t('materialRefsLabel'))} ${refLinks}${refMore}` : ''}</span>
@@ -20292,6 +20523,11 @@
       document.querySelectorAll('[data-annotate-entity]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-annotate-entity'), { mode: 'retake' })));
       document.querySelectorAll('[data-annotate-setting]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-annotate-setting'), { mode: 'setting' })));
       document.querySelectorAll('[data-edit-entity-note]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-note-entity'), { noteId: el.getAttribute('data-edit-entity-note') })));
+      document.querySelectorAll('[data-edit-entity-claim]').forEach(el => el.addEventListener('click', () => openMaterialComposer(el.getAttribute('data-claim-entity'), { claimId: el.getAttribute('data-edit-entity-claim') })));
+      document.querySelectorAll('[data-delete-claim]').forEach(el => el.addEventListener('click', () => deleteClaim(el.getAttribute('data-delete-claim'))));
+      document.querySelectorAll('[data-edit-summary]').forEach(el => el.addEventListener('click', () => editEntitySummaryInline(el.getAttribute('data-edit-summary'), el)));
+      document.querySelectorAll('[data-delete-tag]').forEach(el => el.addEventListener('click', (ev) => { ev.stopPropagation(); removeEntityTag(el.getAttribute('data-tag-entity'), el.getAttribute('data-delete-tag')); }));
+      document.querySelectorAll('[data-add-tag]').forEach(el => el.addEventListener('click', (ev) => { ev.stopPropagation(); openEntityTagPicker(el.getAttribute('data-add-tag'), el); }));
       bindRevisionNoteDeleteButtons();
     }
 
@@ -20310,20 +20546,20 @@
       if (!entity || !card) return;
       closeMaterialComposer();
       const editNote = opts && opts.noteId ? (state.project.revisionNotes || []).find(n => n.id === opts.noteId) : null;
-      const initialMode = editNote ? (editNote.noteType || 'retake') : ((opts && opts.mode) || 'retake');
-      state.materialComposer = { entityId, mode: initialMode, noteId: editNote ? editNote.id : null };
+      const editClaim = opts && opts.claimId ? (state.project.settingClaims || []).find(c => c.id === opts.claimId) : null;
+      // Two ways to make a material entry: a 修正注釈 note, or a 設定ブロック (setting block).
+      // Editing an existing note/claim locks the mode (you can't turn a note into a block).
+      const initialMode = editClaim ? 'setting' : editNote ? 'retake' : ((opts && opts.mode) || 'retake');
+      const locked = !!(editNote || editClaim);
+      state.materialComposer = { entityId, mode: initialMode, noteId: editNote ? editNote.id : null, claimId: editClaim ? editClaim.id : null };
       const wrap = document.createElement('div');
       wrap.className = 'material-composer';
-      const modeButtons = [
-        ['retake', t('noteRetake')],
-        ['direct_rewrite', t('rewriteDraft')],
-        ['fact', t('noteFact')]
-      ].concat(editNote ? [] : [['setting', t('materialSettingMode')]]);
+      const modeButtons = locked ? [] : [['retake', t('noteRetake')], ['setting', t('materialSettingMode')]];
+      const settingAuthority = editClaim ? editableAuthorityValue(editClaim.authority) : 'soft';
       wrap.innerHTML = `
-        <div class="material-composer-type">${modeButtons.map(([mode, label]) => `<button type="button" class="${mode}" data-mc-type="${mode}">${esc(label)}</button>`).join('')}</div>
+        ${modeButtons.length ? `<div class="material-composer-type">${modeButtons.map(([mode, label]) => `<button type="button" class="${mode}" data-mc-type="${mode}">${esc(label)}</button>`).join('')}</div>` : ''}
         <div class="material-composer-setting-fields hidden">
-          <select data-mc-claim-type>${SETTING_BLOCK_TYPES.map(([value]) => `<option value="${value}">${esc(settingBlockTypeLabel(value))}</option>`).join('')}</select>
-          <select data-mc-authority>${AUTHORITY.map(a => `<option value="${a}" ${a === 'soft' ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select>
+          <select data-mc-authority>${AUTHORITY.map(a => `<option value="${a}" ${a === settingAuthority ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select>
         </div>
         <textarea placeholder="${esc(t('pdfFeedbackComposerPlaceholder'))}"></textarea>
         <div class="material-composer-actions">
@@ -20343,14 +20579,24 @@
       };
       setMode(initialMode);
       if (editNote) ta.value = editNote.text || '';
+      if (editClaim) ta.value = editClaim.text || '';
       wrap.querySelectorAll('[data-mc-type]').forEach(b => b.addEventListener('click', () => { setMode(b.getAttribute('data-mc-type')); ta.focus(); }));
       wrap.querySelector('[data-mc-cancel]').addEventListener('click', closeMaterialComposer);
       const commit = () => {
         const text = ta.value.trim();
         if (!text) { closeMaterialComposer(); return; }
         const mode = state.materialComposer.mode;
-        if (mode === 'setting') {
-          const claim = addClaim(state.project, entity, wrap.querySelector('[data-mc-claim-type]').value, text, wrap.querySelector('[data-mc-authority]').value, []);
+        if (state.materialComposer.claimId) {
+          const claim = (state.project.settingClaims || []).find(c => c.id === state.materialComposer.claimId);
+          if (claim) {
+            claim.text = norm(text);
+            claim.authority = wrap.querySelector('[data-mc-authority]').value;
+            state.project.audit.push({ at: nowIso(), action: 'edit_setting_block', claimId: claim.id, targetId: entity.id });
+            markProjectChanged('edit_entity_setting_block');
+          }
+        } else if (mode === 'setting') {
+          // Kind selector removed: every new setting block is a 正式設定 (canonical_setting).
+          const claim = addClaim(state.project, entity, 'canonical_setting', text, wrap.querySelector('[data-mc-authority]').value, []);
           if (claim) entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
           markProjectChanged('add_entity_setting_block');
         } else if (state.materialComposer.noteId) {
@@ -21769,6 +22015,7 @@
       await restorePdfPreviewFilesForProject(state.project);
       putSettingsAutosaveSnapshot('restore_slot').catch(err => console.warn('settings autosave failed', err));
       syncAll(false);
+      undoResetAll();
       return true;
     }
 
@@ -21919,6 +22166,7 @@
         pushProjectRestorePoint('load', { force: true }).catch(err => console.warn('load restore point failed', err));
         lastAutosaveAt = Date.now();
         toast(t('importedToast'));
+        undoResetAll();
         const drop = $('dropZone');
         if (drop) drop.textContent = `${t('loadSettings')}: ${file.name}`;
       } catch (err) {
@@ -22030,17 +22278,14 @@
       if (!entity) return;
       $('modalTitle').textContent = t('addSettingBlockTitle') + ': ' + entity.name;
       $('modalBody').innerHTML = `
-        <div class="grid-2">
-          <div><label>${esc(t('settingBlockType'))}</label><select id="newSettingClaimType">${SETTING_BLOCK_TYPES.map(([value]) => `<option value="${value}">${esc(settingBlockTypeLabel(value))}</option>`).join('')}</select></div>
-          <div><label>${esc(t('authorityTitle'))}</label><select id="newSettingAuthority">${AUTHORITY.map(a => `<option value="${a}" ${a === 'soft' ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select></div>
-        </div>
+        <div><label>${esc(t('authorityTitle'))}</label><select id="newSettingAuthority">${AUTHORITY.map(a => `<option value="${a}" ${a === 'soft' ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select></div>
         <div><label>${esc(t('contentLabel'))}</label><textarea id="newSettingText"></textarea></div>
         <button id="saveSettingBlockBtn" class="primary">${esc(t('addButton'))}</button>
       `;
       $('saveSettingBlockBtn').addEventListener('click', () => {
         const text = norm($('newSettingText').value);
         if (!text) return;
-        const claim = addClaim(state.project, entity, $('newSettingClaimType').value, text, $('newSettingAuthority').value, []);
+        const claim = addClaim(state.project, entity, 'canonical_setting', text, $('newSettingAuthority').value, []);
         if (claim) entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
         closeModal();
         markProjectChanged('add_entity_setting_block');
@@ -22345,6 +22590,20 @@ V（城島剛志）
       $('languageSelect').addEventListener('change', () => setUiLanguage($('languageSelect').value));
       $('createProjectBtn').addEventListener('click', openCreateProjectModal);
       $('saveSettingsBtn').addEventListener('click', manualSaveProject);
+      $('undoBtn').addEventListener('click', () => { performUndo(); });
+      $('redoBtn').addEventListener('click', () => { performRedo(); });
+      // Ctrl/Cmd+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo. Skipped while an editable field is
+      // focused so the browser's native text undo keeps working inside inputs/textareas.
+      document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const k = (e.key || '').toLowerCase();
+        if (k !== 'z' && k !== 'y') return;
+        const el = document.activeElement;
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+        if (!workspaceReady()) return;
+        e.preventDefault();
+        if (k === 'y' || (k === 'z' && e.shiftKey)) performRedo(); else performUndo();
+      });
       $('restoreBtn').addEventListener('click', toggleRestorePopover);
       $('workSelect').addEventListener('change', () => setActiveWork($('workSelect').value));
       $('projectFileInput').addEventListener('change', (ev) => { const file = ev.target.files && ev.target.files[0]; if (file) loadProjectJsonFile(file); ev.target.value = ''; });
@@ -22454,6 +22713,7 @@ V（城島剛志）
       await restorePdfPreviewFilesForProject(state.project);
       syncAll();
       initCanvasShell();
+      undoResetAll();
     }
 
     wire();
