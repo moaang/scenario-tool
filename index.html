@@ -135,6 +135,13 @@
       transform-origin: 0 0;
       border: 0; background: transparent; box-shadow: none;
       display: block;
+      /* iPad: this is the pinch/pan surface, not scrollable content — kill the browser's own
+         pinch-zoom/pan/double-tap-zoom here so it can't fight the custom canvasPinch gesture.
+         Scoped to the scene only (not .workspace, its container): touch-action:none on an
+         ancestor would also block .side-panel's native touch-scroll, since a descendant can't
+         re-open a gesture an ancestor closed — .side-panel is a sibling of this element, not a
+         descendant, so it's unaffected either way, but keep the rule on the narrowest element. */
+      touch-action: none;
     }
     /* id beats the later `.pane { overflow: hidden }` rule — the scene must not clip the
        page's crop-mark corners / feedback capsules that sit outside the page box */
@@ -20709,7 +20716,70 @@
       document.addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; });
       const INTERACTIVE = 'button, a, select, input, textarea, [contenteditable], .side-panel, [data-overlay-block], .pdf-feedback-note-stack, .pdf-feedback-composer, .material-composer, .entity-card, .annotation-row, .pdf-overlay-tools, .pdf-range-test-panel, .pdf-overlay-selection-toolbar';
       let panning = false, panPointer = 0, sx = 0, sy = 0, ox = 0, oy = 0, movedPx = 0;
+      // Two-finger pinch = zoom + pan (iPad). Driven off the SAME Pointer Events pipeline as the
+      // single-finger pan below, not a separate TouchEvent listener — carried over from
+      // conte-editor's genga preview gesture (its ver581 real-device fix): once a drag calls
+      // setPointerCapture, iOS stops delivering that touch's follow-up events to any OTHER
+      // listener on the page, so an independent touchstart/touchmove pinch handler goes dead the
+      // moment a pan is already in progress. One Map of active touch pointers is the only way
+      // pinch and pan can never race each other.
+      const touchPointers = new Map(); // touch pointerId -> {x,y} viewport px
+      let pinch = null; // { startDist, startZ, anchorX, anchorY } — anchor in scene (unzoomed) px
+      const pinchVals = () => {
+        const pts = []; touchPointers.forEach((p) => pts.push(p));
+        if (pts.length < 2) return null;
+        const a = pts[0], b = pts[1];
+        return { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+      };
+      const pinchStart = (v) => {
+        const view = state.canvasView;
+        // anchor = the scene point currently under the fingers' midpoint; holding it fixed
+        // through the gesture is what keeps pinch-zoom from bouncing/drifting under the fingers.
+        pinch = { startDist: Math.max(1, v.d), startZ: view.z, anchorX: (v.mx - view.x) / view.z, anchorY: (v.my - view.y) / view.z };
+      };
+      const pinchMove = (v) => {
+        if (!pinch) return;
+        const view = state.canvasView;
+        const nz = Math.min(2.5, Math.max(0.35, pinch.startZ * (v.d / pinch.startDist))); // same clamp as zoomCanvasBy
+        view.x = v.mx - pinch.anchorX * nz;
+        view.y = v.my - pinch.anchorY * nz;
+        view.z = nz;
+        applyCanvasView();
+        schedulePdfDensityRerender();
+      };
+      // A pinch finger's end event can be delivered to a different element than the one that saw
+      // its pointerdown (iOS system-gesture takeover, capture on another node, finger lifted
+      // outside root) — root's own pointerup/pointercancel below then never fires for it, the id
+      // never leaves touchPointers, pinch never clears, and the next single touch reads size===1
+      // as "still mid-pinch" and silently does nothing. Watching document at the capture phase
+      // catches the end event wherever it actually lands (the same fix conte-editor shipped for
+      // gengaPinch after a real-iPad HUD capture caught it stuck this exact way).
+      const gestureJanitor = (e) => {
+        if (e.pointerType !== 'touch' || e.pointerId == null || !touchPointers.has(e.pointerId)) return;
+        touchPointers.delete(e.pointerId);
+        if (pinch && touchPointers.size < 2) pinch = null;
+      };
+      document.addEventListener('pointerup', gestureJanitor, true);
+      document.addEventListener('pointercancel', gestureJanitor, true);
+      // Safari's native pinch-to-zoom also runs off its own proprietary gesture events, separate
+      // from touch-action; preventDefault on all three keeps it from fighting canvasPinch above.
+      // Side panels are exempted so their text stays natively pinch-zoomable (matches the wheel
+      // handler's own .side-panel exemption).
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+        root.addEventListener(type, (e) => { if (!e.target.closest('.side-panel')) e.preventDefault(); });
+      });
       root.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch' && !e.target.closest('.side-panel')) {
+          touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          if (touchPointers.size >= 2) { // 2nd finger → pinch takes over; drop whatever finger 1 started
+            if (panning) { panning = false; root.classList.remove('panning'); try { root.releasePointerCapture(panPointer); } catch (err) {} }
+            const v = pinchVals();
+            if (v) pinchStart(v);
+            e.preventDefault();
+            return;
+          }
+        }
+        if (pinch) { e.preventDefault(); return; } // 3rd+ finger while pinching: ignored, stays in pinch
         if (e.button !== 0 && e.button !== 1) return;
         if (!spaceDown && e.button === 0 && e.target.closest(INTERACTIVE)) return;
         panning = true; movedPx = 0; panPointer = e.pointerId;
@@ -20720,6 +20790,13 @@
         e.preventDefault();
       });
       root.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'touch' && touchPointers.has(e.pointerId)) touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pinch) {
+          const v = pinchVals();
+          if (v) pinchMove(v);
+          e.preventDefault();
+          return;
+        }
         if (!panning || e.pointerId !== panPointer) return;
         const dx = e.clientX - sx, dy = e.clientY - sy;
         movedPx = Math.max(movedPx, Math.abs(dx), Math.abs(dy));
@@ -20728,6 +20805,10 @@
         applyCanvasView();
       });
       const endPan = (e) => {
+        if (e && e.pointerType === 'touch') {
+          touchPointers.delete(e.pointerId);
+          if (pinch && touchPointers.size < 2) pinch = null;
+        }
         if (!panning || (e && typeof e.pointerId === 'number' && e.pointerId !== panPointer)) return;
         panning = false;
         root.classList.remove('panning');
