@@ -5938,7 +5938,7 @@
       const pages = (doc && (doc.draftPages || []).length)
         ? doc.draftPages.map(p => ({ lines: String(p.text || '').split('\n') }))
         : [{ lines: String(text || '').split('\n') }];
-      const detected = detectQuality(pages, scenarioParserProfileForDocument(doc));
+      const detected = detectQuality(pages, createScenarioParserProfile(pages));
       const warnings = detected.warnings.slice();
       if (warning) warnings.unshift(warning);
       const fallbackPages = (doc && doc.draftPages || []).filter(p => p.textSource === 'pdf-logical-fallback').length;
