@@ -6526,6 +6526,13 @@
       const markerHead = markerAllowed && /^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*\S+/.test(source);
       const hasHeadMarker = markerHead || /^\d{1,3}\s+\S+/.test(source) || (markerAllowed && /[○●◯〇◎]\s*\S+/.test(source));
       const hasPlaceSignal = hasLocationSignal(clean);
+      // 마커가 이 문서의 지배적 씬 마커 계열이면 그 표식 자체가 柱 다. 각본 관례상 그 자리에
+      // 오는 것은 장소이고, 장소 이름은 열거할 수 있는 집합이 아니다 — 장소성 키워드 사전에
+      // 없다는 이유로 씬 헤딩을 놓치면 그 줄은 보호받지 못해 뒤따르는 지문과 한 덩어리가 된다.
+      // 파트 마커·섹션 마커·대사·캐스트 줄은 위에서 이미 걸러졌다. 길이 상한은 이미 지문이
+      // 붙어 버린 문자열을 씬 헤딩으로 승격시키지 않기 위한 것이다.
+      const markerIsDominant = Boolean(markerFamily) && dominantFamilies.includes(markerFamily);
+      if (hasHeadMarker && markerIsDominant && charLen(clean) >= 1 && charLen(clean) <= 40) return true;
       return hasHeadMarker && hasPlaceSignal;
     }
 
