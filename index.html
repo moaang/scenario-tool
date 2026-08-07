@@ -1250,42 +1250,6 @@
     }
     .pdf-overlay-group-box.front .pdf-overlay-group-label { color: #5f5589; }
     .pdf-overlay-group-box.scene .pdf-overlay-group-label { color: #ff1744; }
-    .pdf-body-boundary-line {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      height: 0;
-      border-top: 3px solid rgba(176,0,0,.72);
-      z-index: 5;
-      cursor: ns-resize;
-      pointer-events: auto;
-    }
-    .pdf-body-boundary-line.bottom { border-top-color: rgba(20,82,128,.74); }
-    .pdf-body-boundary-label {
-      position: absolute;
-      left: 4px;
-      top: -19px;
-      padding: 2px 5px;
-      border: 1px solid currentColor;
-      border-radius: 4px;
-      background: rgba(255,255,255,.94);
-      color: #9b1616;
-      font-family: var(--mono);
-      font-size: 9px;
-      font-weight: 1000;
-      line-height: 1.05;
-      white-space: nowrap;
-    }
-    .pdf-body-boundary-line.bottom .pdf-body-boundary-label { color: #145280; }
-    .pdf-body-boundary-fill {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      background: rgba(176,0,0,.045);
-      z-index: 1;
-      pointer-events: none;
-    }
-    .pdf-body-boundary-fill.bottom { background: rgba(20,82,128,.045); }
     .pdf-overlay-selection-toolbar {
       position: absolute;
       z-index: 6;
@@ -1345,8 +1309,6 @@
     /* Debug-only chrome: hidden in clean mode */
     .pdf-page-surface:not(.debug-mode) .pdf-layout-guide-layer,
     .pdf-page-surface:not(.debug-mode) .pdf-layout-body-cut-line,
-    .pdf-page-surface:not(.debug-mode) .pdf-body-boundary-line,
-    .pdf-page-surface:not(.debug-mode) .pdf-body-boundary-fill,
     .pdf-page-surface:not(.debug-mode) .pdf-overlay-resize,
     .pdf-page-surface:not(.debug-mode) .pdf-overlay-selection-toolbar { display: none !important; }
     .body-preview-workspace:not(.debug-mode) .pdf-range-test-panel { display: none !important; }
@@ -3045,11 +3007,6 @@
         pdfExtractNoSelection: 'ボックスを選択してください',
         pdfExtractNoTextLayer: 'PDF.js textLayerなし。PDF.js読込または原本PDF再読込が必要です。',
         pdfBodyBoundsTop: '本文上限',
-        pdfBodyBoundsBottom: '本文下限',
-        pdfBodyBoundsApply: '本文範囲を適用',
-        pdfBodyBoundsClear: '本文範囲を解除',
-        pdfBodyBoundsActive: '本文範囲: 適用中',
-        pdfBodyBoundsInactive: '本文範囲: 未適用',
         pdfBodyCutLabel: '本文下限',
         tagAddPlaceholder: 'タグ追加...',
         tagNone: 'タグなし',
@@ -3062,7 +3019,6 @@
         tagLink: 'リンク',
         tagPdfNote: 'PDF注釈',
         tagPdfLink: 'PDFリンク',
-        tagOutsideBodyBoundary: '本文範囲外',
         tagCommunication: '通信',
         tagCharacterPrefix: 'キャラクター: {value}',
         tagPlacePrefix: '場所: {value}',
@@ -3377,11 +3333,6 @@
         pdfExtractNoSelection: '박스를 선택해야 함',
         pdfExtractNoTextLayer: 'PDF.js textLayer 없음. PDF.js 로딩 또는 원본 PDF 재불러오기가 필요함.',
         pdfBodyBoundsTop: '본문 상한',
-        pdfBodyBoundsBottom: '본문 하한',
-        pdfBodyBoundsApply: '본문범위 적용',
-        pdfBodyBoundsClear: '본문범위 해제',
-        pdfBodyBoundsActive: '본문범위: 적용 중',
-        pdfBodyBoundsInactive: '본문범위: 미적용',
         pdfBodyCutLabel: '본문 하한',
         tagAddPlaceholder: '태그 추가...',
         tagNone: '태그 없음',
@@ -3394,7 +3345,6 @@
         tagLink: '링크',
         tagPdfNote: 'PDF 주석',
         tagPdfLink: 'PDF 링크',
-        tagOutsideBodyBoundary: '본문범위 밖',
         tagCommunication: '통신',
         tagCharacterPrefix: '캐릭터: {value}',
         tagPlacePrefix: '장소: {value}',
@@ -3708,11 +3658,6 @@
         pdfExtractNoSelection: 'Select a box first',
         pdfExtractNoTextLayer: 'No PDF.js textLayer. Load PDF.js or re-import the original PDF.',
         pdfBodyBoundsTop: 'Body Top',
-        pdfBodyBoundsBottom: 'Body Bottom',
-        pdfBodyBoundsApply: 'Apply Body Range',
-        pdfBodyBoundsClear: 'Clear Body Range',
-        pdfBodyBoundsActive: 'Body range: active',
-        pdfBodyBoundsInactive: 'Body range: inactive',
         pdfBodyCutLabel: 'Body Cut',
         tagAddPlaceholder: 'Add tag...',
         tagNone: 'No tags',
@@ -3725,7 +3670,6 @@
         tagLink: 'Link',
         tagPdfNote: 'PDF note',
         tagPdfLink: 'PDF link',
-        tagOutsideBodyBoundary: 'Outside body range',
         tagCommunication: 'Communication',
         tagCharacterPrefix: 'Character: {value}',
         tagPlacePrefix: 'Place: {value}',
@@ -4128,7 +4072,6 @@
         lastSavedAt: '',
         pdfCacheKey: '',
         pdfCacheMeta: null,
-        pdfBodyBounds: defaultPdfBodyBounds(),
         draftPages: [],
         reviewItems: [],
         reviewBlocks: [],
@@ -4151,20 +4094,7 @@
       };
     }
 
-    function defaultPdfBodyBounds() {
-      return { enabled: false, top: 7, bottom: 92 };
-    }
 
-    function normalizePdfBodyBounds(bounds) {
-      const source = Object.assign(defaultPdfBodyBounds(), bounds || {});
-      const top = Math.max(0, Math.min(94, Number(source.top) || 0));
-      const bottom = Math.max(top + 4, Math.min(100, Number(source.bottom) || 100));
-      return {
-        enabled: Boolean(source.enabled),
-        top: Math.round(top * 100) / 100,
-        bottom: Math.round(bottom * 100) / 100
-      };
-    }
 
     function pdfBodyCutLinePctForPage(doc, pageNo) {
       const targetPage = Number(pageNo || 1);
@@ -4194,17 +4124,18 @@
       return trigger === 'layout_divider_stable';
     }
 
+    // 범위는 자동 검출한 컷라인에서만 온다. 예전에는 디버그 모드에서 선을 끌어 정하는
+    // 수동 범위(doc.pdfBodyBounds)와 합쳐 썼는데, 그 기능을 걷어냈다.
     function pdfBodyRangeForPage(doc, pageNo) {
-      const bounds = normalizePdfBodyBounds(doc && doc.pdfBodyBounds);
       const cut = pdfBodyCutLinePctForPage(doc, pageNo);
       const topLine = pdfBodyTopLinePctForPage(doc, pageNo);
-      let top = bounds.enabled ? bounds.top : 0;
-      let bottom = bounds.enabled ? bounds.bottom : 100;
+      let top = 0;
+      let bottom = 100;
       if (topLine != null) top = Math.max(top, topLine);
       if (cut != null) bottom = Math.min(bottom, cut);
       if (bottom <= top) bottom = Math.min(100, top + 0.1);
       return {
-        enabled: bounds.enabled || cut != null || topLine != null,
+        enabled: cut != null || topLine != null,
         top,
         bottom
       };
@@ -4292,18 +4223,6 @@
       return sourceLines.map(line => pdfLineClippedToBodyRange(line, range)).filter(Boolean);
     }
 
-    function rebuildPdfDocumentTextFromBodyRange(doc) {
-      if (!doc || doc.draftSourceType !== 'pdf') return doc && (doc.rawImportedText || doc.originalText) || '';
-      const pages = doc.draftPages || [];
-      pages.forEach((page) => {
-        const lines = pdfBodyLinesForPageRange(page, doc);
-        page.lines = lines;
-        // Single derivation point: pdfReviewLineText (logical tails + scene-number prefixes).
-        page.text = lines.map(line => line && pdfReviewLineText(line)).filter(Boolean).join('\n');
-      });
-      doc.pageMetadata = sourcePagesToPageMetadata(pages);
-      return pages.map(page => page && page.text || '').join('\n\f\n');
-    }
 
     function normalizeDocumentKind(value) {
       if (value === 'project_common') return 'project_common';
@@ -4456,7 +4375,6 @@
         legacyDoc.draftPages = cloneJson(shaped.sourceDocument && shaped.sourceDocument.draftPages || []);
         legacyDoc.reviewItems = cloneJson(shaped.sourceDocument && shaped.sourceDocument.reviewItems || []);
         legacyDoc.reviewBlocks = cloneJson(shaped.sourceDocument && shaped.sourceDocument.reviewBlocks || []);
-        legacyDoc.pdfBodyBounds = normalizePdfBodyBounds(shaped.sourceDocument && shaped.sourceDocument.pdfBodyBounds || legacyDoc.pdfBodyBounds);
         legacyDoc.pageMetadata = shaped.sourceDocument && shaped.sourceDocument.pageMetadata || [];
         legacyDoc.pdfAnnotations = shaped.sourceDocument && shaped.sourceDocument.pdfAnnotations || [];
         legacyDoc.pdfReviewOptions = shaped.sourceDocument && shaped.sourceDocument.pdfReviewOptions || {};
@@ -4480,7 +4398,6 @@
         normalized.latestVersionId = normalized.latestVersionId || normalized.activeVersionId;
         normalized.pdfCacheKey = normalized.pdfCacheKey || '';
         normalized.pdfCacheMeta = normalized.pdfCacheMeta || null;
-        normalized.pdfBodyBounds = normalizePdfBodyBounds(normalized.pdfBodyBounds);
         normalized.pageMetadata = normalized.pageMetadata || [];
         normalized.pdfAnnotations = normalized.pdfAnnotations || [];
         normalized.pdfReviewOptions = normalized.pdfReviewOptions || {};
@@ -12793,7 +12710,6 @@
       appendPdfMetadataReviewItems(reviewItems, doc, options || sourceReviewOptionsForDoc(doc));
       if (doc && doc.draftSourceType === 'pdf') {
         attachPdfOverlayRectsToReviewItems(reviewItems, doc.draftPages || []);
-        applyPdfBodyBoundsToReviewItems(reviewItems, doc);
       }
       return reviewItems;
     }
@@ -12908,39 +12824,7 @@
       return String(text || '').replace(new RegExp('(' + jpLeft + ')[\\t \\u3000\\r\\n]+(?=' + jpRight + ')', 'g'), '$1');
     }
 
-    function applyPdfBodyBoundsToReviewItems(items, doc) {
-      if (!doc || doc.draftSourceType !== 'pdf') return items || [];
-      const bounds = normalizePdfBodyBounds(doc.pdfBodyBounds);
-      if (!bounds.enabled) return items || [];
-      (items || []).forEach((item) => {
-        if (!item || !item.overlayRect) return;
-        if (!['scene', 'action', 'dialog', 'character'].includes(item.type)) return;
-        const rect = normalizeOverlayRect(item.overlayRect);
-        const centerY = Number(rect.top || 0) + Number(rect.height || 0) / 2;
-        if (centerY >= bounds.top && centerY <= bounds.bottom) return;
-        convertSourceReviewItemToText(item, 'outside-body-boundary');
-      });
-      return items || [];
-    }
 
-    function convertSourceReviewItemToText(item, reasonTag) {
-      if (!item) return item;
-      const text = sourceReviewItemText(item);
-      item.type = 'text';
-      item.text = text;
-      item.titleLine = '';
-      item.name = '';
-      item.body = '';
-      item.speaker = '';
-      item.modifier = '';
-      item.modifierRaw = '';
-      item.dialogMode = '';
-      item.dialog = '';
-      item.href = '';
-      item.section = '';
-      item.tags = uniq(['text'].concat(reasonTag ? [reasonTag] : []));
-      return item;
-    }
 
     function attachSourceReviewPageSpans(items, pages) {
       const sourcePages = (pages || []).map((page) => {
@@ -14852,7 +14736,6 @@
       if (raw === 'link') return t('tagLink');
       if (raw === 'source:pdf-note') return t('tagPdfNote');
       if (raw === 'source:pdf-link') return t('tagPdfLink');
-      if (raw === 'outside-body-boundary') return t('tagOutsideBodyBoundary');
       if (raw === 'mode:monologue') return 'M';
       if (raw === 'mode:off') return 'OFF';
       if (raw === 'mode:communication') return t('tagCommunication');
@@ -16367,8 +16250,6 @@
       if ($('copyAllPageDebugTextBtn')) $('copyAllPageDebugTextBtn').addEventListener('click', () => copyAllPagesDebugText().catch(error => console.warn('copy all page debug failed', error)));
       if ($('pdfExtractSelectedBtn')) $('pdfExtractSelectedBtn').addEventListener('click', () => updatePdfRangeExtractionFromSelection(true));
       if ($('pdfRecomputeOverlayRectsBtn')) $('pdfRecomputeOverlayRectsBtn').addEventListener('click', recomputePdfOverlayRectsForActivePage);
-      if ($('pdfApplyBodyBoundsBtn')) $('pdfApplyBodyBoundsBtn').addEventListener('click', () => applyPdfBodyBoundsToActiveDocument(true).catch(error => console.warn('apply pdf body bounds failed', error)));
-      if ($('pdfClearBodyBoundsBtn')) $('pdfClearBodyBoundsBtn').addEventListener('click', () => applyPdfBodyBoundsToActiveDocument(false).catch(error => console.warn('clear pdf body bounds failed', error)));
       bindBodyOverlayInteractions();
       bindRevisionNoteDeleteButtons();
       renderPdfJsPageForActiveBodyPreview(doc, pageNo).catch(error => {
@@ -16449,7 +16330,6 @@
                 <span class="scene-corner tl"></span><span class="scene-corner tr"></span><span class="scene-corner bl"></span><span class="scene-corner br"></span>
                 <div id="pdfLayoutGuideLayer" class="pdf-layout-guide-layer" data-pdf-layout-guide-layer></div>
                 <div id="pdfOverlayLayer" class="pdf-overlay-layer" data-pdf-overlay-layer>
-                  ${renderPdfBodyBoundsOverlay(doc)}
                   ${renderBodyOverlayGroups(doc, pageNo, overlayBlocks)}
                   ${overlayBlocks.map((block, index) => renderBodyOverlayBox(doc, block, index, overlayBlocks.length)).join('')}
                   <div id="pdfOverlaySelectionToolbar" class="pdf-overlay-selection-toolbar hidden"></div>
@@ -16490,11 +16370,6 @@
           </select>
           <button type="button" class="small" id="pdfExtractSelectedBtn">${esc(t('pdfExtractSelected'))}</button>
           <button type="button" class="small" id="pdfRecomputeOverlayRectsBtn">${esc(t('pdfRecomputeOverlayRects'))}</button>
-        </div>
-        <div class="dbg-row">
-          <button type="button" class="small" id="pdfApplyBodyBoundsBtn">${esc(t('pdfBodyBoundsApply'))}</button>
-          <button type="button" class="small" id="pdfClearBodyBoundsBtn">${esc(t('pdfBodyBoundsClear'))}</button>
-          <span class="chip" id="pdfBodyBoundsStatus">${esc(pdfBodyBoundsStatusLabel(doc))}</span>
         </div>
         <textarea id="pdfRangeOutput" class="pdf-range-output" readonly></textarea>`;
       win.classList.add('open');
@@ -16714,29 +16589,7 @@
       return page && page.text || pageTextFromBlocks(blocks) || '';
     }
 
-    function pdfBodyBoundsStatusLabel(doc) {
-      const bounds = normalizePdfBodyBounds(doc && doc.pdfBodyBounds);
-      return t(bounds.enabled ? 'pdfBodyBoundsActive' : 'pdfBodyBoundsInactive') + ` ${bounds.top}-${bounds.bottom}%`;
-    }
 
-    function renderPdfBodyBoundsOverlay(doc) {
-      const bounds = normalizePdfBodyBounds(doc && doc.pdfBodyBounds);
-      const top = bounds.top;
-      const bottom = bounds.bottom;
-      const topFillHeight = Math.max(0, top);
-      const bottomFillTop = Math.max(0, bottom);
-      const bottomFillHeight = Math.max(0, 100 - bottom);
-      return `
-        <div class="pdf-body-boundary-fill top" style="top:0%;height:${esc(topFillHeight)}%"></div>
-        <div class="pdf-body-boundary-fill bottom" style="top:${esc(bottomFillTop)}%;height:${esc(bottomFillHeight)}%"></div>
-        <div class="pdf-body-boundary-line top" data-pdf-body-boundary="top" style="top:${esc(top)}%">
-          <span class="pdf-body-boundary-label">${esc(t('pdfBodyBoundsTop'))}</span>
-        </div>
-        <div class="pdf-body-boundary-line bottom" data-pdf-body-boundary="bottom" style="top:${esc(bottom)}%">
-          <span class="pdf-body-boundary-label">${esc(t('pdfBodyBoundsBottom'))}</span>
-        </div>
-      `;
-    }
 
     function overlayPageNoForBlock(block, pageNo) {
       const value = Number(pageNo || block && block.activeOverlayPageNo || block && block.pageNo || state.activeScriptPageNo || 1);
@@ -18075,37 +17928,6 @@
       renderScriptStructurePanel();
     }
 
-    async function applyPdfBodyBoundsToActiveDocument(enabled) {
-      const doc = activeDocument();
-      if (!doc || doc.draftSourceType !== 'pdf') return;
-      doc.pdfBodyBounds = normalizePdfBodyBounds(Object.assign({}, doc.pdfBodyBounds || {}, { enabled: Boolean(enabled) }));
-      const text = rebuildPdfDocumentTextFromBodyRange(doc);
-      if (!text.trim()) {
-        markProjectChanged('set_pdf_body_bounds');
-        syncAll(false);
-        return;
-      }
-      doc.originalText = text;
-      doc.rawImportedText = text;
-      if ($('sourceInput')) $('sourceInput').value = text;
-      doc.pdfReviewOptions = Object.assign({}, doc.pdfReviewOptions || sourceReviewOptionsForDoc(doc));
-      doc.reviewItems = buildSourceReviewItemsForDocument(text, doc, doc.pdfReviewOptions);
-      doc.reviewBlocks = normalizeImportedBlocks(sourceReviewItemsToBlocks(doc.reviewItems, doc));
-      doc.pageMetadata = sourcePagesToPageMetadata(doc.draftPages || []);
-      state.pdfOverlayComputeKeys = Object.create(null);
-      await analyzeScenario({
-        text,
-        parsed: {
-          blocks: sourceReviewItemsToBlocks(doc.reviewItems, doc),
-          quality: { sourceType: doc.draftSourceType || 'pdf', warnings: [] },
-          parserName: enabled ? 'pdf_body_bounds_applied' : 'pdf_body_bounds_cleared'
-        },
-        sourceType: doc.draftSourceType || 'pdf',
-        sourceFileName: doc.importedFileName || '',
-        versionMode: 'overwrite',
-        pages: doc.draftPages || []
-      });
-    }
 
     function ensurePdfOverlayRectsForRenderedPage(doc, pageNo, items) {
       const missingKey = pdfOverlayMissingRectsKey(doc, pageNo);
@@ -18842,7 +18664,6 @@
       });
       bindPdfOverlaySelectionToolbar();
       syncPdfOverlaySelectionToolbar();
-      bindPdfBodyBoundaryInteractions();
       renderPdfFeedbackLayer();
     }
 
@@ -19551,59 +19372,7 @@
       document.querySelectorAll('.pdf-overlay-box.compose-active').forEach(b => b.classList.remove('compose-active'));
     }
 
-    function bindPdfBodyBoundaryInteractions() {
-      document.querySelectorAll('[data-pdf-body-boundary]').forEach((line) => {
-        if (line.dataset.boundPdfBodyBoundary === '1') return;
-        line.dataset.boundPdfBodyBoundary = '1';
-        line.addEventListener('pointerdown', (ev) => beginPdfBodyBoundaryDrag(ev, line));
-      });
-    }
 
-    function beginPdfBodyBoundaryDrag(ev, line) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const doc = activeDocument();
-      if (!doc) return;
-      const surface = line.closest('[data-pdf-overlay-stage]');
-      if (!surface) return;
-      const stageRect = surface.getBoundingClientRect();
-      if (!stageRect.height) return;
-      const kind = line.getAttribute('data-pdf-body-boundary') === 'bottom' ? 'bottom' : 'top';
-      const startBounds = normalizePdfBodyBounds(doc.pdfBodyBounds);
-      const minGap = 4;
-      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-      const updateVisual = (bounds) => {
-        const normalized = normalizePdfBodyBounds(bounds);
-        const topLine = surface.querySelector('[data-pdf-body-boundary="top"]');
-        const bottomLine = surface.querySelector('[data-pdf-body-boundary="bottom"]');
-        const topFill = surface.querySelector('.pdf-body-boundary-fill.top');
-        const bottomFill = surface.querySelector('.pdf-body-boundary-fill.bottom');
-        if (topLine) topLine.style.top = normalized.top + '%';
-        if (bottomLine) bottomLine.style.top = normalized.bottom + '%';
-        if (topFill) topFill.style.height = normalized.top + '%';
-        if (bottomFill) {
-          bottomFill.style.top = normalized.bottom + '%';
-          bottomFill.style.height = Math.max(0, 100 - normalized.bottom) + '%';
-        }
-        const status = $('pdfBodyBoundsStatus');
-        if (status) status.textContent = pdfBodyBoundsStatusLabel(Object.assign({}, doc, { pdfBodyBounds: normalized }));
-      };
-      const onMove = (moveEv) => {
-        const y = (moveEv.clientY - stageRect.top) / stageRect.height * 100;
-        const next = Object.assign({}, startBounds);
-        if (kind === 'top') next.top = clamp(y, 0, startBounds.bottom - minGap);
-        else next.bottom = clamp(y, startBounds.top + minGap, 100);
-        doc.pdfBodyBounds = normalizePdfBodyBounds(next);
-        updateVisual(doc.pdfBodyBounds);
-      };
-      const onUp = () => {
-        document.removeEventListener('pointermove', onMove);
-        doc.pdfBodyBounds = normalizePdfBodyBounds(doc.pdfBodyBounds);
-        markProjectChanged('move_pdf_body_bounds');
-      };
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', onUp, { once: true });
-    }
 
     function selectPdfOverlayBox(box) {
       if (!box) return;
