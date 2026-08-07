@@ -6,7 +6,7 @@
   <title>Scenario Material Control Layer</title>
   <style>
     :root {
-      /* Modern-minimal surface stack (canvas shell, ver074): neutral greys, single blue accent */
+      /* Modern-minimal surface stack (canvas shell): neutral greys, single blue accent */
       --bg: #f4f4f2;
       --dot: #dededa;
       --panel: #ffffff;
@@ -129,7 +129,7 @@
 
     .app { height: 100%; }
 
-    /* ===== Canvas shell (ver074): the whole screen is a pannable/zoomable work surface ===== */
+    /* ===== Canvas shell: the whole screen is a pannable/zoomable work surface ===== */
     .workspace {
       position: fixed; inset: 0;
       overflow: hidden;
@@ -1890,7 +1890,7 @@
     .material-composer-actions .save.direct_rewrite { background: var(--rewrite); border-color: var(--rewrite); color: #fff; }
     .material-composer-actions .save.fact { background: var(--fact); border-color: var(--fact); color: #fff; }
     .material-composer-actions .save.setting { background: #5c6f7a; border-color: #5c6f7a; color: #fff; }
-    /* ver074: page nav lives in the floating top chrome (proxy buttons); in-scene bar hidden */
+    /* page nav lives in the floating top chrome (proxy buttons); in-scene bar hidden */
     .script-page-nav {
       display: none;
       align-items: center;
@@ -2704,6 +2704,7 @@
 
     <div id="bottomStrip" class="canvas-chrome">
       <span class="strip-item"><span class="strip-k">blocks</span><span id="stripBlocks" class="strip-mono"></span></span>
+      <span class="strip-item"><span id="stripVersion" class="strip-mono"></span></span>
       <button type="button" id="stripDebugBtn" class="strip-btn" title="PDF 오버레이 디버그"><span class="strip-k" data-i18n="pdfDebugOverlayToggle">디버그</span><span id="stripDebugState" class="strip-dot"></span></button>
       <button type="button" id="zoomResetBtn" class="strip-btn" title="100%"><span class="strip-k">zoom</span><span id="zoomLabel" class="strip-mono"></span></button>
     </div>
@@ -2723,6 +2724,11 @@
 
   <script>
     'use strict';
+
+    // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·generator.name 이 전부
+    // 이 값을 읽는다. 사용자에게 보이는 변화를 낸 판마다 올린다.
+    const APP_VERSION = 'ver075';
+    const APP_NAME = 'Scenario Material Control Layer';
 
     // The picker is two-state (確定/仮), but the data is not: extractEntities() still stamps
     // 'draft' on what it inferred by itself, and authorityRank() ranks that below 'soft'.
@@ -4009,7 +4015,7 @@
       return {
         schemaVersion: 'scenario_material_control_settings_kari_v0_2',
         generator: {
-        name: 'Scenario Material Control Layer',
+        name: APP_NAME + ' ' + APP_VERSION,
           generatedAt: new Date().toISOString()
         },
         activeWorkId: '',
@@ -4021,7 +4027,7 @@
       return {
         schemaVersion: 'scenario_material_control_kari_v0_2',
         generator: {
-        name: 'Scenario Material Control Layer',
+        name: APP_NAME + ' ' + APP_VERSION,
           generatedAt: new Date().toISOString(),
           mode: 'classification_support'
         },
@@ -11872,6 +11878,8 @@
         const meta = parseSceneMeta(part, previous);
         if (meta.locationName) candidates.push(meta.locationName);
       });
+      // 파트 마커(ＯＰ·ＥＤ·Ｃパート…)는 이야기의 구간 표시이지 장소가 아니다.
+      if (isScenarioPartMembershipLine(text) || isScenarioSectionLabel(cleanPlaceName(text))) return candidates;
       const raw = resolveRelativeLocationName(cleanPlaceName(text), previous);
       if (raw && !isLikelyNonPlaceName(raw)) candidates.push(raw);
       String(raw || text || '').split(/[○●◯〇◎□■△▲▽▼／/]/).forEach((part) => {
@@ -12702,7 +12710,7 @@
       const reviewItems = foldTrailingPunctuationAfterQuotedDialogItems(buildSourceReviewItems(sourceText, doc));
       if (doc && doc.draftSourceType === 'pdf') {
         attachSourceReviewPageSpans(reviewItems, sourceReviewPagesFromText(sourceText));
-        normalizePdfDialogInlineSpacingForReviewItems(reviewItems);
+        normalizePdfInlineSpacingForReviewItems(reviewItems);
       }
       // Annotation/metadata note items must exist BEFORE rect attachment — they used to be
       // appended after it and stayed rect-less (their rects then came from render-time
@@ -12806,10 +12814,17 @@
       });
     }
 
-    function normalizePdfDialogInlineSpacingForReviewItems(items) {
+    // 세로쓰기 랩을 이어 붙이는 과정에서 줄 경계가 공백으로 남는다(norm() 의 \s+ → ' ').
+    // 일본어 본문에 어중간한 공백이 끼면 그대로 콘티로 넘어가므로 여기서 걷어낸다.
+    // 대사만 처리하다가 지문·씬 헤딩에 공백이 남아 있었다.
+    function normalizePdfInlineSpacingForReviewItems(items) {
       (items || []).forEach((item) => {
-        if (!item || item.type !== 'dialog') return;
-        item.dialog = normalizePdfJapaneseInlineSpacing(item.dialog);
+        if (!item) return;
+        if (item.type === 'dialog') item.dialog = normalizePdfJapaneseInlineSpacing(item.dialog);
+        if (['dialog', 'action', 'scene', 'character', 'text'].includes(item.type)) {
+          item.text = normalizePdfJapaneseInlineSpacing(item.text);
+          item.body = normalizePdfJapaneseInlineSpacing(item.body);
+        }
         (item.pageSpans || []).forEach((span) => {
           if (!span || !span.text) return;
           span.text = normalizePdfJapaneseInlineSpacing(span.text);
@@ -20303,7 +20318,7 @@
       renderStaticI18n();
     }
 
-    // ===== ver074 canvas shell: pan / zoom / rails / floating chrome =====
+    // ===== canvas shell: pan / zoom / rails / floating chrome =====
     function canvasZoomFactor() {
       return (state.canvasView && state.canvasView.z) || 1;
     }
@@ -20587,6 +20602,13 @@
         if (/\.json$/i.test(file.name)) loadProjectJsonFile(file);
         else { if (!requireProjectReady()) return; importJsonOrText(file, { versionMode: 'new' }); }
       });
+    }
+
+    // 버전을 화면과 탭 제목에 싣는다. 어느 빌드를 보고 있는지 앱 안에서 확인할 수 있어야 한다.
+    function setAppVersionChrome() {
+      document.title = APP_NAME + ' ' + APP_VERSION;
+      const el = document.getElementById('stripVersion');
+      if (el) el.textContent = APP_VERSION;
     }
 
     function initCanvasShell() {
@@ -21023,7 +21045,7 @@
         format: 'scenario_to_conte_package',
         schemaVersion: 1,
         generator: {
-          name: 'Scenario Material Control Layer',
+          name: APP_NAME + ' ' + APP_VERSION,
           generatedAt,
           app: 'scenario_material_control_layer'
         },
@@ -21811,6 +21833,7 @@
     }
 
     wire();
+    setAppVersionChrome();
     initializeApp();
     window.__materialDebug = {
       state,
