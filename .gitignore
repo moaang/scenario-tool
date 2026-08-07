@@ -1,0 +1,13 @@
+sample/
+_pool/
+scenario_material_control_settings_settings.json
+_shiftjis_reverse_map.tsv
+design.jpg
+
+# 정리 전 스냅샷 — 세션 DOM 덤프(클라이언트 각본 대사)가 들어 있다. 절대 커밋하지 말 것.
+index.html.bak-*
+
+# 작업 규약과 코드맵은 로컬 전용. 원격이 public 이고, 내용 자체가 내부 사정이다.
+AGENTS.md
+CLAUDE.md
+docs/
