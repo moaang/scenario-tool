@@ -4121,12 +4121,8 @@
         documents: [makeSourceDocument('project-common', '作品共通', 'project_common')],
         sourceBlocks: [],
         entities: [],
-        relations: [],
         settingClaims: [],
-        consistencyRules: [],
         revisionNotes: [],
-        riskMemos: [],
-        lowConfidenceItems: [],
         audit: []
       };
     }
@@ -4541,12 +4537,8 @@
       delete shaped.sourceDocument;
       shaped.sourceBlocks = expandSceneHeadingActionTailBlocks(shaped.sourceBlocks || []);
       shaped.entities = shaped.entities || [];
-      shaped.relations = shaped.relations || [];
       shaped.settingClaims = shaped.settingClaims || [];
-      shaped.consistencyRules = shaped.consistencyRules || [];
       shaped.revisionNotes = shaped.revisionNotes || shaped.retakeDirectives || [];
-      shaped.riskMemos = shaped.riskMemos || [];
-      shaped.lowConfidenceItems = shaped.lowConfidenceItems || [];
       shaped.audit = shaped.audit || [];
       shaped.sourceBlocks.forEach((b) => {
         if (!b.sourceDocumentId || !shaped.documents.some(doc => doc.id === b.sourceDocumentId)) b.sourceDocumentId = shaped.activeDocumentId;
@@ -5127,9 +5119,6 @@
       state.project.revisionNotes = (state.project.revisionNotes || [])
         .filter(n => !(n.targetType === 'entity' && n.targetId === id))
         .map(n => Object.assign({}, n, { linkedEntityIds: (n.linkedEntityIds || []).filter(x => x !== id) }));
-      state.project.consistencyRules = (state.project.consistencyRules || [])
-        .map(r => Object.assign({}, r, { targetEntityIds: (r.targetEntityIds || []).filter(x => x !== id) }))
-        .filter(r => (r.targetEntityIds || []).length);
       (state.project.sourceBlocks || []).forEach((b) => {
         if (Array.isArray(b.linkedEntityIds)) b.linkedEntityIds = b.linkedEntityIds.filter(x => x !== id);
       });
@@ -7173,7 +7162,6 @@
       });
       if (!removedEntityIds.size) return;
       project.settingClaims = (project.settingClaims || []).filter(claim => !removedEntityIds.has(claim.targetId));
-      project.consistencyRules = (project.consistencyRules || []).filter(rule => !(rule.targetEntityIds || []).some(id => removedEntityIds.has(id)));
       project.revisionNotes = (project.revisionNotes || []).filter(note => !removedEntityIds.has(note.targetId) && !(note.linkedEntityIds || []).some(id => removedEntityIds.has(id)));
     }
 
@@ -12482,9 +12470,6 @@
       state.project.entities = (state.project.entities || []).filter(e => !removedEntityIds.has(e.id));
       state.project.settingClaims = (state.project.settingClaims || []).filter(c => !removedEntityIds.has(c.targetId) && c.sourceDocumentId !== doc.id);
       state.project.revisionNotes = (state.project.revisionNotes || []).filter(n => !removedBlockIds.has(n.targetId) && !removedEntityIds.has(n.targetId));
-      state.project.consistencyRules = (state.project.consistencyRules || []).map(r => Object.assign({}, r, {
-        targetEntityIds: (r.targetEntityIds || []).filter(id => !removedEntityIds.has(id))
-      })).filter(r => (r.targetEntityIds || []).length);
       state.project.documents = docs.filter(item => item.id !== doc.id);
       const nextDoc = editableDocuments(state.project)[0] || commonDocument(state.project);
       state.project.activeDocumentId = nextDoc.id;
