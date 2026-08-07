@@ -352,6 +352,7 @@
       padding: 5px 8px 5px 14px;
       background: var(--panel); border-radius: 999px; box-shadow: var(--shadow-chrome);
     }
+    .strip-warn .strip-k, .strip-warn .strip-mono { color: var(--warn, #d97706); }
     .strip-item { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; white-space: nowrap; }
     .strip-k { color: var(--faint); font-size: 10px; font-weight: 750; }
     .strip-mono { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); font-weight: 700; }
@@ -2704,6 +2705,7 @@
 
     <div id="bottomStrip" class="canvas-chrome">
       <span class="strip-item"><span class="strip-k">blocks</span><span id="stripBlocks" class="strip-mono"></span></span>
+      <span class="strip-item strip-warn hidden" id="stripOverlayDrops" title=""><span class="strip-k">overlay</span><span id="stripOverlayDropCount" class="strip-mono"></span></span>
       <span class="strip-item"><span id="stripVersion" class="strip-mono"></span></span>
       <button type="button" id="stripDebugBtn" class="strip-btn" title="PDF 오버레이 디버그"><span class="strip-k" data-i18n="pdfDebugOverlayToggle">디버그</span><span id="stripDebugState" class="strip-dot"></span></button>
       <button type="button" id="zoomResetBtn" class="strip-btn" title="100%"><span class="strip-k">zoom</span><span id="zoomLabel" class="strip-mono"></span></button>
@@ -4102,23 +4104,22 @@
 
 
 
-    function pdfBodyCutLinePctForPage(doc, pageNo) {
-      const targetPage = Number(pageNo || 1);
-      const page = (doc && doc.draftPages || []).find(item => Number(item.pageNo || item.sourcePageIndex || 1) === targetPage);
-      if (!page || !isPdfBodyCutLineTrigger(page.bodyCutLineTrigger)) return null;
-      const value = Number(page && page.bodyCutLinePct);
-      if (!Number.isFinite(value)) return null;
-      if (value < 45 || value > 96) return null;
-      return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
-    }
+    // 상한·하한은 같은 구조로 다른 필드를 본다. 다른 것은 어느 필드를 보는가와 허용 범위뿐이라
+    // 표로 뽑아 한 벌로 읽는다. 범위 값은 조판 관찰치이지 일반해가 아니다.
+    const PDF_BODY_LINE_SPECS = {
+      cut: { triggerField: 'bodyCutLineTrigger', valueField: 'bodyCutLinePct', isTrigger: isPdfBodyCutLineTrigger, min: 45, max: 96 },
+      top: { triggerField: 'bodyTopLineTrigger', valueField: 'bodyTopLinePct', isTrigger: isPdfBodyTopLineTrigger, min: 8, max: 65 }
+    };
 
-    function pdfBodyTopLinePctForPage(doc, pageNo) {
+    function pdfBodyLinePctForPage(doc, pageNo, kind) {
+      const spec = PDF_BODY_LINE_SPECS[kind];
+      if (!spec) return null;
       const targetPage = Number(pageNo || 1);
       const page = (doc && doc.draftPages || []).find(item => Number(item.pageNo || item.sourcePageIndex || 1) === targetPage);
-      if (!page || !isPdfBodyTopLineTrigger(page.bodyTopLineTrigger)) return null;
-      const value = Number(page && page.bodyTopLinePct);
+      if (!page || !spec.isTrigger(page[spec.triggerField])) return null;
+      const value = Number(page[spec.valueField]);
       if (!Number.isFinite(value)) return null;
-      if (value < 8 || value > 65) return null;
+      if (value < spec.min || value > spec.max) return null;
       return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
     }
 
@@ -4132,14 +4133,49 @@
 
     // 범위는 자동 검출한 컷라인에서만 온다. 예전에는 디버그 모드에서 선을 끌어 정하는
     // 수동 범위(doc.pdfBodyBounds)와 합쳐 썼는데, 그 기능을 걷어냈다.
+    // 오버레이 박스가 조용히 사라지는 길이 여럿이다 — 매칭 실패, 본문 범위 밖 클립,
+    // 범위 자체의 붕괴, 렌더 생략. 지금까지 어느 쪽도 흔적을 남기지 않아서
+    // "왜 이 대사만 박스가 없나"에 답할 방법이 없었다. 전부 여기로 모아 상태줄에 낸다.
+    const pdfOverlayDrops = new Map();
+
+    function notePdfOverlayDrop(kind, detail) {
+      const prev = pdfOverlayDrops.get(kind) || { count: 0, last: '' };
+      pdfOverlayDrops.set(kind, { count: prev.count + 1, last: detail || prev.last });
+    }
+
+    function resetPdfOverlayDrops() {
+      pdfOverlayDrops.clear();
+    }
+
+    function pdfOverlayDropTotal() {
+      let total = 0;
+      pdfOverlayDrops.forEach((entry) => { total += entry.count; });
+      return total;
+    }
+
+    function pdfOverlayDropDetail() {
+      const parts = [];
+      pdfOverlayDrops.forEach((entry, kind) => {
+        parts.push(kind + ' ' + entry.count + (entry.last ? ' (' + entry.last + ')' : ''));
+      });
+      return parts.join(' / ');
+    }
+
     function pdfBodyRangeForPage(doc, pageNo) {
-      const cut = pdfBodyCutLinePctForPage(doc, pageNo);
-      const topLine = pdfBodyTopLinePctForPage(doc, pageNo);
+      const cut = pdfBodyLinePctForPage(doc, pageNo, 'cut');
+      const topLine = pdfBodyLinePctForPage(doc, pageNo, 'top');
       let top = 0;
       let bottom = 100;
       if (topLine != null) top = Math.max(top, topLine);
       if (cut != null) bottom = Math.min(bottom, cut);
-      if (bottom <= top) bottom = Math.min(100, top + 0.1);
+      if (bottom <= top) {
+        // 상한(8~65)과 하한(45~96)의 유효범위가 45~65 에서 겹쳐, 한 페이지에서 둘 다
+        // 검출되면 여기 걸린다. 예전에는 범위를 높이 0.1% 로 짜부라뜨렸는데 그러면
+        // 그 페이지 오버레이가 통째로 사라졌다(클립이 전부 null). 범위를 포기한다 —
+        // 클립을 안 하면 박스는 남는다. 검출이 어긋난 것이므로 기록도 남긴다.
+        notePdfOverlayDrop('bodyRangeConflict', 'p' + Number(pageNo || 1));
+        return { enabled: false, top: 0, bottom: 100 };
+      }
       return {
         enabled: cut != null || topLine != null,
         top,
@@ -8178,6 +8214,10 @@
       return Math.round(Math.min(94, Math.max(0, candidates[0].top + 0.45)) * 100) / 100;
     }
 
+    // 하한판(pdfJsStableBodyCutLineFromCandidates)과 86.9% 닮았지만 **합치지 않는다.**
+    // 범위도 클러스터 허용치도 필요 개수 계산도 다르고, 무엇보다 동점 처리의 정렬 방향이
+    // 서로 반대다 — 하한은 큰 값을, 상한은 작은 값을 고른다(둘 다 본문을 넓게 잡는 쪽이라
+    // 의도된 비대칭이다). 합치면 커널 안에 방향 분기가 들어간다.
     function pdfJsStableBodyTopLineFromCandidates(values, pageCount) {
       const nums = (values || [])
         .map(value => Number(value))
@@ -12972,7 +13012,10 @@
             matched = matchPdfTextWithMatcher(entry.matcher, variant);
             if (matched && matched.rect) break;
           }
-          if (!matched || !matched.rect) return;
+          if (!matched || !matched.rect) {
+            notePdfOverlayDrop('reviewItemNoMatch', '');
+            return;
+          }
           span.overlayRect = Object.assign({}, matched.rect, {
             inferred: true,
             manual: false,
@@ -16234,7 +16277,8 @@
         renderPdfFeedbackLayer();
         return;
       }
-      const debugMode = Boolean(state.pdfOverlayDebugMode);
+      // 여기부터가 실제 재렌더다(위 캐시 반환을 지나왔다). 이번 판에서 몇 개가 빠지는지 다시 센다.
+      resetPdfOverlayDrops();
       el.innerHTML = `
         <div class="script-page-nav" aria-hidden="true">
           <button class="small" data-script-page-go="prev" ${currentIndex <= 0 ? 'disabled' : ''}>Prev</button>
@@ -16296,9 +16340,6 @@
           block.activeOverlayPageNo || pageNo || '',
           block.continuedFromPageNo || '',
           block.overlayLabel || '',
-          doc && doc.pdfBodyBounds && doc.pdfBodyBounds.enabled ? 1 : 0,
-          Math.round(Number(doc && doc.pdfBodyBounds && doc.pdfBodyBounds.top || 0) * 10),
-          Math.round(Number(doc && doc.pdfBodyBounds && doc.pdfBodyBounds.bottom || 0) * 10),
           Math.round(Number(rect.left || 0) * 10),
           Math.round(Number(rect.top || 0) * 10),
           Math.round(Number(rect.width || 0) * 10),
@@ -17059,7 +17100,10 @@
       const isFrontText = isFrontPreviewBlock(block) && !isCast;
       const speaker = isDialog ? (block.speaker || block.characterName || '') : '';
       const pageNo = overlayPageNoForBlock(block);
-      if (!hasUsablePdfOverlayRect(block, pageNo)) return '';
+      if (!hasUsablePdfOverlayRect(block, pageNo)) {
+        notePdfOverlayDrop('noUsableRect', 'p' + Number(pageNo || 1));
+        return '';
+      }
       const rect = overlayRectForBlock(block, index, total, doc);
       if (!rect) return '';
       const style = `${isDialog ? characterColorStyle(speaker || 'unknown-speaker') : ''};left:${rect.left}%;top:${rect.top}%;width:${rect.width}%;height:${rect.height}%`;
@@ -17501,8 +17545,8 @@
     }
 
     function renderPdfBodyCutLineGuide(pageNo) {
-      const topLine = pdfBodyTopLinePctForPage(activeDocument(), pageNo);
-      const cut = pdfBodyCutLinePctForPage(activeDocument(), pageNo);
+      const topLine = pdfBodyLinePctForPage(activeDocument(), pageNo, 'top');
+      const cut = pdfBodyLinePctForPage(activeDocument(), pageNo, 'cut');
       const lines = [];
       if (topLine != null) {
         lines.push(`<div class="pdf-layout-body-cut-line top-divider" style="top:${topLine}%" title="body top divider" data-pdf-layout-guide-label="BODY_TOP" data-pdf-layout-guide-role="divider" data-pdf-layout-guide-mode="H">
@@ -18013,12 +18057,16 @@
         const matched = isNote
           ? inferNoteOverlayRectFromLines(overlayBlock, pools.noteLines, pageNo)
           : inferOverlayRectFromPdfText(overlayBlock, bodyMatcher);
-        if (!matched || !matched.rect) return;
+        if (!matched || !matched.rect) {
+          notePdfOverlayDrop('noTextMatch', 'p' + Number(pageNo || 1));
+          return;
+        }
         // Notes live outside the configured body band — clipping them into it would be
         // exactly the kind of forced coordinate correction we want to avoid.
         const nextRect = isNote
           ? normalizeOverlayRect(matched.rect)
-          : (clipOverlayRectToPdfBodyBounds(matched.rect, doc, pageNo) || normalizeOverlayRect(matched.rect));
+          : (clipOverlayRectToPdfBodyBounds(matched.rect, doc, pageNo)
+            || (notePdfOverlayDrop('outsideBodyRange', 'p' + Number(pageNo || 1)), normalizeOverlayRect(matched.rect)));
         const savedRect = setBlockOverlayRectForPage(block, pageNo, Object.assign({}, nextRect, {
           inferred: true,
           manual: false,
@@ -18528,6 +18576,8 @@
         ? normalizeOverlayRect(rect)
         : clipOverlayRectToPdfBodyBounds(rect, activeDocument(), targetPageNo);
       if (!clipped) {
+        // 좌표는 저장돼 있는데 화면에서만 지운다. 저장과 표시가 갈리는 자리라 반드시 남긴다.
+        notePdfOverlayDrop('hiddenByBodyRange', 'p' + targetPageNo);
         box.classList.add('hidden');
         return;
       }
@@ -18651,7 +18701,6 @@
     }
 
     function bindBodyOverlayInteractions() {
-      const debugMode = Boolean(state.pdfOverlayDebugMode);
       document.querySelectorAll('[data-overlay-block]').forEach((box) => {
         if (box.dataset.boundOverlayBox === '1') return;
         box.dataset.boundOverlayBox = '1';
@@ -19549,11 +19598,25 @@
       }
     }
 
+    // 오버레이가 몇 개나 조용히 빠졌는지 낸다. 0 이면 칩 자체를 숨긴다 —
+    // 평소에 안 보이다가 문제가 생겨야 나타나야 눈에 띈다.
+    function renderPdfOverlayDropChip() {
+      const chip = $('stripOverlayDrops');
+      if (!chip) return;
+      const total = pdfOverlayDropTotal();
+      chip.classList.toggle('hidden', total === 0);
+      if (!total) return;
+      const count = $('stripOverlayDropCount');
+      if (count) count.textContent = total;
+      chip.title = pdfOverlayDropDetail();
+    }
+
     function renderStats() {
       const p = state.project;
       const blocks = activeDocumentBlocks(p);
       const strip = $('stripBlocks');
       if (strip) strip.textContent = blocks.length;
+      renderPdfOverlayDropChip();
       const body = blocks.filter(b => b.zone === 'body').length;
       const characters = (p.entities || []).filter(e => e.type === 'character' && entityVisibleInActiveDocument(e, p)).length;
       const places = (p.entities || []).filter(e => e.type === 'place' && entityVisibleInActiveDocument(e, p)).length;
