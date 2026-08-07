@@ -697,32 +697,6 @@
       color: var(--muted);
       font-weight: 800;
     }
-    .doc-map { display: grid; gap: 5px; }
-    .doc-map-item {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 6px;
-      align-items: center;
-      width: 100%;
-      text-align: left;
-      border-radius: 8px;
-    }
-    .doc-map-item.active { border-color: var(--focus); background: #eef4f7; }
-    .doc-status {
-      display: inline-flex;
-      align-items: center;
-      min-height: 18px;
-      padding: 2px 6px;
-      border: 1px solid #c9c9bd;
-      border-radius: 999px;
-      background: #f3f3ed;
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
-    .doc-status.confirmed { color: #285a36; background: #e7f5e9; border-color: #b7d9be; }
-    .doc-status.review { color: #7b4d10; background: #fbefd9; border-color: #e2c488; }
     .source-review-panel, .source-preview-panel, .script-structure-panel { display: grid; gap: 8px; }
     .script-page {
       display: grid;
@@ -2438,12 +2412,9 @@
       border-color: #7b2b2b;
       background: rgba(127,23,23,.18);
     }
-    .review-block-grid { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 7px; }
-    .review-dialog-row { display: grid; grid-template-columns: minmax(90px, 160px) auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
     .review-block textarea { min-height: 64px; font-family: var(--mono); font-size: 12px; }
     .review-block.text textarea { min-height: 96px; }
     .review-block select, .review-block input { min-height: 28px; padding: 4px 6px; }
-    .review-block-actions { display: flex; gap: 5px; justify-content: flex-end; flex-wrap: wrap; }
     .review-page-tags { display: flex; flex-wrap: wrap; gap: 4px; }
     .review-token {
       display: inline-flex;
@@ -2607,7 +2578,7 @@
     @media (max-width: 760px) {
       .source-review-toolbar { display: grid; }
       .source-review-page-layout { grid-template-columns: 1fr; }
-      .review-block-grid, .review-dialog-row, .review-dialog-card { grid-template-columns: 1fr; }
+      .review-dialog-card { grid-template-columns: 1fr; }
       .review-material-candidates { grid-template-columns: 1fr; }
       .review-material-drop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .review-speaker-tag { justify-items: start; min-height: 0; }
