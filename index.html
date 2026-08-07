@@ -4124,7 +4124,7 @@
     }
 
     function isPdfBodyCutLineTrigger(trigger) {
-      return trigger === 'color_annotation_stable' || trigger === 'annotation_layout_stable';
+      return trigger === 'annotation_layout_stable';
     }
 
     function isPdfBodyTopLineTrigger(trigger) {
@@ -9153,13 +9153,9 @@
         pageNo: clean[0] && clean[0].pageNo || 0,
         visualGroupKey: pdfJsTextItemVisualGroupKey(clean[0]),
         compactOverlayRect: compactRect,
-        overlayRect: compactRect || unionOverlayRects(clean.map(item => ({
-          left: item.leftPct,
-          top: item.topPct,
-          width: item.widthPct,
-          height: item.heightPct,
-          vertical
-        })))
+        // compactPdfItemUnionRect 가 null 을 주는 건 clean 이 빌 때뿐이고,
+        // 그때는 어떤 폴백도 빈 배열을 받아 null 이 된다.
+        overlayRect: compactRect
       };
     }
 
@@ -9329,7 +9325,6 @@
         ? Math.min(rawWidth, Math.max(rawWidth * 0.72, rawHeight * 0.08))
         : Math.max(measuredGlyphWidth, Math.min(rawWidth, rawHeight * 0.82));
       const width = Math.min(rawWidth, widthHint * (rotatedLatin ? 1.04 : 1.02));
-      const runXShift = pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight);
       const bottomPad = pdfVerticalRunBottomPadPct(item, rawHeight, vertical);
       // Horizontal placement: center the box on the glyph's true ink center (item.centerXPct,
       // pixel-verified against the rasterized render). For a measured multi-glyph run pdf.js
@@ -9342,7 +9337,7 @@
       const centerX = Number(item && item.centerXPct);
       const centeredLeft = (!rotatedLatin && Number.isFinite(centerX))
         ? centerX - width / 2
-        : left + (rawWidth - width) / 2 - runXShift;
+        : left + (rawWidth - width) / 2;
       return {
         left: Math.max(0, Math.min(99, centeredLeft)),
         top,
@@ -9350,17 +9345,6 @@
         height: Math.min(100 - top, rawHeight + bottomPad),
         vertical: true
       };
-    }
-
-    function pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight) {
-      // pdf.js reports every vertical (ttb) glyph's x-origin at the ink CENTER, so centering the box
-      // means pulling it left by half its own width — uniformly for measured runs, estimated runs,
-      // and SINGLE-glyph markers alike (a lone × / ○ / 」 stacked in a column). The >=2 glyph gate in
-      // isPdfExpandedVerticalRunItem only guards the height heuristics; x-centering applies to any
-      // vertical glyph. (ltr-glyph columns keep verticalTextItem false and are left untouched.)
-      if (!item || item.rotatedLatinRun) return 0;
-      if (!item.verticalTextItem && !item.verticalRunExpanded) return 0;
-      return Math.max(0, (Number(rawWidth) || Number(width) || 0) / 2);
     }
 
     function pdfVerticalRunBottomPadPct(item, rawHeight, vertical) {
@@ -17604,14 +17588,9 @@
         id: group.id,
         text: group.text,
         pageNo: group.items[0] && group.items[0].pageNo || 0,
-        parentText: uniqTextValues(group.items.map(item => item.pdfRubyParentText)).join(''),
-        overlayRect: unionOverlayRects(group.items.map(item => ({
-          left: item.leftPct,
-          top: item.topPct,
-          width: item.widthPct,
-          height: item.heightPct,
-          vertical: true
-        }))) || null
+        // 좌표는 계산하지 않는다 — 이 목록을 읽는 곳은 removePdfRubyLinesFromLogicalText 하나뿐이고
+        // 거기서는 text 만 본다. 페이지마다 union 을 돌릴 이유가 없다.
+        parentText: uniqTextValues(group.items.map(item => item.pdfRubyParentText)).join('')
       }));
       return items.pdfRubyLines;
     }
