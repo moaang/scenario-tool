@@ -7636,7 +7636,7 @@
         const page = await pdf.getPage(pageNo);
         const viewport = page.getViewport({ scale: 1 });
         const [textContent, operatorSignals] = await Promise.all([
-          page.getTextContent(),
+          page.getTextContent({ includeMarkedContent: true }),
           pdfJsPageOperatorSignals(page, pdfjsLib, viewport).catch(() => ({ colorKeys: [], horizontalDividers: [] }))
         ]);
         const colorKeys = operatorSignals && operatorSignals.colorKeys || [];
@@ -17269,7 +17269,7 @@
       let items = state.pdfPageTextItems[key];
       if (!items) {
         const [textContent, colorKeys] = await Promise.all([
-          page.getTextContent(),
+          page.getTextContent({ includeMarkedContent: true }),
           pdfJsTextItemColorKeysForPage(page, pdfjsLib).catch(() => [])
         ]);
         const logicalPage = pdfLogicalPageForDocument(doc, pageNo);
@@ -17809,9 +17809,19 @@
       // 추측할 것이 아니라 여기서 확정되고, ascent 도 어림값이 아니라 실제 폰트 값이다.
       const styles = textContent && textContent.styles || {};
       let visibleTextIndex = 0;
+      // includeMarkedContent 를 켜면 items 사이에 begin/endMarkedContent 표식이 섞여 온다.
+      // 그 구간 안의 텍스트가 어떤 태그(P=문단, Span, Artifact=페이지 장식) 소속인지 기록한다.
+      const markStack = [];
       rawItems.forEach((item, index) => {
+        if (item && item.type) {
+          if (item.type === 'endMarkedContent') markStack.pop();
+          else markStack.push({ tag: item.tag || '', id: item.id || '' });
+          return;
+        }
         const text = String(item.str || '').trim();
         if (!text) return;
+        const mark = markStack.length ? markStack[markStack.length - 1] : null;
+        const markArtifact = markStack.some(m => m.tag === 'Artifact');
         const colorIndex = visibleTextIndex;
         visibleTextIndex += 1;
         const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
@@ -17840,6 +17850,9 @@
           glyphWidthPct: box.glyphWidth / viewport.width * 100,
           // pdf.js 가 판정한 줄바꿈. 세로쓰기에서는 컬럼 전환이 여기 실린다.
           hasEOL: Boolean(item.hasEOL),
+          markTag: mark ? mark.tag : '',
+          markId: mark ? mark.id : '',
+          markArtifact: markArtifact,
           fontName: item.fontName || '',
           fontVertical: Boolean(styles[item.fontName] && styles[item.fontName].vertical)
         };
@@ -18000,6 +18013,9 @@
     }
 
     function pdfArtifactRoleForTextItem(item, pageNo) {
+      // PDF 가 Artifact 로 표시한 것은 본문이 아니라 페이지 장식이라고 문서 스스로 말한 것이다.
+      // 좌표 존 추측보다 강한 신호라 먼저 본다(샘플 7개 중 5개가 태그드였다).
+      if (item && item.markArtifact) return 'page_number';
       if (isPdfPageArtifactTextItem(item, pageNo) || isPdfCoordinateArtifactItem(item, pageNo)) return 'page_number';
       return '';
     }
