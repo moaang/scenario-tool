@@ -2836,6 +2836,9 @@
     const UI_LANGUAGE_OPTIONS = ['ja', 'ko', 'en'];
     const UI_I18N = {
       ja: {
+        qualityWarningTitle: '認識の注意:',
+        qualityVerticalSuspect: '縦書きPDFの抽出、または文字単位の分解が疑われます。自動判定は補助にとどめてください。',
+        qualityFallbackPages: '{n}/{total}ページが代替パーサで処理されました（pdf.js の結果を使えませんでした）。',
         languageJa: '日本語',
         languageKo: '\ud55c\uad6d\uc5b4',
         languageEn: 'English',
@@ -3165,6 +3168,9 @@
         moveHere: 'ここへ移動'
       },
       ko: {
+        qualityWarningTitle: '인식 주의:',
+        qualityVerticalSuspect: '세로쓰기 PDF 추출 또는 글자 단위 분해가 의심됩니다. 자동 판단은 보조 수준으로만 쓰세요.',
+        qualityFallbackPages: '{n}/{total}페이지가 대체 파서로 처리됐습니다(pdf.js 결과를 쓰지 못했습니다).',
         languageJa: '日本語',
         languageKo: '한국어',
         languageEn: 'English',
@@ -3493,6 +3499,9 @@
         moveHere: '여기로 이동'
       },
       en: {
+        qualityWarningTitle: 'Recognition warnings:',
+        qualityVerticalSuspect: 'Vertical-script extraction or per-character splitting suspected. Treat the automatic classification as assistive only.',
+        qualityFallbackPages: '{n} of {total} pages were handled by the fallback parser (pdf.js output was unusable).',
         languageJa: 'Japanese',
         languageKo: 'Korean',
         languageEn: 'English',
@@ -5922,6 +5931,23 @@
       return pages.length ? pages : [{ pageNo: 1, lines: [] }];
     }
 
+    // 임포트 경로용 품질 판정. importJsonOrText 가 parsed 를 손수 만들어 넘기는 바람에
+    // parseDocumentSelfContained 안의 detectQuality 가 건너뛰어졌고, PDF 에서는
+    // verticalPdfSuspected 가 영원히 false 였다. 같은 판정을 여기서 직접 부른다.
+    function importQualitySignals(doc, text, sourceType, warning) {
+      const pages = (doc && (doc.draftPages || []).length)
+        ? doc.draftPages.map(p => ({ lines: String(p.text || '').split('\n') }))
+        : [{ lines: String(text || '').split('\n') }];
+      const detected = detectQuality(pages, scenarioParserProfileForDocument(doc));
+      const warnings = detected.warnings.slice();
+      if (warning) warnings.unshift(warning);
+      const fallbackPages = (doc && doc.draftPages || []).filter(p => p.textSource === 'pdf-logical-fallback').length;
+      if (fallbackPages) {
+        warnings.push(t('qualityFallbackPages', { n: fallbackPages, total: (doc.draftPages || []).length }));
+      }
+      return Object.assign({ sourceType: sourceType }, detected, { warnings: warnings });
+    }
+
     function detectQuality(pages, profile) {
       const lines = pages.flatMap(p => p.lines).map(l => l.trim()).filter(Boolean);
       const total = lines.length || 1;
@@ -5934,7 +5960,7 @@
       const quotePairRecoveryRate = quoteStarts ? Math.min(quoteStarts, quoteEnds) / quoteStarts : 1;
       const verticalPdfSuspected = total > 30 && (single / total > 0.38 || (avg < 6 && quotePairRecoveryRate < 0.55));
       const warnings = [];
-     if (verticalPdfSuspected) warnings.push('세로쓰기 PDF 추출 또는 글자 단위 분해 의심: 자동 판단은 보조 수준으로 제한');
+      if (verticalPdfSuspected) warnings.push(t('qualityVerticalSuspect'));
       return {
         singleCharLineRatio: single / total,
         averageLineLength: avg,
@@ -6932,8 +6958,14 @@
           sourceFileName: doc.importedFileName || block.sourceFileName || ''
         });
       });
-      const quality = parsed.quality || parsed.extractionQuality || parsed.stats || {};
-      const warnings = (parsed.warnings || parsed.importWarnings || quality.warnings || []).slice();
+      // 품질 신호는 **여기서 한 번 잰다.** 호출부마다 parsed.quality 를 손수 만들어 넘기는데
+      // 그중 셋이 warnings: [] 로 넘겨서, 임포트 때 잡은 경고가 본문범위 적용이나 재확정 한
+      // 번에 지워졌다. 넘어온 값은 보태기만 하고 판정은 문서를 보고 다시 한다.
+      const passed = parsed.quality || parsed.extractionQuality || parsed.stats || {};
+      const measured = importQualitySignals(doc, text, passed.sourceType || (imported && imported.sourceType) || doc.draftSourceType || '', '');
+      const quality = Object.assign({}, passed, measured);
+      const warnings = uniq((parsed.warnings || parsed.importWarnings || [])
+        .concat(passed.warnings || [], measured.warnings || []).filter(Boolean));
       doc.qualityGate = Object.assign(doc.qualityGate || {}, {
         verticalPdfSuspected: Boolean(quality.verticalExtractionUnreliable || quality.verticalPdfSuspected),
         warnings,
@@ -12545,6 +12577,15 @@
       $('editModal').classList.add('active');
     }
 
+    // qualityGate.warnings 는 저장은 되는데 읽는 렌더가 없었다 — 조용한 실패 금지에 정면으로
+    // 어긋난다. 인식이 어긋났을 때 사용자가 알 수 있는 유일한 자리가 여기다.
+    function qualityWarningsHtml(doc) {
+      const warnings = (doc && doc.qualityGate && doc.qualityGate.warnings) || [];
+      if (!warnings.length) return '';
+      return `<div class="note quality-warning"><strong>${esc(t('qualityWarningTitle'))}</strong>
+        <ul>${warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`;
+    }
+
     function renderSourceReviewPanel() {
       const el = $('sourceReviewPanel');
       if (!el) return;
@@ -12557,7 +12598,7 @@
         return;
       }
       if (unlocked && doc.originalText) {
-        el.innerHTML = `
+        el.innerHTML = qualityWarningsHtml(doc) + `
           <div class="row">
             <button id="editSourceAgainBtn" class="small">${esc(t('openSourceReview'))}</button>
           </div>
@@ -21788,7 +21829,7 @@
             blocks: result.type === 'md' && result.blocks
               ? result.blocks
               : sourceReviewItemsToBlocks(doc.reviewItems, doc),
-            quality: { sourceType: result.type, warnings: result.warning ? [result.warning] : [] },
+            quality: importQualitySignals(doc, result.text, result.type, result.warning),
             parserName: 'import_auto_recognized'
           },
           sourceType: result.type,
@@ -21832,7 +21873,7 @@
           text,
           parsed: {
             blocks: sourceReviewItemsToBlocks(doc.reviewItems, doc),
-            quality: { sourceType: 'txt', warnings: [] },
+            quality: importQualitySignals(doc, text, 'txt', ''),
             parserName: 'import_auto_recognized_fallback'
           },
           sourceType: 'txt',
