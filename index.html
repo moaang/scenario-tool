@@ -11589,6 +11589,7 @@
         + '民間軍事会社|[一-龠々ァ-ヴーA-Za-z0-9・]+(?:省|庁|局|課|社|会社|評議会|研究所|研究センター|ラボ))', 'g');
       const techTerms = GENERIC_TECH_TERMS.concat(WORK_TERMS.technology);
       const dialogSpeakers = uniq((project.sourceBlocks || []).flatMap(b => dialogSpeakerNamesForBlock(b)).filter(Boolean));
+      let previousSceneLocation = '';
       project.sourceBlocks.forEach((b, blockIndex) => {
         if (b.type === 'cast_entry') {
           const castMetas = extractCastMetas(b.text || '');
@@ -11628,11 +11629,12 @@
           if (entity && b.timeOfDay) addEntityTag(entity, 'time:' + b.timeOfDay);
         }
         if (b.type === 'scene_heading') {
-          extractPlaceCandidates(b.text || '').forEach((place, index) => {
+          extractPlaceCandidates(b.text || '', previousSceneLocation).forEach((place, index) => {
             const entity = upsertEntity(project, place, 'place', b.id, index === 0 ? 0.94 : 0.86, 'confirmed');
             promoteEntity(entity, 'confirmed', 'draft', ['source:scene']);
             if (entity && b.timeOfDay) addEntityTag(entity, 'time:' + b.timeOfDay);
           });
+          if (b.locationName) previousSceneLocation = b.locationName;
         }
         const text = b.text || '';
         Array.from(text.matchAll(orgRegex)).forEach(m => upsertEntity(project, m[1], 'organization', b.id, 0.70, 'candidate'));
@@ -11888,16 +11890,19 @@
       return uniq(pieces).filter(name => isLikelyCharacterName(name));
     }
 
-    function extractPlaceCandidates(text) {
+    // previousLocation 을 반드시 넘길 것. 「同・リビング」 는 직전 씬 장소를 승계하라는 표기이지
+    // 장소명이 아니다 — 빈 값을 넘기면 승계가 통째로 죽고 승계 전 문자열이 그대로 장소가 된다.
+    function extractPlaceCandidates(text, previousLocation) {
+      const previous = norm(previousLocation || '');
       const candidates = [];
       expandSceneHeadingRuns(text).forEach((part) => {
-        const meta = parseSceneMeta(part, '');
+        const meta = parseSceneMeta(part, previous);
         if (meta.locationName) candidates.push(meta.locationName);
       });
-      const raw = cleanPlaceName(text);
+      const raw = resolveRelativeLocationName(cleanPlaceName(text), previous);
       if (raw && !isLikelyNonPlaceName(raw)) candidates.push(raw);
       String(raw || text || '').split(/[○●◯〇◎□■△▲▽▼／/]/).forEach((part) => {
-        const place = cleanPlaceName(part);
+        const place = resolveRelativeLocationName(cleanPlaceName(part), previous);
         const orgTail = workTermAlternation(WORK_TERMS.organizationSuffixed);
         const isOrgName = Boolean(orgTail) && new RegExp('(' + orgTail + ')$').test(place);
         if (place && !isLikelyNonPlaceName(place) && !isOrgName) candidates.push(place);
