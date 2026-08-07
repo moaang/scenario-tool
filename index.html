@@ -17764,6 +17764,9 @@
     function pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys) {
       const out = [];
       const rawItems = textContent && textContent.items || [];
+      // pdf.js 는 폰트마다 { vertical, ascent, descent } 를 함께 준다. 세로쓰기 여부는
+      // 추측할 것이 아니라 여기서 확정되고, ascent 도 어림값이 아니라 실제 폰트 값이다.
+      const styles = textContent && textContent.styles || {};
       let visibleTextIndex = 0;
       rawItems.forEach((item, index) => {
         const text = String(item.str || '').trim();
@@ -17771,7 +17774,7 @@
         const colorIndex = visibleTextIndex;
         visibleTextIndex += 1;
         const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-        const box = pdfJsTextItemBox(item, text, tx, viewport);
+        const box = pdfJsTextItemBox(item, text, tx, viewport, styles[item.fontName]);
         const left = box.left;
         const top = box.top;
         const width = box.width;
@@ -17793,7 +17796,11 @@
           rawHeight: box.rawHeight,
           verticalGlyphCount: box.verticalGlyphCount,
           glyphWidth: box.glyphWidth,
-          glyphWidthPct: box.glyphWidth / viewport.width * 100
+          glyphWidthPct: box.glyphWidth / viewport.width * 100,
+          // pdf.js 가 판정한 줄바꿈. 세로쓰기에서는 컬럼 전환이 여기 실린다.
+          hasEOL: Boolean(item.hasEOL),
+          fontName: item.fontName || '',
+          fontVertical: Boolean(styles[item.fontName] && styles[item.fontName].vertical)
         };
         rect.colorKey = pdfJsColorKeyForTextItem(colorKeys, colorIndex);
         rect.visualGroupKey = rect.colorKey || '';
@@ -17873,7 +17880,7 @@
       });
     }
 
-    function pdfJsTextItemBox(item, text, tx, viewport) {
+    function pdfJsTextItemBox(item, text, tx, viewport, fontStyle) {
       const scale = viewport && viewport.scale || 1;
       const charCount = Math.max(1, charLen(text));
       const matrixFontHeight = Math.hypot(Number(tx[2]) || 0, Number(tx[3]) || 0)
@@ -17883,10 +17890,15 @@
       const fontSize = Math.max(2, matrixFontHeight);
       const advance = Math.max(2, Math.abs(Number(item && item.width) || 0) * scale || charCount * fontSize * 0.55);
       const angle = Math.atan2(Number(tx[1]) || 0, Number(tx[0]) || 0);
-      const axisVertical = Math.abs(Number(tx[1]) || 0) > Math.abs(Number(tx[0]) || 0) * 1.2
+      // 폰트가 세로쓰기용이라고 pdf.js 가 말하면 그것이 답이다. 행렬 성분 비교와 dir 은
+      // 그 정보가 없을 때의 폴백으로 남긴다(스타일 표가 비어 오는 PDF 가 있다).
+      const axisVertical = Boolean(fontStyle && fontStyle.vertical)
+        || Math.abs(Number(tx[1]) || 0) > Math.abs(Number(tx[0]) || 0) * 1.2
         || Math.abs(Number(tx[2]) || 0) > Math.abs(Number(tx[3]) || 0) * 1.2
         || String(item && item.dir || '').toLowerCase() === 'ttb';
-      const ascent = fontSize * 0.82;
+      // ascent 는 폰트 단위 비율이다. 실제 값이 오면 쓰고, 없으면 종전 어림값(0.82).
+      const ascentRatio = fontStyle && Number(fontStyle.ascent) > 0 ? Number(fontStyle.ascent) : 0.82;
+      const ascent = fontSize * ascentRatio;
       const anchorX = Number(tx[4]) || 0;
       const anchorY = Number(tx[5]) || 0;
       const boxLeft = anchorX + ascent * Math.sin(angle);
