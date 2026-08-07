@@ -2830,11 +2830,9 @@
       technology: '技術/用語',
       unclassified: '未分類(素材DB対象外)'
     };
-    const SETTING_BLOCK_TYPES = [
-      ['summary', '概要'],
-      ['canonical_setting', '確定設定'],
-      ['intent', '意図']
-    ];
+    // 설정 블록으로 취급할 claimType. 새로 만들어지는 것은 canonical_setting 하나뿐이고
+    // (설정창에서 종류 선택을 없앴다) summary·intent 는 그 이전 데이터에만 있다.
+    const SETTING_BLOCK_TYPES = ['summary', 'canonical_setting', 'intent'];
     const DOCUMENT_KINDS = [
       ['episode_script', '本文'],
       ['other', 'その他']
@@ -3926,7 +3924,6 @@
       return t(UI_LABEL_KEYS.type[type] || '') || type || '';
     }
 
-
     function tagOptionLabel(value, fallback) {
       const raw = String(value || '');
       const map = {
@@ -4407,7 +4404,6 @@
       });
       doc.hasSessionPdfPreview = true;
     }
-
 
     // Japanese scripts use CID-keyed vertical fonts; without the matching CMap resources pdf.js
     // can't resolve their glyph metrics and collapses each vertical column to roughly half height,
@@ -4904,7 +4900,6 @@
       return Boolean(d && d.documentKind !== 'project_common' && d.sourceConfirmed);
     }
 
-
     function loadActiveDocumentToInput() {
       const doc = activeDocument();
       const blocks = activeDocumentBlocks();
@@ -5051,13 +5046,15 @@
       return found ? tagOptionLabel(found[0], found[1]) : raw;
     }
 
-
     function settingClaimsForEntity(entityId) {
-      return (state.project.settingClaims || []).filter(c => c.targetId === entityId && SETTING_BLOCK_TYPES.some(t => t[0] === c.claimType));
+      return claimsForEntity(entityId).filter(c => SETTING_BLOCK_TYPES.includes(c.claimType));
     }
 
-    function legacyClaimsForEntity(entityId) {
-      return (state.project.settingClaims || []).filter(c => c.targetId === entityId && !SETTING_BLOCK_TYPES.some(t => t[0] === c.claimType));
+    // 설정 블록을 먼저, 그 밖의 claim(confirmed_fact 등)을 뒤에. 카드와 소재 카드가 같은 순서를 쓴다.
+    function orderedClaimsForEntity(entityId) {
+      const own = claimsForEntity(entityId);
+      return own.filter(c => SETTING_BLOCK_TYPES.includes(c.claimType))
+        .concat(own.filter(c => !SETTING_BLOCK_TYPES.includes(c.claimType)));
     }
 
     function renderTagChips(entity) {
@@ -5065,11 +5062,7 @@
     }
 
     function renderSettingBlocks(entity) {
-      const blocks = settingClaimsForEntity(entity.id);
-      const legacy = legacyClaimsForEntity(entity.id);
-      const rows = blocks.map(c => `<div class="annotation fact"><strong>${esc(claimLabel(c))}</strong> ${esc(c.text)} <span class="card-sub">${esc(authorityLabel(c.authority))} ・ ${esc(entityScopeLabel(c.scope || entity.scope))}</span></div>`).join('');
-      const legacyRows = legacy.map(c => `<div class="annotation fact"><strong>${esc(claimLabel(c))}</strong> ${esc(c.text)} <span class="card-sub">${esc(authorityLabel(c.authority))} ・ ${esc(entityScopeLabel(c.scope || entity.scope))}</span></div>`).join('');
-      return `${rows}${legacyRows}`;
+      return orderedClaimsForEntity(entity.id).map(c => `<div class="annotation fact"><strong>${esc(claimLabel(c))}</strong> ${esc(c.text)} <span class="card-sub">${esc(authorityLabel(c.authority))} ・ ${esc(entityScopeLabel(c.scope || entity.scope))}</span></div>`).join('');
     }
 
     function noteLabel(note) {
@@ -5444,7 +5437,6 @@
       if (/^[△▲▽▼]$/.test(source)) return 'triangle';
       return '';
     }
-
 
     function isNonSceneMarkerTextLine(raw, profile) {
       const family = scenarioLineMarkerFamily(raw);
@@ -6441,7 +6433,6 @@
       if (isScenarioSectionLabel(payload)) return true;
       return /^(?:タイトル|サブタイトル|ロゴタイトル|タイトルロゴ|アイキャッチ|テロップ|字幕|画面文字|画面テキスト|文字情報|クレジット)$/.test(payload);
     }
-
 
     // A line LEADING with ××× (or ✕✕✕) marks a shot/beat transition (cf. classifyBody's
     // ^××× transition rule) — anchored at the start only, since extraction sometimes glues
@@ -7575,7 +7566,6 @@
       }).join('');
     }
 
-
     async function readDocumentFileSelfContained(file) {
       const name = String(file && file.name || '').toLowerCase();
       if (name.endsWith('.md') || name.endsWith('.markdown')) {
@@ -8303,7 +8293,6 @@
       return clusters.map(cluster => cluster.rects);
     }
 
-
     function splitPdfJsOverlayLinesForBodyAndAnnotations(lines, pageNo, options) {
       const bodyCandidateContext = options && options.bodyCandidateContext || createPdfOverlayBodyCandidateContext(lines || [], pageNo);
       const bodyLines = [];
@@ -8411,7 +8400,6 @@
       if (/[」』）)]$/.test(raw) && stats.japanese >= 2) score += 2;
       return score;
     }
-
 
     function pdfOverlayLineInsideDetectedScriptBodyBand(line, band) {
       const rect = pdfOverlayLineRectForBodyCheck(line);
@@ -9373,7 +9361,6 @@
       };
     }
 
-
     function pdfVerticalRunXShiftPct(item, rawWidth, width, rawHeight) {
       // pdf.js reports every vertical (ttb) glyph's x-origin at the ink CENTER, so centering the box
       // means pulling it left by half its own width — uniformly for measured runs, estimated runs,
@@ -10216,7 +10203,6 @@
       const descendant = body.match(/\/DescendantFonts\s*\[\s*(\d+)\s+\d+\s+R/);
       return descendant ? pdfFontObjectFallback(objectMap, descendant[1], seen) : '';
     }
-
 
     async function extractPdfPositionedPages(streams, cmap) {
       const pages = [];
@@ -11320,7 +11306,6 @@
       return '';
     }
 
-
     function decodePdfTextOp(op, cmap, fontName) {
       let cleanOp = String(op || '').trim();
       if (cleanOp.endsWith("'")) cleanOp = cleanOp.slice(0, -1).trim() + ' Tj';
@@ -11416,7 +11401,6 @@
       };
       return winAnsi[code] || String.fromCharCode(code);
     }
-
 
     function cleanPdfGarbledTextLines(text) {
       return String(text || '')
@@ -11975,7 +11959,6 @@
       return uniq(candidates).filter(place => charLen(place) >= 2 && charLen(place) <= 60);
     }
 
-
     function addClaim(project, targetEntity, claimType, text, authority, evidence) {
       if (!targetEntity || !text) return null;
       const id = stableId('claim', targetEntity.id + text);
@@ -12458,7 +12441,6 @@
       el.dataset.docId = '';
     }
 
-
     function deleteDocumentById(documentId, options) {
       const doc = documentById(documentId);
       const docs = state.project.documents || [];
@@ -12597,7 +12579,6 @@
       });
       $('editModal').classList.add('active');
     }
-
 
     function renderSourceReviewPanel() {
       const el = $('sourceReviewPanel');
@@ -15804,7 +15785,6 @@
       }).join('');
     }
 
-
     function markdownDocumentNodeForLine(doc, lineIndex) {
       return (doc && doc.markdownBlocks || []).find(node => (node.sourceLineIndexes || []).includes(Number(lineIndex))) || null;
     }
@@ -16895,7 +16875,6 @@
         return `${parts.speaker}${parts.open}（${modifier}）${parts.dialog}${parts.close}`;
       });
     }
-
 
     function dialogStartsWithModifierText(dialog, modifier) {
       if (!dialog || !modifier) return false;
@@ -19206,7 +19185,6 @@
       bindRevisionNoteDeleteButtons();
     }
 
-
     // ---- Page-level floating notes: same capsule UI, anchored to the page itself (no leader line). ----
     function pdfFeedbackCurrentPageInfo() {
       const doc = activeDocument();
@@ -19772,7 +19750,6 @@
       renderMaterialTypeTabs();
     }
 
-
     function renderBlocks() {
       const p = state.project;
       const doc = activeDocument(p);
@@ -19906,7 +19883,7 @@
       const refs = (e.sourceRefs || []);
       const refLinks = refs.slice(0, 6).map((id, i) => `<button type="button" class="ref-jump" data-jump-block="${esc(id)}" title="${esc(id)}">${i + 1}</button>`).join('');
       const refMore = refs.length > 6 ? `<span>+${refs.length - 6}</span>` : '';
-      const claims = settingClaimsForEntity(e.id).concat(legacyClaimsForEntity(e.id));
+      const claims = orderedClaimsForEntity(e.id);
       const notes = notesFor('entity', e.id);
       const claimRows = claims.map(c => `<div class="annotation-row fact">
           <span class="annotation-row-badge">${esc(claimLabel(c))}</span>
@@ -21265,7 +21242,6 @@
       };
     }
 
-
     function downloadBlob(text, filename, type) {
       const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
@@ -21496,7 +21472,6 @@
       downloadBlob(JSON.stringify(pkg, null, 2), conteExportFilename(state.project, pkg.generator.generatedAt), 'application/json;charset=utf-8');
     }
 
-
     async function loadProjectJsonFile(file) {
       if (!file) return;
       try {
@@ -21649,7 +21624,6 @@
       $('editModal').classList.add('active');
     }
 
-
     function openAddEntityNote(entityId) {
       const entity = state.project.entities.find(e => e.id === entityId);
       if (!entity) return;
@@ -21770,7 +21744,6 @@
       });
       $('editModal').classList.add('active');
     }
-
 
     function normalizeDocumentImportVersionMode(options) {
       return options && options.versionMode === 'new' ? 'new' : 'overwrite';
