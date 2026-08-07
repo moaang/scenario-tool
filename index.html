@@ -20123,6 +20123,38 @@
       });
     }
 
+    // IndexedDB 접근은 이 둘로만 한다. 아홉 곳이 열기·트랜잭션·close 를 각자 적고 있었고,
+    // 그중 여덟이 close 를 await 뒤에 두어 트랜잭션이 실패하면 연결이 닫히지 않았다.
+    // 여기서는 finally 로 닫는다.
+    async function readSettingsStore(storeName, key) {
+      const db = await openSettingsAutosaveDb();
+      try {
+        return await new Promise((resolve, reject) => {
+          const req = db.transaction(storeName, 'readonly').objectStore(storeName).get(key);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
+
+    // fn 은 objectStore 를 받아 put/delete/clear 를 건다. 완료는 트랜잭션이 알려 준다.
+    async function writeSettingsStore(storeName, fn) {
+      const db = await openSettingsAutosaveDb();
+      try {
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(storeName, 'readwrite');
+          fn(tx.objectStore(storeName));
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
+
+
     function pdfPreviewCacheKeyForDocument(doc, file) {
       if (!doc) return '';
       if (doc.pdfCacheKey) return doc.pdfCacheKey;
@@ -20150,29 +20182,14 @@
         meta,
         blob: file.slice ? file.slice(0, file.size, file.type || 'application/pdf') : file
       };
-      const db = await openSettingsAutosaveDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_PDF_STORE, 'readwrite');
-        tx.objectStore(SETTINGS_PDF_STORE).put(payload, key);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
+      await writeSettingsStore(SETTINGS_PDF_STORE, store => store.put(payload, key));
       doc.pdfCacheMeta = meta;
       return true;
     }
 
     async function getPdfPreviewFileCache(key) {
       if (!key || !settingsAutosaveSupported()) return null;
-      const db = await openSettingsAutosaveDb();
-      const payload = await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_PDF_STORE, 'readonly');
-        const req = tx.objectStore(SETTINGS_PDF_STORE).get(key);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error);
-      });
-      db.close();
-      return payload;
+      return await readSettingsStore(SETTINGS_PDF_STORE, key);
     }
 
     async function restorePdfPreviewFilesForProject(project) {
@@ -20203,33 +20220,19 @@
 
     async function clearPdfPreviewFileCache() {
       if (!settingsAutosaveSupported()) return;
-      const db = await openSettingsAutosaveDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_PDF_STORE, 'readwrite');
-        tx.objectStore(SETTINGS_PDF_STORE).clear();
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
+      await writeSettingsStore(SETTINGS_PDF_STORE, store => store.clear());
     }
 
     async function putSettingsAutosaveSnapshot(reason) {
       if (!settingsAutosaveSupported()) return false;
       const snapshot = compactSettingsForStorage(ensureSettingsShape(settingsSnapshot()));
       if (!snapshot.works.length) return false;
-      const db = await openSettingsAutosaveDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_AUTOSAVE_STORE, 'readwrite');
-        tx.objectStore(SETTINGS_AUTOSAVE_STORE).put({
-          schemaVersion: 'scenario_material_control_settings_autosave_v1',
-          savedAt: nowIso(),
-          reason: reason || 'autosave',
-          settings: snapshot
-        }, SETTINGS_AUTOSAVE_KEY);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
+      await writeSettingsStore(SETTINGS_AUTOSAVE_STORE, store => store.put({
+        schemaVersion: 'scenario_material_control_settings_autosave_v1',
+        savedAt: nowIso(),
+        reason: reason || 'autosave',
+        settings: snapshot
+      }, SETTINGS_AUTOSAVE_KEY));
       return true;
     }
 
@@ -20249,28 +20252,13 @@
 
     async function getSettingsAutosaveSnapshot() {
       if (!settingsAutosaveSupported()) return null;
-      const db = await openSettingsAutosaveDb();
-      const payload = await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_AUTOSAVE_STORE, 'readonly');
-        const req = tx.objectStore(SETTINGS_AUTOSAVE_STORE).get(SETTINGS_AUTOSAVE_KEY);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error);
-      });
-      db.close();
-      return payload;
+      return await readSettingsStore(SETTINGS_AUTOSAVE_STORE, SETTINGS_AUTOSAVE_KEY);
     }
 
     async function clearSettingsAutosaveSnapshot() {
       window.clearTimeout(settingsAutosaveTimer);
       if (!settingsAutosaveSupported()) return;
-      const db = await openSettingsAutosaveDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(SETTINGS_AUTOSAVE_STORE, 'readwrite');
-        tx.objectStore(SETTINGS_AUTOSAVE_STORE).delete(SETTINGS_AUTOSAVE_KEY);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
+      await writeSettingsStore(SETTINGS_AUTOSAVE_STORE, store => store.delete(SETTINGS_AUTOSAVE_KEY));
     }
 
     async function restoreSettingsAutosaveSnapshot() {
@@ -21122,27 +21110,13 @@
 
     async function getProjectSlotsRecord(workId) {
       if (!settingsAutosaveSupported() || !workId) return { workId: workId || '', slots: [] };
-      const db = await openSettingsAutosaveDb();
-      const rec = await new Promise((resolve, reject) => {
-        const tx = db.transaction(PROJECT_SLOTS_STORE, 'readonly');
-        const req = tx.objectStore(PROJECT_SLOTS_STORE).get(workId);
-        req.onsuccess = () => resolve(req.result || { workId, slots: [] });
-        req.onerror = () => reject(req.error);
-      });
-      db.close();
+      const rec = await readSettingsStore(PROJECT_SLOTS_STORE, workId) || { workId, slots: [] };
       if (!Array.isArray(rec.slots)) rec.slots = [];
       return rec;
     }
 
     async function putProjectSlotsRecord(rec) {
-      const db = await openSettingsAutosaveDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(PROJECT_SLOTS_STORE, 'readwrite');
-        tx.objectStore(PROJECT_SLOTS_STORE).put(rec, rec.workId);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
+      await writeSettingsStore(PROJECT_SLOTS_STORE, store => store.put(rec, rec.workId));
     }
 
     // Capture the active project as a restore point (rolling, newest-first, capped at 5).
@@ -21194,14 +21168,7 @@
     async function clearProjectSlots() {
       if (!settingsAutosaveSupported()) return;
       try {
-        const db = await openSettingsAutosaveDb();
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(PROJECT_SLOTS_STORE, 'readwrite');
-          tx.objectStore(PROJECT_SLOTS_STORE).clear();
-          tx.oncomplete = resolve;
-          tx.onerror = () => reject(tx.error);
-        });
-        db.close();
+        await writeSettingsStore(PROJECT_SLOTS_STORE, store => store.clear());
       } catch (e) { console.warn('clear slots failed', e); }
     }
 
