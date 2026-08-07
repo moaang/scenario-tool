@@ -11583,6 +11583,19 @@
       return uniq(names.map(name => normalizeEntityName(name, 'character') || normalizeSpeakerName(name)).filter(Boolean));
     }
 
+    // 조직 접미사만 맞은 낱말을 걸러낸다. 접미사를 떼고 남는 고유부가 2자는 돼야 이름이다 —
+    // 結局·本庁·官庁·6課·放課(放課後의 앞머리)·コラボ(ラボ 접미사) 가 전부 고유부 1자였다.
+    // 株式会社는 조직의 형태를 가리키는 말이라 그 자체로는 이름이 아니다.
+    const ORG_NAME_SUFFIX_RE = /(?:研究センター|研究所|評議会|会社|省|庁|局|課|社|ラボ)$/u;
+    const ORG_FORM_WORDS = ['株式会社', '有限会社', '合同会社', '民間軍事会社'];
+    function isPlausibleOrganizationName(name) {
+      const clean = norm(name);
+      if (!clean || ORG_FORM_WORDS.includes(clean)) return false;
+      const suffix = clean.match(ORG_NAME_SUFFIX_RE);
+      if (!suffix) return true;
+      return charLen(clean.slice(0, clean.length - suffix[0].length)) >= 2;
+    }
+
     function extractEntities(project) {
       const orgSpecific = workTermAlternation(WORK_TERMS.organizations);
       const orgRegex = new RegExp('(' + (orgSpecific ? orgSpecific + '|' : '')
@@ -11637,7 +11650,9 @@
           if (b.locationName) previousSceneLocation = b.locationName;
         }
         const text = b.text || '';
-        Array.from(text.matchAll(orgRegex)).forEach(m => upsertEntity(project, m[1], 'organization', b.id, 0.70, 'candidate'));
+        Array.from(text.matchAll(orgRegex))
+          .filter(m => isPlausibleOrganizationName(m[1]))
+          .forEach(m => upsertEntity(project, m[1], 'organization', b.id, 0.70, 'candidate'));
         techTerms.forEach(term => { if (text.includes(term)) upsertEntity(project, term, 'technology', b.id, 0.72, 'observed'); });
       });
 
