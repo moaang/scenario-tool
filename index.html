@@ -2624,10 +2624,10 @@
           <div id="sourceReviewPanel" class="source-review-panel"></div>
           <div id="sourcePreviewPanel" class="source-preview-panel"></div>
           <div class="tabs" id="blockTabs">
-            <button class="tab" data-tab="body" data-i18n="tabBody">본문 <span class="chip"></span></button>
-            <button class="tab" data-tab="character" data-i18n="tabCharacter">인물 <span class="chip"></span></button>
-            <button class="tab" data-tab="place" data-i18n="tabPlace">장소 <span class="chip"></span></button>
-            <button class="tab" data-tab="low" data-i18n="tabLow">저신뢰 <span class="chip"></span></button>
+            <button class="tab" data-tab="body">본문 <span class="chip"></span></button>
+            <button class="tab" data-tab="character">인물 <span class="chip"></span></button>
+            <button class="tab" data-tab="place">장소 <span class="chip"></span></button>
+            <button class="tab" data-tab="low">저신뢰 <span class="chip"></span></button>
           </div>
           <div id="blockList" class="block-list"></div>
         </div>
@@ -3921,7 +3921,6 @@
     function renderStaticI18n() {
       document.documentElement.lang = normalizeUiLanguage(activeUiLanguage);
       document.querySelectorAll('[data-i18n]').forEach((el) => {
-        if (el.closest('#blockTabs')) return;
         el.textContent = t(el.getAttribute('data-i18n'));
       });
       document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {

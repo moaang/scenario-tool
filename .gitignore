@@ -8,6 +8,8 @@ design.jpg
 index.html.bak-*
 
 # 작업 규약과 코드맵은 로컬 전용. 원격이 public 이고, 내용 자체가 내부 사정이다.
+# 게이트도 같다 — 검사기 주석이 이 저장소에서 난 사고 이력을 그대로 적고 있다.
 AGENTS.md
 CLAUDE.md
 docs/
+tools/
