@@ -5323,7 +5323,7 @@
     }
 
     // Some scripts number scenes by writing a bare digit immediately
-    // followed by the location (e.g. "１ライブ会場・全景（夜）") with NO ○ marker and NO space,
+    // followed by the location (e.g. a digit, then a place name and a time in parentheses)
     // and use アバン / Aパート as part-membership labels rather than scenes. This detects that
     // convention per-document so the numbered-scene + part-marker handling only activates there.
     function detectNumberedSceneHeadingFormat(lines) {
@@ -5357,7 +5357,8 @@
     // requireLocation defaults true (used by detectNumberedSceneHeadingFormat to decide the
     // convention is in play at all — keep that strict). Once the convention IS confirmed for
     // the document, a numbered scene heading can name a location with no geographic/spatial
-    // keyword (e.g. "２超てんちゃんのショートムービー", "５配信映像") — requireLocation:false
+    // keyword — a programme segment or an in-world video can stand in for a place — so
+    // requireLocation:false
     // is used by the per-line checks below that only run when profile.numberedSceneHeadings
     // is already true, so the punctuation/length/marker guards are enough to avoid false hits.
     function numberedSceneHeadingLineNumber(raw, opts) {
@@ -7934,9 +7935,10 @@
         // If this line's own text shows up in more than one place in the page's logical text
         // (a short phrase, a stock line ending, a repeated word), we can't tell which occurrence's
         // continuation is the real one — UNLESS every occurrence continues with the exact same tail,
-        // in which case the ambiguity is harmless (e.g. 米内山 appears in both the horizontal header
-        // and the vertical column, and both continue with 陽子 — the tail pdf.js drops from the
-        // vertical run). Occurrences with no tail count as a distinct (empty) candidate, so a line
+        // in which case the ambiguity is harmless — e.g. a character name printed both in the
+        // horizontal header and in the vertical column, where both occurrences continue with the
+        // same given name, which is exactly the tail pdf.js drops from the vertical run.
+        // Occurrences with no tail count as a distinct (empty) candidate, so a line
         // that is already complete somewhere in the logical text still blocks recovery.
         const tailKeys = new Set();
         let extraGlyphs = 0;
@@ -12728,7 +12730,7 @@
       return Object.assign(defaults, doc && doc.pdfReviewOptions || {});
     }
 
-    // A closing 「」 quote immediately followed by lone sentence punctuation (e.g. …「ゼロコマ」。)
+    // A closing 「」 quote immediately followed by lone sentence punctuation (…「…」。)
     // proves the quote was a mid-sentence term — a device/title name in a stage direction — not
     // spoken dialogue: real dialogue never has text after its 」. Column-grouped PDFs wrap that
     // trailing "。" into its own line, so it surfaces as a separate punctuation-only review item
@@ -13032,8 +13034,9 @@
           if (noteItem) {
             // Notes match by line-containment union (not the body char stream — that produced
             // giant wrong rects). Try the NOTE pool first; then fall back to the BODY lines,
-            // because an in-body annotation (director comment embedded in the script, e.g.
-            // "×××わずかに時間が飛んで…") has its glyphs in the body pool now that body/note is
+            // because an in-body annotation (a director comment embedded in the script, typically
+            // a ××× marker followed by a short instruction) has its glyphs in the body pool
+            // now that body/note is
             // decided by position. A note item only exists for a real annotation (the logical
             // channel already stripped it from the body text), so this can't spuriously box body.
             const noteText = span.text || sourceReviewItemText(item);
