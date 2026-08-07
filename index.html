@@ -18480,8 +18480,19 @@
       };
     }
 
+    // 합친 뒤에 한 번만 정규화한다. 예전에는 입력마다 normalizeOverlayRect 를 먼저 걸었는데,
+    // 그게 최소 폭 2% 를 강제하면서 세로 컬럼 조각(폭 0.4~1.5%)을 각각 부풀리고
+    // 교차축으로 밀어 놓은 뒤 합쳤다. 컬럼 셋이면 좌우로 0.4% 씩 번졌다 —
+    // 같은 파이프라인의 다른 자리가 0.05% 를 따지고 있다.
     function unionOverlayRects(rects) {
-      const source = (rects || []).filter(Boolean).map(normalizeOverlayRect);
+      const source = (rects || []).filter(rect => rect
+        && Number.isFinite(Number(rect.left)) && Number.isFinite(Number(rect.top))
+        && Number.isFinite(Number(rect.width)) && Number.isFinite(Number(rect.height)))
+        .map(rect => ({
+          left: Number(rect.left), top: Number(rect.top),
+          width: Math.max(0, Number(rect.width)), height: Math.max(0, Number(rect.height)),
+          vertical: rect.vertical, inferred: rect.inferred, manual: rect.manual
+        }));
       if (!source.length) return null;
       const left = Math.min(...source.map(rect => rect.left));
       const top = Math.min(...source.map(rect => rect.top));
@@ -18491,8 +18502,8 @@
       return normalizeOverlayRect({
         left,
         top,
-        width: Math.max(2, right - left),
-        height: Math.max(2, bottom - top),
+        width: right - left,
+        height: bottom - top,
         vertical: verticalVotes > source.length / 2 || (bottom - top) > (right - left) * 1.25,
         inferred: source.some(rect => rect.inferred),
         manual: source.some(rect => rect.manual)
@@ -19560,10 +19571,17 @@
         nextRect.manual = true;
         const overlaps = overlayRectOverlapsOtherBlock(block, nextRect, overlayPageNo);
         if (overlaps) {
-          nextRect = Object.assign({}, startRect, { manual: true });
-          applyOverlayRectToElement(box, nextRect, overlayPageNo);
+          // 겹쳐서 튕겨 나온 것뿐이다. 여기서 manual 을 굳히면 사용자는 아무것도 바꾸지
+          // 않았는데 그 블록만 자동 재계산에서 영구히 빠진다(hasCurrentRenderedPdfOverlayRect
+          // 가 manual 을 먼저 본다). 게다가 startRect 는 이미 클립된 화면 좌표라
+          // 되돌리는 순간 클립 결과가 좌표에 구워진다. 저장하지 않고 화면만 되돌린다.
+          applyOverlayRectToElement(box, startRect, overlayPageNo);
           box.classList.add('blocked');
           window.setTimeout(() => box.classList.remove('blocked'), 380);
+          state.selectedBlockId = block.id;
+          document.querySelectorAll('[data-overlay-block]').forEach(item => item.classList.toggle('selected', item === box));
+          syncPdfOverlaySelectionToolbar();
+          return;
         }
         setBlockOverlayRectForPage(block, overlayPageNo, nextRect);
         syncReviewItemOverlayRectFromBlock(block, overlayPageNo, nextRect);
