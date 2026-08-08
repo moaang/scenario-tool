@@ -3928,6 +3928,7 @@
       pdfPreviewFiles: Object.create(null),
       pdfJsDocuments: Object.create(null),
       pdfPageTextItems: Object.create(null),
+      pdfPageTextItemsRenderWidth: 0,
       pdfOverlayComputeKeys: Object.create(null),
       scriptStructureRenderKey: '',
       pdfRenderToken: 0,
@@ -17211,6 +17212,15 @@
         await page.render({ canvasContext: ctx, viewport, transform: dpr === 1 ? null : [dpr, 0, 0, dpr, 0, 0] }).promise;
         if (token !== state.pdfRenderToken) return;
         canvas.dataset.renderKey = renderKey;
+      }
+      // 아이템 좌표는 viewport 로 만들어진다 — pdfJsTextItemBox 의 px 하한 2 가 viewport.width 로
+      // 나뉘어 % 가 되므로 **렌더 scale 이 바뀌면 같은 페이지라도 다른 rect 가 나온다**
+      // (scale 0.65 에서 0.517%, 2.6 에서 0.129%). 그런데 캐시 키에는 scale 이 없어서,
+      // 창 폭을 바꿔 다시 그려도 옛 scale 로 만든 아이템을 그대로 썼다. 폭이 바뀌면 버린다.
+      const renderWidth = Math.round(Number(viewport.width) || 0);
+      if (state.pdfPageTextItemsRenderWidth !== renderWidth) {
+        state.pdfPageTextItems = Object.create(null);
+        state.pdfPageTextItemsRenderWidth = renderWidth;
       }
       const key = doc.id + '#' + pageNo;
       let items = state.pdfPageTextItems[key];
