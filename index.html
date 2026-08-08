@@ -21907,7 +21907,11 @@
       classifyTextToBlocks,
       readDocumentFileSelfContained,
       parseMarkdownDocument,
-      markdownColorIsFeedback
+      markdownColorIsFeedback,
+      // 컬럼 그루핑을 밖에서 재려면 이 둘이 필요하다. 측정 도구가 같은 로직을 다시 짜면
+      // 그 순간 갈라지므로 재현하지 말고 여기서 그대로 부른다(tools/column_truth.js).
+      pdfJsTextItemsFromContent,
+      groupPdfJsTextItemsToOverlayLines
     };
   </script>
 
