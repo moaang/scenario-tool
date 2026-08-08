@@ -7659,7 +7659,6 @@
           logicalText,
           logicalLines,
           bodyReviewText,
-          rubyLines,
           textSource: usingLogicalFallbackItems ? 'pdf-logical-fallback' : (logicalText ? 'pdf-logical' : 'pdfjs-overlay'),
           text: bodyReviewText || logicalText || lineGroups.bodyLines.map(line => line.text).filter(Boolean).join('\n'),
           annotations: mergedAnnotations
@@ -7959,7 +7958,6 @@
         }), 0.24, 0.75);
         line.compactOverlayRect = next;
         line.overlayRect = next;
-        line.pdfLogicalTailGlyphs = extraGlyphs;
         line.pdfLogicalTailText = extraText;
         line.text = appendPdfLogicalTailToLineText(line.text, extraText);
       });
@@ -8600,6 +8598,8 @@
       return { space, values };
     }
 
+    // viewport 가 없으면 괘선은 계산하지 않는다. 좌표를 알 수 없으니 계산해 봐야
+    // 페이지를 100x100 으로 가정한 값이 나오고, 그런 값을 쓸 곳은 없다.
     async function pdfJsPageOperatorSignals(page, pdfjsLib, viewport) {
       const OPS = pdfjsLib && pdfjsLib.OPS;
       if (!page || !OPS || typeof page.getOperatorList !== 'function') return { colorKeys: [], horizontalDividers: [] };
@@ -8646,7 +8646,7 @@
         } else if (fn === OPS.constructPath) {
           pathSegments = pathSegments.concat(pdfJsConstructPathSegments(args, OPS, ctm, viewport));
         } else if (pdfJsOperatorStrokesPath(fn, OPS)) {
-          horizontalDividers.push(...pdfJsHorizontalDividersFromPathSegments(pathSegments, strokeKey, lineWidth));
+          if (viewport) horizontalDividers.push(...pdfJsHorizontalDividersFromPathSegments(pathSegments, strokeKey, lineWidth));
           pathSegments = [];
         } else if (pdfJsOperatorConsumesPathWithoutStroke(fn, OPS)) {
           pathSegments = [];
@@ -8894,12 +8894,15 @@
 
     function groupPdfJsBodyItemsToOverlayLines(source, isPortrait) {
       if (!source.length) return [];
+      // 인자가 없으면 아이템이 실어 온 판형을 쓴다 — 호출부 여섯 중 다섯이 안 넘겨서
+      // 같은 페이지가 경로에 따라 세로/가로로 갈리고 있었다.
+      const portrait = isPortrait === undefined ? Boolean(source[0] && source[0].pagePortrait) : isPortrait;
       const horizontal = groupPdfJsTextItemsHorizontal(source);
       const verticalAll = groupPdfJsTextItemsVertical(source);
       const verticalSource = source.filter(isPdfJsVerticalTextItemForColumnGrouping);
       const verticalStrict = verticalSource.length === source.length ? verticalAll : groupPdfJsTextItemsVertical(verticalSource);
-      const useVertical = isPdfJsPageLikelyVertical(source, horizontal, verticalAll, isPortrait)
-        || isPdfJsPageLikelyVertical(verticalSource, horizontal, verticalStrict, isPortrait);
+      const useVertical = isPdfJsPageLikelyVertical(source, horizontal, verticalAll, portrait)
+        || isPdfJsPageLikelyVertical(verticalSource, horizontal, verticalStrict, portrait);
       const vertical = useVertical && shouldUseStrictPdfJsVerticalGrouping(source, verticalStrict, verticalAll)
         ? verticalStrict
         : verticalAll;
@@ -9019,7 +9022,7 @@
         const key = pdfJsTextItemVisualGroupKey(item);
         let col = nearestPdfJsVerticalColumn(cols, item, key);
         if (!col) {
-          col = { x: item.centerXPct, key, items: [] };
+          col = { x: item.centerXPct, key, markId: item && item.markId, items: [] };
           cols.push(col);
         }
         col.items.push(item);
@@ -9126,11 +9129,23 @@
         items: orderedItems,
         overlayRect,
         compactOverlayRect: overlayRect,
-        mergedColorFragment: true
       });
     }
 
+    // 같은 markId 라도 x 가 멀면 붙이지 않는다. 실측 최대 편차가 0.8% 라 그 세 배를 한계로 둔다 —
+    // 태그를 못 믿을 문서에서 컬럼 여러 개가 한 박스로 뭉치는 것을 막는 안전장치다.
+    const PDF_JS_MARKED_COLUMN_X_LIMIT_PCT = 2.5;
+
     function nearestPdfJsVerticalColumn(cols, item, key) {
+      // 마크드 콘텐츠가 있으면 그것이 컬럼 경계의 정답이다. 색이 바뀌어 visualGroupKey 가
+      // 갈리는 한 줄짜리 빨간 수정도 여기서 같은 컬럼으로 붙는다.
+      // 태그가 없는 문서는 그대로 아래 좌표 경로로 간다.
+      const markId = item && item.markId;
+      if (markId != null) {
+        const tagged = (cols || []).find(entry => entry && entry.markId === markId
+          && Math.abs(Number(entry.x) - Number(item.centerXPct)) <= PDF_JS_MARKED_COLUMN_X_LIMIT_PCT);
+        if (tagged) return tagged;
+      }
       let match = null;
       let bestDiff = Infinity;
       (cols || []).forEach((entry) => {
@@ -16204,8 +16219,14 @@
         const top = Math.max(0, (r.top - sr.top) / sr.height * 100);
         const width = Math.min(100 - left, r.width / sr.width * 100);
         const height = Math.min(100 - top, r.height / sr.height * 100);
-        // Keep an overlayRect on the block so the feedback layer / composer can read its geometry.
-        block.overlayRect = { left, top, width, height, vertical: true, coordinateSource: 'rendered-pdfjs-v21' };
+        // DOM 실측치이지 pdf.js 좌표가 아니다. 좌표원을 PDF 로 위장하면
+        // isCurrentPdfCoordinateSource 가 최신 PDF 좌표로 인정해 버린다.
+        // 직접 대입하지 않고 정규 경로로 저장해야 pageSpans 도 함께 갱신된다.
+        setBlockOverlayRectForPage(block, overlayPageNoForBlock(block), {
+          left, top, width, height,
+          vertical: height > width * 1.25,
+          coordinateSource: 'rendered-docx-dom-v1'
+        });
         const kind = docxReaderBlockKind(block);
         const typeClass = kind === 'dialog' ? 'dialog' : kind === 'scene' ? 'scene_heading' : kind === 'cast' ? 'cast_entry' : kind === 'end' ? 'end_marker' : 'action';
         const label = kind === 'dialog' ? 'DIALOG' : kind === 'scene' ? 'SCENE' : kind === 'cast' ? 'CAST' : kind === 'end' ? 'END' : 'ACTION';
@@ -17747,7 +17768,6 @@
           verticalRunMeasured: Boolean(box.verticalRunMeasured),
           rawHeight: box.rawHeight,
           verticalGlyphCount: box.verticalGlyphCount,
-          glyphWidth: box.glyphWidth,
           glyphWidthPct: box.glyphWidth / viewport.width * 100,
           // pdf.js 가 판정한 줄바꿈. 세로쓰기에서는 컬럼 전환이 여기 실린다.
           hasEOL: Boolean(item.hasEOL),
@@ -17755,7 +17775,9 @@
           markId: mark ? mark.id : '',
           markArtifact: markArtifact,
           fontName: item.fontName || '',
-          fontVertical: Boolean(styles[item.fontName] && styles[item.fontName].vertical)
+          // 판형은 viewport 를 아는 여기서만 알 수 있다. 그루핑 함수들은 아이템만 받으므로
+          // 여기 실어 보내야 임포트 경로와 렌더 경로가 같은 축으로 판정한다.
+          pagePortrait: Number(viewport.width || 0) < Number(viewport.height || 0)
         };
         rect.colorKey = pdfJsColorKeyForTextItem(colorKeys, colorIndex);
         rect.visualGroupKey = rect.colorKey || '';
