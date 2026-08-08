@@ -10838,11 +10838,24 @@
       const minValue = values.length ? Math.min(...values) : 1;
       const maxValue = values.length ? Math.max(...values) : 999;
       const medianY = ys.length ? ys[Math.floor(ys.length / 2)] : NaN;
+      // 행번호는 균등 간격 컬럼에 놓인다. 그 간격을 여기서 재 둔다 —
+      // 아래에 본문이 없어 앵커를 못 찾은 컬럼의 행번호는 후보에 못 들어오고,
+      // 그러면 minValue/maxValue 가 실제보다 좁게 잡혀 그 숫자들이 값 범위 검사에서
+      // 탈락한다(표지에서 1~35 만 지워지고 36~39 가 남던 원인이다).
+      const xs = source.map(item => Number(item.centerXPct)).filter(Number.isFinite).sort((a, b) => a - b);
+      const gaps = [];
+      for (let i = 1; i < xs.length; i += 1) {
+        const gap = xs[i] - xs[i - 1];
+        if (gap > 0.2) gaps.push(gap);
+      }
+      gaps.sort((a, b) => a - b);
       return {
         minValue,
         maxValue,
         yMin: Number.isFinite(medianY) ? medianY - 1.4 : -Infinity,
-        yMax: Number.isFinite(medianY) ? medianY + 1.4 : Infinity
+        yMax: Number.isFinite(medianY) ? medianY + 1.4 : Infinity,
+        xRef: xs.length ? xs[0] : NaN,
+        xPitch: gaps.length ? gaps[Math.floor(gaps.length / 2)] : NaN
       };
     }
 
@@ -10855,7 +10868,15 @@
       const source = band || {};
       const minValue = Number.isFinite(Number(source.minValue)) ? Number(source.minValue) : 1;
       const maxValue = Number.isFinite(Number(source.maxValue)) ? Number(source.maxValue) : 999;
-      if (value < minValue - 1 || value > maxValue + 1) return false;
+      // 값 범위는 후보에서 나온 것이라 앵커를 못 찾은 컬럼만큼 좁다.
+      // 그래서 **행번호 격자 위에 있는 숫자에는 값 범위를 적용하지 않는다** —
+      // 격자 위상이 맞고 y 밴드(중앙값 ±1.4%) 안에 있으면 그것으로 충분하다.
+      const x = Number(item && item.centerXPct);
+      const pitch = Number(source.xPitch);
+      const xRef = Number(source.xRef);
+      const onGrid = Number.isFinite(x) && Number.isFinite(pitch) && pitch > 0.2 && Number.isFinite(xRef)
+        && Math.abs(((x - xRef) / pitch) - Math.round((x - xRef) / pitch)) <= 0.2;
+      if (!onGrid && (value < minValue - 1 || value > maxValue + 1)) return false;
       return y >= Number(source.yMin) && y <= Number(source.yMax);
     }
 
