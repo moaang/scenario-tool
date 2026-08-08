@@ -2814,6 +2814,7 @@
         qualityWarningTitle: '認識の注意:',
         qualityVerticalSuspect: '縦書きPDFの抽出、または文字単位の分解が疑われます。自動判定は補助にとどめてください。',
         qualityFallbackPages: '{n}/{total}ページが代替パーサで処理されました（pdf.js の結果を使えませんでした）。',
+        qualityFallbackCmapUnreachable: '原因：CMap を読み込めません。CID フォントの縦書き PDF はこれがないと本文を取り出せません。',
         languageJa: '日本語',
         languageKo: '\ud55c\uad6d\uc5b4',
         languageEn: 'English',
@@ -3140,6 +3141,7 @@
         qualityWarningTitle: '인식 주의:',
         qualityVerticalSuspect: '세로쓰기 PDF 추출 또는 글자 단위 분해가 의심됩니다. 자동 판단은 보조 수준으로만 쓰세요.',
         qualityFallbackPages: '{n}/{total}페이지가 대체 파서로 처리됐습니다(pdf.js 결과를 쓰지 못했습니다).',
+        qualityFallbackCmapUnreachable: '사유: CMap 을 받지 못했습니다. CID 폰트를 쓴 세로쓰기 PDF 는 이것 없이 본문을 못 냅니다.',
         languageJa: '日本語',
         languageKo: '한국어',
         languageEn: 'English',
@@ -3465,6 +3467,7 @@
         qualityWarningTitle: 'Recognition warnings:',
         qualityVerticalSuspect: 'Vertical-script extraction or per-character splitting suspected. Treat the automatic classification as assistive only.',
         qualityFallbackPages: '{n} of {total} pages were handled by the fallback parser (pdf.js output was unusable).',
+        qualityFallbackCmapUnreachable: 'Reason: the CMap resources could not be fetched. Vertical PDFs with CID fonts yield no text without them.',
         languageJa: 'Japanese',
         languageKo: 'Korean',
         languageEn: 'English',
@@ -4344,9 +4347,28 @@
     // can't resolve their glyph metrics and collapses each vertical column to roughly half height,
     // which forces the overlay geometry to be reconstructed from estimates. Point pdf.js at the CDN
     // CMaps so it reports real vertical metrics instead.
-    const PDF_JS_CMAP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/';
+    //
+    // cdnjs 를 쓰면 안 된다 — 그 배포에는 cmaps/ 가 없어서 403 이 돌아오고(본문 24바이트),
+    // 그 응답에는 CORS 헤더도 없어서 브라우저는 이걸 CORS 오류로 보고한다. 그래서
+    // 위 의도는 맞았고 URL 만 틀렸다 — CMap 은 한 번도 로드된 적이 없었다(2026-08-08 확인).
+    // jsdelivr 는 200 + Access-Control-Allow-Origin: * 로 낸다. 라이브러리도 같은 버전이
+    // 거기 있어서 외부 의존은 여전히 CDN 하나다.
+    const PDF_JS_CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/';
+    const PDF_JS_CMAP_URL = PDF_JS_CDN + 'cmaps/';
     function pdfJsDocumentParams(data) {
       return { data, cMapUrl: PDF_JS_CMAP_URL, cMapPacked: true };
+    }
+
+    // CMap 을 못 받으면 CID 폰트 문서가 통째로 대체 파서로 떨어지는데, pdf.js 는 그걸
+    // 콘솔에만 적는다. 사유가 화면에 안 보이면 사람은 문서 탓으로 오해한다 — 실제로
+    // 한 문서가 「원래 pdf.js 가 안 되는 문서」로 여러 세션 기록에 남았고, 진짜 원인은 URL 이었다.
+    // 결과는 폴백 경고에 사유로 붙는다. 기다리지 않고 띄워두며, 미확인(null)이면 사유를 생략한다.
+    let pdfJsCmapReachable = null;
+    function probePdfJsCmapReachable() {
+      if (pdfJsCmapReachable !== null) return;
+      fetch(PDF_JS_CMAP_URL + 'Adobe-Japan1-UCS2.bcmap')
+        .then((res) => { pdfJsCmapReachable = Boolean(res && res.ok); })
+        .catch(() => { pdfJsCmapReachable = false; });
     }
 
     async function loadPdfJsLibrary() {
@@ -4354,13 +4376,14 @@
       if (window.__scenarioPdfJsLoading) return window.__scenarioPdfJsLoading;
       window.__scenarioPdfJsLoading = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.src = PDF_JS_CDN + 'build/pdf.min.js';
         script.onload = () => {
           if (!window.pdfjsLib) {
             reject(new Error('PDF.js load failed'));
             return;
           }
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_JS_CDN + 'build/pdf.worker.min.js';
+          probePdfJsCmapReachable();
           resolve(window.pdfjsLib);
         };
         script.onerror = () => reject(new Error('PDF.js script load failed'));
@@ -5898,6 +5921,7 @@
       const fallbackPages = (doc && doc.draftPages || []).filter(p => p.textSource === 'pdf-logical-fallback').length;
       if (fallbackPages) {
         warnings.push(t('qualityFallbackPages', { n: fallbackPages, total: (doc.draftPages || []).length }));
+        if (pdfJsCmapReachable === false) warnings.push(t('qualityFallbackCmapUnreachable'));
       }
       return Object.assign({ sourceType: sourceType }, detected, { warnings: warnings });
     }
@@ -9146,8 +9170,18 @@
       // 함께 건다. 한계를 넘으면 태그를 버리고 아래 좌표 기준으로 떨어진다.
       const markId = item && item.markId;
       if (markId != null) {
-        const tagged = nearestPdfJsColumnBy(cols, item, entry => entry.markId === markId,
-          PDF_JS_MARKED_COLUMN_X_LIMIT_PCT);
+        // 한계를 페이지 % 절대값으로만 두면 컬럼이 넓은 문서에서 이웃 컬럼을 삼킨다.
+        // 실측(2026-08-08): 컬럼 피치가 문서마다 1.3~2.1% 로 갈리는데 2.5% 는 그 전부보다 크다 —
+        // 다른 문서는 markId 가 컬럼 하나 단위라 우연히 안 걸렸을 뿐이다. 한 문서에서는
+        // 씬 헤딩 컬럼과 대사 컬럼이 한 라인으로 묶여 6줄이 병합됐고, 그 줄은 dialog 로
+        // 분류돼 씬 마커가 통째로 잘려 나갔다(씬 20개 중 5개 누락).
+        // 글자 폭이 곧 컬럼 폭이므로 그것으로 무차원화한다 — 같은 markId 안의 실측 최대
+        // 편차 0.8% 는 담고(글자 폭 1.25~1.43 × 0.7 = 0.88~1.0), 어느 문서에서도 피치는 안 넘는다.
+        const glyphWidth = Number(item.widthPct) || 0;
+        const markedLimit = glyphWidth > 0
+          ? Math.min(PDF_JS_MARKED_COLUMN_X_LIMIT_PCT, glyphWidth * 0.7)
+          : PDF_JS_MARKED_COLUMN_X_LIMIT_PCT;
+        const tagged = nearestPdfJsColumnBy(cols, item, entry => entry.markId === markId, markedLimit);
         if (tagged) return tagged;
       }
       return nearestPdfJsColumnBy(cols, item, entry => entry.key === key,
