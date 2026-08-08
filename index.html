@@ -10222,7 +10222,7 @@
         if (pageStream.height) pageSize.height = Number(pageStream.height) || pageSize.height;
         const items = extractPdfTextItems(stream, cmap, itemBudget, pageSize);
         itemBudget -= items.length;
-        const grouped = groupPdfItemsByVerticalColumns(items);
+        const grouped = splitPdfItemsIntoBodyAndAnnotations(items);
         const text = (grouped.bodyLines || []).join('\n').trim();
         if (text) {
           const printedPageNo = detectPdfPrintedPageNo(items);
@@ -10479,7 +10479,10 @@
       return String(stream || '').replace(/(^|[\s\r\n])BI(?:\s|[\r\n])[\s\S]*?(?:\s|[\r\n])ID[\s\S]*?(?:\s|[\r\n])EI(?=\s|[\r\n]|$)/g, '$1');
     }
 
-    function groupPdfItemsByVerticalColumns(items) {
+    // 자체 파서 경로의 상위 조립. 파랑 잉크 주석을 먼저 떼어 내고 남은 본문만
+    // groupPdfVerticalColumns 에 넘긴다 — 컬럼을 묶는 것은 그쪽이다.
+    // (예전 이름이 groupPdfItemsByVerticalColumns 라 그 그루퍼와 구별되지 않았다.)
+    function splitPdfItemsIntoBodyAndAnnotations(items) {
       const cleanItems = (items || []).filter(item => item && item.text && item.text !== ' ');
       if (!cleanItems.length) return { bodyLines: [], annotations: [] };
       const colorNoteItems = cleanItems.filter(isPdfBlueTextItem);
@@ -16829,19 +16832,23 @@
       return { speaker, modifiers, dialog, open, close };
     }
 
+    // 수식자를 따옴표 **앞**에 두는 표기.
     function pdfDialogHeadModifierCoordinateTexts(source) {
-      const parts = pdfDialogCoordinateParts(source);
-      if (!parts) return [];
-      return parts.modifiers.map((modifier) => {
-        const dialog = stripLeadingDialogModifierText(parts.dialog, modifier);
-        return `${parts.speaker}（${modifier}）${parts.open}${dialog}${parts.close}`;
-      });
+      return pdfDialogCoordinateTexts(source, (parts, modifier) =>
+        `${parts.speaker}（${modifier}）${parts.open}${stripLeadingDialogModifierText(parts.dialog, modifier)}${parts.close}`);
     }
 
-    function pdfDialogVisualCoordinateTexts(source) {
+    // 수식자 하나마다 좌표 매칭용 표기를 만든다. 두 표기가 조립 규칙만 다르고
+    // 앞부분(파트 분해 · 가드 · 수식자 순회)이 같아서 그 부분만 여기 모은다.
+    function pdfDialogCoordinateTexts(source, build) {
       const parts = pdfDialogCoordinateParts(source);
       if (!parts) return [];
-      return parts.modifiers.map((modifier) => {
+      return parts.modifiers.map(modifier => build(parts, modifier));
+    }
+
+    // 수식자를 따옴표 **안**에 넣는 표기.
+    function pdfDialogVisualCoordinateTexts(source) {
+      return pdfDialogCoordinateTexts(source, (parts, modifier) => {
         if (dialogStartsWithModifierText(parts.dialog, modifier)) return `${parts.speaker}${parts.open}${parts.dialog}${parts.close}`;
         return `${parts.speaker}${parts.open}（${modifier}）${parts.dialog}${parts.close}`;
       });
