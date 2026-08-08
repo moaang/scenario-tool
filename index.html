@@ -7842,7 +7842,7 @@
 
 
     function isPdfLogicalDashLeaderText(text) {
-      const compact = String(text || '').normalize('NFKC').replace(/\s+/g, '');
+      const compact = normalizePdfCompactTextPreserveMarks(text);
       return Boolean(compact && /^[\u2010-\u2015\u2212\u2500-\u257f－-]+$/u.test(compact));
     }
 
@@ -8038,14 +8038,14 @@
       const keptMs = [];
       (primary || []).concat(secondary || []).forEach((note) => {
         if (!note) return;
-        const text = normalizePdfDuplicateCompareText(formatPdfAnnotationText(note) || note.text || note.href || '');
+        const text = normalizePdfCompactTextPreserveMarks(formatPdfAnnotationText(note) || note.text || note.href || '');
         if (!text) { kept.push(note); keptMs.push(null); return; }
         const ms = pdfCharMultiset(text);
         for (let i = 0; i < kept.length; i += 1) {
           if (!keptMs[i]) continue;
           if (pdfCharMultisetOverlap(ms, keptMs[i]) >= 0.72) {
             // Same note captured twice — keep whichever copy is longer (more complete).
-            const keptText = normalizePdfDuplicateCompareText(formatPdfAnnotationText(kept[i]) || kept[i].text || kept[i].href || '');
+            const keptText = normalizePdfCompactTextPreserveMarks(formatPdfAnnotationText(kept[i]) || kept[i].text || kept[i].href || '');
             if (text.length > keptText.length) { kept[i] = note; keptMs[i] = ms; }
             return;
           }
@@ -8058,7 +8058,7 @@
 
     function pdfCharMultiset(text) {
       const map = new Map();
-      const raw = String(text || '').normalize('NFKC').replace(/\s+/g, '');
+      const raw = normalizePdfCompactTextPreserveMarks(text);
       for (const ch of raw) map.set(ch, (map.get(ch) || 0) + 1);
       return map;
     }
@@ -8081,13 +8081,13 @@
       (annotations || []).filter(isPdfColorNoteAnnotation).forEach((note) => {
         String(formatPdfAnnotationText(note) || '')
           .split(/\n+/)
-          .map(line => normalizePdfDuplicateCompareText(line))
+          .map(line => normalizePdfCompactTextPreserveMarks(line))
           .filter(line => line && line.length >= 4)
           .forEach(line => colorLineSet.add(line));
       });
       if (!colorLineSet.size) return normalizedText;
       return normalizedText.split(/\n+/)
-        .filter(line => !colorLineSet.has(normalizePdfDuplicateCompareText(line)))
+        .filter(line => !colorLineSet.has(normalizePdfCompactTextPreserveMarks(line)))
         .join('\n')
         .trim();
     }
@@ -8520,7 +8520,7 @@
             .map(line => line.trim())
             .filter(Boolean)
             .forEach((line, lineIndex) => {
-              const key = normalizePdfDuplicateCompareText(line);
+              const key = normalizePdfCompactTextPreserveMarks(line);
               if (!key || key.length < 8 || seen.has(key)) return;
               seen.add(key);
               targets.push({
@@ -8539,7 +8539,7 @@
       const chars = [];
       const owners = [];
       (items || []).forEach((item) => {
-        const normalized = normalizePdfDuplicateCompareText(item && item.text || '');
+        const normalized = normalizePdfCompactTextPreserveMarks(item && item.text || '');
         if (!normalized) return;
         Array.from(normalized).forEach((char) => {
           chars.push(char);
@@ -9233,7 +9233,7 @@
     }
 
     function pdfDialogHeadLooksLikeProse(head) {
-      const clean = norm(head).normalize('NFKC').replace(/\s+/g, '');
+      const clean = normalizePdfCompactTextPreserveMarks(head);
       if (!clean) return false;
       if (charLen(clean) > 16 && /(?:として|について|による|ため|から|まで|には|では|の|を|に|へ|で|と|が|は)/.test(clean)) return true;
       return /(?:として|について|による|される|された|する|した|して|ある|いる)$/.test(clean);
@@ -10592,13 +10592,13 @@
     }
 
     function filterPdfAnnotationsAlreadyInBody(annotations, bodyLines) {
-      const body = normalizePdfDuplicateCompareText((bodyLines || []).join('\n'));
+      const body = normalizePdfCompactTextPreserveMarks((bodyLines || []).join('\n'));
       if (!body) return annotations || [];
       return (annotations || []).filter((note) => {
         if (isPdfLinkAnnotation(note)) return true;
         const rawText = formatPdfAnnotationText(note);
         if (isPdfIgnorableAnnotationText(rawText)) return false;
-        const text = normalizePdfDuplicateCompareText(rawText);
+        const text = normalizePdfCompactTextPreserveMarks(rawText);
         if (text && body.includes(text) && isPdfColorNoteAnnotation(note)) return false;
         return !text || text.length < 8 || !body.includes(text);
       });
@@ -11608,7 +11608,7 @@
     }
 
     function isNumberedRoleCharacterName(value) {
-      const clean = norm(value).normalize('NFKC').replace(/\s+/g, '');
+      const clean = normalizePdfCompactTextPreserveMarks(value);
       if (!clean || charLen(clean) > 18) return false;
       return /^(?:生徒|学生|児童|男子|女子|男|女|男性|女性|子供|少年|少女|客|通行人|近所の人|友人|クラスメイト|モブ|兵士|隊員|職員|警官|教師|記者)[0-9A-Z一二三四五六七八九十]+$/i.test(clean);
     }
@@ -13552,24 +13552,18 @@
     }
 
     function isPdfAnnotationTextAlreadyRepresented(items, pageNo, text) {
-      const needle = normalizePdfDuplicateCompareText(text);
+      const needle = normalizePdfCompactTextPreserveMarks(text);
       if (!needle || needle.length < 8) return false;
-      const haystack = normalizePdfDuplicateCompareText((items || [])
+      const haystack = normalizePdfCompactTextPreserveMarks((items || [])
         .filter(item => Number(item.pageNo || 1) === Number(pageNo || 1) && item.type !== 'note' && item.type !== 'link')
         .map(item => item.text || item.body || '')
         .join('\n'));
       return Boolean(haystack && haystack.includes(needle));
     }
 
-    function normalizePdfDuplicateCompareText(text) {
-      return String(text || '')
-        .normalize('NFKC')
-        .replace(/\s+/g, '')
-        .trim();
-    }
 
     function isPdfIgnorableAnnotationText(text) {
-      const raw = String(text || '').normalize('NFKC').replace(/\s+/g, '').trim();
+      const raw = normalizePdfCompactTextPreserveMarks(text);
       if (/^[0-9]{1,4}$/.test(raw)) return true;
       return /^[.…‥ー―─－\-]*[\u3040-\u30ffァ-ヴー一-龠々〆ヵヶ]{1,8}$/.test(raw);
     }
@@ -17791,7 +17785,7 @@
     }
 
     function isPdfRubyKanaText(text) {
-      const raw = String(text || '').normalize('NFKC').replace(/\s+/g, '');
+      const raw = normalizePdfCompactTextPreserveMarks(text);
       return Boolean(raw && raw.length <= 8 && /^[\u3041-\u309f\u30a1-\u30ffー]+$/u.test(raw));
     }
 
@@ -17942,7 +17936,7 @@
     }
 
     function isRotatedLatinPdfRun(value) {
-      const compact = String(value || '').normalize('NFKC').replace(/\s+/g, '');
+      const compact = normalizePdfCompactTextPreserveMarks(value);
       if (!compact) return false;
       if (isPdfVerticalPunctuationFragment(compact)) return false;
       const latin = (compact.match(/[A-Za-z0-9#&:;.,'!?+\-\/()[\]{}]/g) || []).length;
