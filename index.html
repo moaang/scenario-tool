@@ -7736,15 +7736,20 @@
       const stableTopLine = pdfJsStableBodyTopLineFromCandidates((pages || []).map(page => page && page.bodyTopLineCandidatePct), (pages || []).length);
       (pages || []).forEach((page) => {
         const sourceLines = page.bodyBaseLines || page.lines || [];
+        const pageNo = Number(page && (page.pageNo || page.sourcePageIndex) || 1);
         const pageTopCandidate = Number(page && page.bodyTopLineCandidatePct);
         const pageTopLine = stableTopLine != null && Number.isFinite(pageTopCandidate) && Math.abs(pageTopCandidate - stableTopLine) <= 1.5
           ? stableTopLine
           : null;
-        const bodyRange = stableCut == null && pageTopLine == null ? null : {
-          enabled: true,
-          top: pageTopLine == null ? 0 : pageTopLine,
-          bottom: stableCut == null ? 100 : stableCut
-        };
+        // 본문 범위의 권위는 pdfBodyRangeForPage 한 곳이다. 예전에는 여기서 즉석 리터럴로 범위를
+        // 만들었고 그 리터럴에는 bottom <= top 충돌 가드가 없었다 — 상·하한이 뒤집힌 페이지에서
+        // 모든 줄이 클립에 탈락해 page.lines 와 본문 텍스트가 통째로 비었다.
+        // 값·트리거를 먼저 확정하고 리뷰·매칭·렌더가 이미 쓰는 그 함수를 부른다.
+        page.bodyCutLinePct = stableCut;
+        page.bodyCutLineTrigger = stableCut == null ? '' : 'annotation_layout_stable';
+        page.bodyTopLinePct = pageTopLine;
+        page.bodyTopLineTrigger = pageTopLine == null ? '' : 'layout_divider_stable';
+        const bodyRange = pdfBodyRangeForPage({ draftPages: [page] }, pageNo);
         // Colour-flagged lines were shunted to colorLines by the EARLY raw-parse heuristic
         // (isPdfJsOverlayLineColorNote — content-score based, no position awareness) before
         // the stable body range was even known. A line that sits INSIDE the now-known stable
@@ -7757,22 +7762,18 @@
         // locally clipped view) — pdfScriptBodyReviewTextFromDraftPages (the actual source
         // buildSourceReviewItemsForDocument uses) reads bodyBaseLines directly and would
         // otherwise silently see the old, incomplete pool again.
-        const reclaimedColorLines = bodyRange
+        const reclaimedColorLines = bodyRange.enabled
           ? (page.colorLines || []).filter(line => pdfLineInsideBodyRange(line, bodyRange))
           : [];
         const combinedSourceLines = reclaimedColorLines.length
           ? sourceLines.concat(reclaimedColorLines).sort((a, b) => (Number(a && a.index) || 0) - (Number(b && b.index) || 0))
           : sourceLines;
         page.bodyBaseLines = combinedSourceLines;
-        const clippedLines = bodyRange == null
-          ? combinedSourceLines
-          : combinedSourceLines.map(line => pdfLineClippedToBodyRange(line, bodyRange)).filter(Boolean);
+        const clippedLines = combinedSourceLines
+          .map(line => pdfLineClippedToBodyRange(line, bodyRange))
+          .filter(Boolean);
         const bodyLines = mergeDetachedPdfDialogModifierLines(clippedLines);
         page.lines = bodyLines;
-        page.bodyCutLinePct = stableCut;
-        page.bodyCutLineTrigger = stableCut == null ? '' : 'annotation_layout_stable';
-        page.bodyTopLinePct = pageTopLine;
-        page.bodyTopLineTrigger = pageTopLine == null ? '' : 'layout_divider_stable';
         const bodyReviewText = pdfBodyReviewTextFromLines(bodyLines);
         page.bodyReviewText = bodyReviewText;
         page.text = bodyReviewText || normalizePdfLogicalPageText(page.logicalText) || bodyLines.map(line => line.text).filter(Boolean).join('\n');
