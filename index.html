@@ -21932,7 +21932,14 @@
       // 컬럼 그루핑을 밖에서 재려면 이 둘이 필요하다. 측정 도구가 같은 로직을 다시 짜면
       // 그 순간 갈라지므로 재현하지 말고 여기서 그대로 부른다(tools/column_truth.js).
       pdfJsTextItemsFromContent,
-      groupPdfJsTextItemsToOverlayLines
+      groupPdfJsTextItemsToOverlayLines,
+      // 「후보에서 파라미터를 뽑아 다시 필터링」 구조를 밖에서 재기 위한 것들.
+      // 그 구조는 1단계가 놓친 것이 2단계 파라미터에도 빠져 계속 놓이는 결함을 낳는다
+      // (행번호가 그랬다). tools/band_probe.js 가 이 셋을 쓴다.
+      pdfOverlayDetectedScriptBodyVerticalBand,
+      pdfJsStableBodyCutLineFromCandidates,
+      pdfJsStableBodyTopLineFromCandidates,
+      splitPdfGuideLinesForOverlayMatching
     };
   </script>
 
