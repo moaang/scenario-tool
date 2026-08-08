@@ -7759,9 +7759,9 @@
         // appendPdfMetadataReviewItems's existing dedupe suppress the now-redundant note item.
         // Re-sort by .index (assigned before the body/colour split) to restore reading order.
         // IMPORTANT: fold the reclaimed lines into page.bodyBaseLines itself (not just the
-        // locally clipped view) — pdfScriptBodyReviewTextFromDraftPages (the actual source
-        // buildSourceReviewItemsForDocument uses) reads bodyBaseLines directly and would
-        // otherwise silently see the old, incomplete pool again.
+        // locally clipped view) — bodyBaseLines is the pool every later re-clip starts from
+        // (pdfBaseBodyLinesForPage -> the 「선택 박스 추출」 debug tool, and the clip below),
+        // so a locally-clipped-only view would leave the old, incomplete pool in place.
         const reclaimedColorLines = bodyRange.enabled
           ? (page.colorLines || []).filter(line => pdfLineInsideBodyRange(line, bodyRange))
           : [];
@@ -12847,28 +12847,21 @@
       return reviewItems;
     }
 
+    // 본문 리뷰 텍스트의 유도점은 pdfBodyReviewTextFromLines 한 곳이다.
+    // 예전에는 여기서 같은 줄 풀을 **다른 클리핑 권위로** 다시 클립해 같은 텍스트를 다시 만들었다
+    // — 파싱 쪽은 즉석 리터럴, 이쪽은 pdfBodyRangeForPage. 한 페이지에서 두 텍스트가 갈렸다.
+    // 이제 파싱 때 확정한 값을 그대로 읽는다. 페이지 구분자 '\n\f\n' 는 그대로다(빈 페이지도
+    // 빈 조각으로 남아야 페이지 색인이 맞는다).
     function pdfScriptBodyReviewTextFromDraftPages(doc) {
       if (!doc || doc.draftSourceType !== 'pdf' || !Array.isArray(doc.draftPages) || !doc.draftPages.length) return '';
       return doc.draftPages.map((page) => {
-        const lines = pdfScriptBodyReviewLinesForPage(page, doc);
-        const reviewLines = lines.map(pdfReviewLineText).filter(Boolean);
-        return normalizePdfSceneHeadingDashLeaderReviewLines(reviewLines).join('\n');
+        // 조용한 실패 금지: 줄 풀은 있는데 필드가 없으면 applyStablePdfJsBodyCutLineToPages 를
+        // 안 거친 페이지다(있을 수 없는 상태). 빈 문자열을 조용히 내보내지 말고 남긴다.
+        if (page && page.bodyReviewText == null && (page.lines || []).length) {
+          console.warn('draft page has body lines but no bodyReviewText', page.pageNo || page.sourcePageIndex);
+        }
+        return String(page && page.bodyReviewText || '');
       }).join('\n\f\n').trim();
-    }
-
-    function pdfScriptBodyReviewLinesForPage(page, doc) {
-      if (!page) return [];
-      const pageNo = Number(page && (page.pageNo || page.sourcePageIndex) || 1);
-      const range = pdfBodyRangeForPage(doc || { draftPages: page ? [page] : [] }, pageNo);
-      const source = range.enabled
-        ? pdfBaseBodyLinesForPage(page)
-        : (page.lines || pdfBaseBodyLinesForPage(page));
-      const lines = range.enabled
-        ? (source || []).map(line => pdfLineClippedToBodyRange(line, range)).filter(Boolean)
-        : (source || []);
-      return mergeDetachedPdfDialogModifierLines(lines)
-        .filter(line => line && String(line.text || '').trim())
-        .map(line => Object.assign({}, line, { text: pdfReviewLineText(line) }));
     }
 
     function pdfReviewLineText(line) {
@@ -16649,7 +16642,9 @@
       const doc = activeDocument();
       const pageNo = state.activeScriptPageNo;
       const page = pdfLogicalPageForDocument(doc, pageNo);
-      const text = page ? (page.bodyReviewText || page.logicalText || page.text || '') : '';
+      // 사다리는 파싱 쪽 한 곳뿐이다 — 여기서 다시 세우면 사용자가 보는 텍스트와
+      // 파서가 먹는 텍스트가 갈린다(예전에 세 곳이 서로 다른 순서로 세우고 있었다).
+      const text = page && page.text || '';
       const blockLines = pageDebugBlockLines(doc, pageNo);
       return [
         `# ${doc && (doc.title || doc.id) || ''} — p.${pageNo}`,
@@ -16700,7 +16695,7 @@
       return {
         pageNo,
         textSource: page && page.textSource || '',
-        text: page ? (page.bodyReviewText || page.logicalText || page.text || '') : '',
+        text: page && page.text || '',
         blockCount: pageBlocks.length,
         blockTypeCounts,
         lowConfidenceBlockCount
@@ -17617,6 +17612,10 @@
     function pdfLayoutGuideLineGroupsForPage(doc, items, pageNo, bodyRange) {
       const range = bodyRange && typeof bodyRange === 'object' ? bodyRange : pdfBodyRangeForPage(doc, pageNo);
       const page = (doc && doc.draftPages || []).find(item => Number(item.pageNo || item.sourcePageIndex || 1) === Number(pageNo || 1));
+      // 이 사다리 4항 중 page.logicalLines 는 어디서도 대입되지 않아 도달 불가다(전 파일 대입 0건).
+      // logicalText 항까지 지우는 정리를 시도했더니 오버레이 좌표 합이 움직였다 — 페이지마다
+      // 어느 항이 뽑히는지 세어 보면 전부 같았는데도 그랬다. 원인을 못 찾아 코드는 그대로 둔다.
+      // 손대기 전에 docs/text_pipeline_redesign_2026-08-09.md 의 2.7 항목을 읽을 것.
       const logicalSource = page && (page.rawLogicalText || page.logicalText || page.text || page.logicalLines || []) || [];
       const groupedLines = expandPdfOverlayLineBoundsForMissingLogicalTails(
         groupPdfJsTextItemsToOverlayLines(items || [], pageNo)
