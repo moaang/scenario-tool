@@ -9375,15 +9375,21 @@
       const height = Number(rawHeight) || Number(item.heightPct) || 0;
       if (!height) return 0;
       const pitch = height / Math.max(1, glyphCount);
-      if (item.verticalRunExpanded && item.verticalRunMeasured) return Math.min(1.9, Math.max(0.9, pitch * 0.8));
-      if (item.verticalRunExpanded) return Math.min(2.2, Math.max(0.55, pitch * 0.68));
+      // 세 갈래가 (계수, 하한, 상한) 삼중쌍만 다르다. 표로 뽑아 값들을 나란히 보이게 한다 —
+      // 흩어져 있을 때는 measured 와 기본이 계수·상한이 같고 하한만 다르다는 것이 안 보였다.
+      // 상·하한은 페이지 높이 % 절대값이라 규모 의존이다(실측: 3.2% 가 clamp 에 걸리고,
+      // 대부분 큰 글자다). pitch 배수로 바꾸면 무차원이 되지만 그때는 좌표가 바뀐다.
+      const [factor, minPad, maxPad] = item.verticalRunExpanded
+        ? (item.verticalRunMeasured ? [0.8, 0.9, 1.9] : [0.68, 0.55, 2.2])
+        : [0.8, 0.6, 1.9];
+      if (item.verticalRunExpanded) return Math.min(maxPad, Math.max(minPad, pitch * factor));
       // Lone glyph (× / 決 / a single stacked kana / a trailing bracket). Content glyphs fill their cell
       // and their ink descends ~0.6 below the advance box, so they need the pad (verified: ×××× ink sat
       // 0.9% below its box). But high-sitting punctuation — 」』）…。 — draws in the TOP of its cell
       // (measured: a trailing 」 ink ended 1.5% ABOVE its advance-box bottom), so padding it only bloats
       // the box downward into empty space. Exempt pure-punctuation fragments.
       if (isPdfVerticalPunctuationFragment(item.text || item.str || '')) return 0;
-      return Math.min(1.9, Math.max(0.6, pitch * 0.8));
+      return Math.min(maxPad, Math.max(minPad, pitch * factor));
     }
 
     function normalizeCompactOverlayRect(rect, minWidth, minHeight) {
