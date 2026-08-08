@@ -18023,7 +18023,13 @@
       const ascent = fontSize * ascentRatio;
       const anchorX = Number(tx[4]) || 0;
       const anchorY = Number(tx[5]) || 0;
-      const boxLeft = anchorX + ascent * Math.sin(angle);
+      // 세로쓰기 CMap 폰트(fontStyle.vertical)는 글리프 원점이 **상단 중앙**이다 —
+      // 가로쓰기의 좌하단이 아니다. 그대로 왼쪽 가장자리로 쓰면 박스가 반 글자만큼
+      // 오른쪽으로 밀린다. 라스터 대조(2026-08-09): 그 문서만 잉크 대비 **+0.61%** 쏠렸고,
+      // fontSize/2 를 페이지 폭으로 나눈 값(0.62%)과 일치했다. 다른 네 문서는 ±0.1% 안이다.
+      // 그 문서들은 폰트가 vertical:false 라 이 보정을 안 탄다.
+      const verticalOriginFont = Boolean(fontStyle && fontStyle.vertical);
+      const boxLeft = anchorX + ascent * Math.sin(angle) - (verticalOriginFont ? fontSize / 2 : 0);
       const boxTop = anchorY - ascent * Math.cos(angle);
       const bounds = rotatedPdfTextBoxBounds(boxLeft, boxTop, advance, fontSize, angle);
       if (axisVertical) {
