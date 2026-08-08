@@ -9301,16 +9301,40 @@
       if (!anchor) return source;
       const targetLeft = Number(anchor.rect.left) || 0;
       const targetWidth = Math.max(0.22, Number(anchor.rect.width) || 0);
+      // 정렬은 **중심** 기준이다. 예전에는 왼쪽 모서리를 앵커에 맞췄는데, 그러면
+      // 폭이 다른 조각은 중심이 (rect.width - targetWidth) / 2 만큼 밀린다 —
+      // compactPdfItemRectForLine 이 이미 잉크 중심(centerXPct)에 맞춰 놓은 것을 깨뜨린다.
+      // 라스터 대조(2026-08-08, 세 문서 전수): 이동 전 박스가 잉크 중심에서
+      // 중앙값 0.016~0.027% 안에 있었는데, 왼쪽 정렬이 그것을 0.15~0.23% 로 밀었다.
+      // 중심 기준으로 바꾸자 이동량 합계가 90.53 → 25.92 (71% 감소), 최대 0.235 → 0.098 로 줄었다.
+      // 아래 settledBand 까지 합치면 1,325건 90.53 → 495건 21.03 이다(폭 확대 18건은 그대로 남는다).
+      const targetCenter = targetLeft + targetWidth / 2;
+      // 이미 제자리인 것은 건드리지 않는다. 앵커 폭의 2% 는 위 대조의 바닥보다 작아서,
+      // 그 아래 이동은 정확도를 못 올리고 좌표만 흔든다(실측: 그러는 것이 837건).
+      // 폭 보정은 이 판정에 걸리지 않는다 — 폭이 바뀌는 건은 중심이 가까워도 늘려야 한다.
+      const settledBand = targetWidth * 0.02;
       const tolerance = Math.max(1.6, targetWidth * 1.45);
       return entries.map((entry) => {
         const rect = entry.rect;
         if (!rect || entry.item && entry.item.rotatedLatinRun && !entry.punctuation) return rect;
-        const closeToMainColumn = Math.abs((Number(rect.left) || 0) - targetLeft) <= tolerance;
-        const narrowVerticalFragment = Number(rect.width || 0) <= targetWidth * 1.6 || entry.textLen <= 2 || entry.punctuation;
+        const width = Number(rect.width) || 0;
+        const nextWidth = Math.max(width, targetWidth);
+        const center = (Number(rect.left) || 0) + width / 2;
+        // 앵커 컬럼 중심에서 얼마나 벗어나 있나 — 대상 판정과 제자리 판정이 같은 자를 쓴다.
+        // 정렬을 중심으로 하면서 판정만 왼쪽 모서리로 재면 같은 개념을 두 자로 재는 셈이 된다.
+        // tolerance 가 폭 차이보다 훨씬 커서 이 코퍼스에서는 대상이 갈리지 않았다 —
+        // 바꾸기 전후 rect 지문이 완전히 같다(세 문서 전 페이지, len 356,730 / hash 4153930020).
+        const offCenter = Math.abs(center - targetCenter);
+        const closeToMainColumn = offCenter <= tolerance;
+        const narrowVerticalFragment = width <= targetWidth * 1.6 || entry.textLen <= 2 || entry.punctuation;
         if (!closeToMainColumn || !narrowVerticalFragment) return rect;
+        // 폭 비교를 등호로 하면 안 된다 — 조각 폭은 앵커와 부동소수점 수준으로만 달라도
+        // nextWidth !== width 가 돼 전부 이 판정을 빠져나간다(실측: 그래서 786/815 건이 그대로 움직였다).
+        const widensMeaningfully = nextWidth - width > settledBand;
+        if (!widensMeaningfully && offCenter <= settledBand) return rect;
         return Object.assign({}, rect, {
-          left: Math.max(0, Math.min(99, targetLeft)),
-          width: Math.max(Number(rect.width) || 0, targetWidth)
+          left: Math.max(0, Math.min(99, targetCenter - nextWidth / 2)),
+          width: nextWidth
         });
       });
     }
@@ -9332,10 +9356,18 @@
       const punctuationFragment = isPdfVerticalPunctuationFragment(item && (item.text || item.str) || '');
       const rotatedLatin = Boolean(item && item.rotatedLatinRun) && !punctuationFragment;
       const measuredGlyphWidth = Number(item && item.glyphWidthPct) || 0;
-      const widthHint = rotatedLatin
-        ? Math.min(rawWidth, Math.max(rawWidth * 0.72, rawHeight * 0.08))
-        : Math.max(measuredGlyphWidth, Math.min(rawWidth, rawHeight * 0.82));
-      const width = Math.min(rawWidth, widthHint * (rotatedLatin ? 1.04 : 1.02));
+      // 회전 라틴은 rawWidth 의 0.9 하나로 정한다(2026-08-08 라스터 전수 51건).
+      // 세로 흐름 속 가로 영문은 **가로축이 글자의 세로축**이라, 폭을 가르는 것은
+      // 글자 수가 아니라 디센더다. 잉크폭 / rawWidth 실측이 그대로 갈렸다:
+      //   대문자·숫자만 44건 → 0.667~0.710 (디센더 0, 소문자 0)
+      //   디센더 포함   7건 → 0.792~0.899
+      // 예전 식은 하나가 아니었다 — 47건은 rawWidth×0.72 가, 4건은 rawHeight×0.08 이 이겨
+      // 배율이 0.749 / 0.87 / 0.901 / 1.0 으로 흔들렸고, 그 흔들림은 런 길이에 따른 것이지
+      // 글자 모양과는 무관했다. 그래서 디센더가 있는 4건이 0.749 를 받아 잉크가 잘렸다.
+      // 0.9 는 실측 최대 0.899 를 덮는다. 대문자 쪽은 0.19% 넓어지지만 컬럼 피치(1.24%) 안이다.
+      const width = rotatedLatin
+        ? rawWidth * 0.9
+        : Math.min(rawWidth, Math.max(measuredGlyphWidth, Math.min(rawWidth, rawHeight * 0.82)) * 1.02);
       const bottomPad = pdfVerticalRunBottomPadPct(item, rawHeight, vertical);
       // Horizontal placement: center the box on the glyph's true ink center (item.centerXPct,
       // pixel-verified against the rasterized render). For a measured multi-glyph run pdf.js
@@ -13389,6 +13421,26 @@
         Math.max(0.1, Math.max(...source.map(item => (Number(item.leftPct) || 0) + (Number(item.widthPct) || 0))) - Math.min(...source.map(item => Number(item.leftPct) || 0))),
         Math.max(0.1, Math.max(...source.map(item => (Number(item.topPct) || 0) + (Number(item.heightPct) || 0))) - Math.min(...source.map(item => Number(item.topPct) || 0)))
       );
+      // 이 함수의 상수 여섯이 어디까지 실효가 있는가 — 2026-08-08 실측.
+      // 네 문서를 앱에 임포트해 이 함수 안에서 호출 1,854회를 그대로 재었다:
+      //
+      //   갈래                    호출   union gap   minWidth 발동   minHeight 발동
+      //   세로 + synthetic guide  1,851   결과 폐기  0 (최소폭 1.29)  0 (최소높이 6.37)
+      //   세로 (guide 혼합)          0   —           —               —
+      //   가로                        3   좌표에 반영 0               0
+      //
+      // 세로 갈래는 전부 syntheticGuideOnly 라 sourceRect 가 guideRect 로 통째로 바뀐다 —
+      // 즉 여기서 계산한 union rect(gap 0.08)는 null 판정에만 쓰이고 좌표에는 안 들어간다.
+      // 그리고 그 guideRect 는 unionPdfGuideLineRectsForItems 가 이미 (0.24, 0.75) 로
+      // 정규화해 낸 값이다. 여기서 다시 거는 0.24 는 **같은 하한을 두 번 거는 것**이라
+      // 코퍼스와 무관하게 항상 no-op 이다(minHeight 만 0.75 → 1.2 로 올라간다).
+      //
+      // 독립 검증: 다섯 상수를 극단값(0.08→0.9, 0.24→0.01, 0.55→9.9, 가로 minWidth 1.2→0.01,
+      // minHeight 1.2→0.01)으로 바꿔 다시 임포트해도 좌표 지문이 완전히 같았다.
+      // 대조로 0.16 만 0.9 로 바꾸자 지문이 바뀌었고, 그 변화량(rect 합계 +2.96)이
+      // 가로 갈래 2건 × 1.48 과 정확히 맞았다 — 계측과 좌표가 따로 같은 수를 냈다.
+      //
+      // 실효 0 이지만 지우지 않는다: 가로 조판·다른 서체에서 세로 갈래와 하한이 살아난다.
       const rect = compactPdfItemUnionRect(source, vertical, vertical ? 0.08 : 0.16);
       if (!rect) return null;
       const guideRect = vertical ? unionPdfGuideLineRectsForItems(source) : null;
@@ -21992,7 +22044,12 @@
       // (expandCollapsedPdfJsVerticalRunBounds 는 아이템에 verticalRunExpanded 를 남기므로
       //  노출하지 않아도 센다.)
       compactPdfItemRectForLine,
-      alignPdfVerticalFragmentRectsForLine
+      alignPdfVerticalFragmentRectsForLine,
+      // 둘 다 순수 함수라 같은 items 를 밖에서 넣으면 같은 rect 가 나온다.
+      // 2026-08-08 상수 실측이 이 둘로 돌았다 — 앞은 로드된 상수를 소스로 확인하는 데,
+      // 뒤는 union gap 을 바꿔 넣어 그 값이 결과를 가르는지 비교하는 데 썼다.
+      rectForPdfMatchedItems,
+      compactPdfItemUnionRect
     };
   </script>
 
