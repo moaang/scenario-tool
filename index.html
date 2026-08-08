@@ -7840,9 +7840,6 @@
         .trim();
     }
 
-    function normalizePdfLogicalLineGuideMatchText(text) {
-      return normalizePdfCompactTextPreserveMarks(text);
-    }
 
     function isPdfLogicalDashLeaderText(text) {
       const compact = String(text || '').normalize('NFKC').replace(/\s+/g, '');
@@ -7868,7 +7865,7 @@
       const logicalSourceText = Array.isArray(logicalText) ? logicalText.join('\n') : logicalText;
       const logicalLines = normalizePdfLogicalPageText(logicalSourceText)
         .split(/\n+/)
-        .map(line => normalizePdfLogicalLineGuideMatchText(line))
+        .map(line => normalizePdfCompactTextPreserveMarks(line))
         .filter(Boolean);
       // 「논리 텍스트가 아예 없어 페이지를 통째로 건너뛴 것」과 「논리 줄은 있는데 어느 줄도
       // 오버레이 문자열을 담지 않은 것」은 다른 사실이다. 둘 다 흔적이 없어 소스만으로는
@@ -7883,7 +7880,7 @@
         if (!line || !line.text) return;
         const rawRect = line.compactOverlayRect || line.overlayRect;
         if (!rawRect || !rawRect.vertical) return;
-        const compact = normalizePdfLogicalLineGuideMatchText(line.text);
+        const compact = normalizePdfCompactTextPreserveMarks(line.text);
         if (!compact || compact.length < 2) return;
         const currentGlyphs = pdfVerticalRunGlyphCount(line.text);
         if (currentGlyphs < 2) return;
@@ -7896,7 +7893,7 @@
         // printed line across a page-width limit). If that next line already starts with the
         // candidate tail, the text is already correctly present there — appending it here too
         // would duplicate it rather than recover something pdf.js actually dropped.
-        const nextLineText = normalizePdfLogicalLineGuideMatchText((lines[lineIndex + 1] && lines[lineIndex + 1].text) || '');
+        const nextLineText = normalizePdfCompactTextPreserveMarks((lines[lineIndex + 1] && lines[lineIndex + 1].text) || '');
         // If this line's own text shows up in more than one place in the page's logical text
         // (a short phrase, a stock line ending, a repeated word), we can't tell which occurrence's
         // continuation is the real one — UNLESS every occurrence continues with the exact same tail,
@@ -7915,11 +7912,11 @@
           const matchIndex = logicalLine.indexOf(compact);
           if (matchIndex < 0) return;
           const extra = logicalLine.slice(matchIndex + compact.length).replace(/[0-9０-９]+$/u, '');
-          tailKeys.add(normalizePdfLogicalLineGuideMatchText(extra));
+          tailKeys.add(normalizePdfCompactTextPreserveMarks(extra));
           if (!extra) return;
           if (shouldSkipPdfLogicalTailForOverlayLine(line, extra)) return;
           if (!isPdfLogicalVerticalTailCandidate(extra)) return;
-          const extraKey = normalizePdfLogicalLineGuideMatchText(extra);
+          const extraKey = normalizePdfCompactTextPreserveMarks(extra);
           if (extraKey && nextLineText && nextLineText.startsWith(extraKey)) return;
           const glyphs = pdfVerticalRunGlyphCount(extra);
           if (glyphs > extraGlyphs) {
@@ -7972,8 +7969,8 @@
       const base = String(text || '').trim();
       const tail = String(tailText || '').trim();
       if (!base || !tail) return base;
-      const baseKey = normalizePdfLogicalLineGuideMatchText(base);
-      const tailKey = normalizePdfLogicalLineGuideMatchText(tail);
+      const baseKey = normalizePdfCompactTextPreserveMarks(base);
+      const tailKey = normalizePdfCompactTextPreserveMarks(tail);
       if (!tailKey || baseKey.endsWith(tailKey)) return base;
       return normalizePdfJapaneseInlineSpacing(base + tail);
     }
@@ -8556,19 +8553,16 @@
       const source = normalizePdfLogicalPageText(text);
       if (!source) return '';
       const rubyKeys = new Set((rubyLines || [])
-        .map(line => normalizePdfRubyLineText(line && line.text || line))
+        .map(line => normalizePdfCompactTextPreserveMarks(line && line.text || line))
         .filter(key => key.length >= 2));
       if (!rubyKeys.size) return source;
       return source.split(/\n+/)
         .map(line => line.trim())
         .filter(Boolean)
-        .filter(line => !rubyKeys.has(normalizePdfRubyLineText(line)))
+        .filter(line => !rubyKeys.has(normalizePdfCompactTextPreserveMarks(line)))
         .join('\n');
     }
 
-    function normalizePdfRubyLineText(text) {
-      return String(text || '').normalize('NFKC').replace(/[\s\u200b\u200c\u200d\ufeff]+/g, '');
-    }
 
     function pdfJsAnnotationsFromBlueOverlayLines(lines, pageNo) {
       const fragments = (lines || [])
@@ -9363,7 +9357,7 @@
     }
 
     function isPdfVerticalPunctuationFragment(text) {
-      const compact = String(text || '').normalize('NFKC').replace(/[\s\u200b\u200c\u200d\ufeff]+/g, '');
+      const compact = normalizePdfCompactTextPreserveMarks(text);
       if (!compact) return false;
       return /^[、。,.，．・:：;；!！?？…‥'"“”‘’「」『』（）()［］\[\]【】〈〉《》ー―‐\-]+$/u.test(compact);
     }
@@ -12975,11 +12969,11 @@
       const sourcePages = (pages || []).map((page) => {
         const lines = page && page.lines || [];
         const text = lines.join('\n');
-        const pageSpanLineKeys = lines.map(line => normalizePdfPageSpanMatchText(line)).filter(Boolean);
+        const pageSpanLineKeys = lines.map(line => normalizePdfCompactTextPreserveMarks(line)).filter(Boolean);
         return {
           pageNo: Number(page && page.pageNo || 1),
           text,
-          pageSpanKey: normalizePdfPageSpanMatchText(text),
+          pageSpanKey: normalizePdfCompactTextPreserveMarks(text),
           pageSpanLineKeys
         };
       }).filter(page => page.pageNo && (page.pageSpanKey || page.pageSpanLineKeys.length));
@@ -13004,7 +12998,7 @@
       if (pageIndex < 0) pageIndex = 0;
       const groups = [];
       lines.forEach((line) => {
-        const lineKey = normalizePdfPageSpanMatchText(line);
+        const lineKey = normalizePdfCompactTextPreserveMarks(line);
         let matchedIndex = -1;
         if (lineKey && lineKey.length >= 2) {
           const maxIndex = Math.min(sourcePages.length - 1, pageIndex + 3);
@@ -17735,7 +17729,7 @@
         item.pdfRuby = true;
         item.pdfRubyParentText = parent && parent.text || '';
       });
-      const groups = groupPdfRubyTextItems(confirmed, metrics).filter(group => normalizePdfRubyLineText(group.text).length >= 2);
+      const groups = groupPdfRubyTextItems(confirmed, metrics).filter(group => normalizePdfCompactTextPreserveMarks(group.text).length >= 2);
       groups.forEach((group, index) => {
         const groupId = 'ruby-' + pad(index + 1, 3);
         group.items.forEach((item) => {
@@ -18673,6 +18667,10 @@
       });
     }
 
+    // 정규화의 정본. 예전에는 이 체인이 이름만 다른 사본으로 다섯 벌 있었다 — 그래서 어느
+    // 자리가 어느 자로 재는지 읽어서는 알 수 없었고, 실제로 좌표용 자로 동일성을 재던 자리를
+    // 아무도 못 봤다. 이름이 같으면 호출부만 읽어도 갈린 자를 찾을 수 있다.
+    // 좌표용 자(normalizePdfCoordinateMatchText)는 이것의 상위집합이다 — 합치면 안 된다.
     function normalizePdfCompactTextPreserveMarks(value) {
       return String(value || '').normalize('NFKC').replace(/[\s\u200b\u200c\u200d\ufeff]+/g, '');
     }
@@ -18683,19 +18681,13 @@
       return compact.replace(/^off(?=[\u3040-\u30ff\u3400-\u9fff々ヶ○●「『（(])/i, '');
     }
 
-    function normalizePdfPageSpanMatchText(value) {
-      return normalizePdfCompactTextPreserveMarks(value);
-    }
 
-    function normalizePdfReviewIdentityText(value) {
-      return normalizePdfCompactTextPreserveMarks(value);
-    }
 
     function pdfReviewIdentityKeys(values) {
       const out = [];
       const seen = new Set();
       (values || []).forEach((value) => {
-        const key = normalizePdfReviewIdentityText(value);
+        const key = normalizePdfCompactTextPreserveMarks(value);
         if (!key || seen.has(key)) return;
         seen.add(key);
         out.push(key);
