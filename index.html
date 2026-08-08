@@ -9390,12 +9390,12 @@
       const punctuationFragment = isPdfVerticalPunctuationFragment(item && (item.text || item.str) || '');
       const rotatedLatin = Boolean(item && item.rotatedLatinRun) && !punctuationFragment;
       const measuredGlyphWidth = Number(item && item.glyphWidthPct) || 0;
-      // 회전 라틴은 rawWidth 를 그대로 쓴다 — 좁히지 않는다.
+      // 회전 라틴은 rawWidth 를 그대로 쓴다 — 즐이지 않는다.
       // 세로 흐름 속 가로 영문은 **가로축이 글자의 세로축**이라, 폭을 가르는 것은
       // 글자 수가 아니라 디센더·어센더다. 그리고 그 범위는 advance box 보다 넓다:
       // 이 코퍼스에서 rawWidth 는 정확히 fontSize(1.0 em)인데(실측: fontPx/페이지폭 × 100 이
       // widthPct 와 소수점까지 같다), 폰트의 ascent + |descent| 는 1.10 em 이다.
-      // 즉 **advance box 자체가 글자 범위를 다 담지 못한다** — 거기서 더 좁히면 잉크가 잘린다.
+      // 즉 **advance box 자체가 글자 범위를 다 담지 못한다** — 거기서 더 즐이면 잉크가 잘린다.
       //
       // 2026-08-08 라스터 측정은 잉크비를 0.667~0.899 로 냈지만, 그 측정은 관측창을
       // **아이템 박스(rawWidth) 안으로 제한**했다. 박스 밖으로 나간 잉크는 볼 수 없었고,
@@ -9440,41 +9440,36 @@
       return Math.min(maxPad, Math.max(minPad, source * factor));
     }
 
-    // 잉크가 advance box 아래로 얼마나 내려가는가 — 폰트가 알려 준다.
-    // 박스 높이는 fontSize(1.0 em)이고 baseline 은 그 위에서 ascent 만큼 내려온 자리이므로,
-    // 잉크가 박스 아래로 나가는 양은 (ascent + |descent| - 1) em 이다.
-    // 이 코퍼스의 폰트 셋 실측(2026-08-09): 0.102 / 0.000 / 0.107 em. 0.15 면 전부 덮는다.
-    //
-    // 예전 값은 0.8 이었고 근거로 「잉크가 약 0.6 글자 내려간다(픽셀 스캔)」을 적었는데,
-    // 폰트 메트릭과 5~8배 어긋난다. 그 과대는 화면에도 보였다 — 표지 페이지의 10개 라인이
-    // 좌우·위는 오차 0 인데 **아래만 1.4~1.6% 더 내려가** 있었다(pad/pitch = 0.82).
-    // 그 픽셀 스캔은 다시 볼 것 — 회전 라틴에서도 관측창을 박스 안으로 제한해 값을 잘못 읽었다.
-    const PDF_VERTICAL_BOTTOM_PAD_FACTOR = 0.15;
-    const PDF_VERTICAL_BOTTOM_PAD_MIN_MUL = 0.05;
-    const PDF_VERTICAL_BOTTOM_PAD_MAX_MUL = 0.5;
-
     function pdfVerticalRunBottomPadPct(item, rawHeight, vertical) {
-      // 세로 라인 안의 아이템이면 다 대상이다 — 어떤 PDF 는 셀마다 ltr 글자를 하나씩 내므로
-      // 자기가 세로라고 밝힌 것만 골라서는 꼬리 괄호가 빠진다. 회전 라틴은 제외한다.
+      // pdf.js item.height is the glyph ADVANCE box, but the actual rendered ink of the bottom glyph
+      // descends ~0.6 of a glyph below it (pixel-scanned from rasterized renders: cast columns
+      // sat 0.6-0.7% above the ink, the ××× marker column 1.1% above, and one-glyph-per-cell dialogue /
+      // ×××× the same). So the box needs ~0.8*pitch of bottom pad (~0.6 to reach the ink + ~0.2 margin).
+      // This holds for measured multi-glyph runs, lone stacked glyphs (× / ○ / 決), AND ltr-sourced
+      // glyphs that were grouped into a vertical column (some PDFs emit one ltr glyph per cell, so
+      // the trailing 」 / ×××× are ltr yet still need the pad). Hence: any item inside a vertical line
+      // qualifies, not just ones self-flagged vertical. Rotated-latin runs (e.g. a 2024 date) are exempt.
       if (!item || item.rotatedLatinRun) return 0;
       if (!item.verticalTextItem && !item.verticalRunExpanded && !vertical) return 0;
       const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text) || 1;
       const height = Number(rawHeight) || Number(item.heightPct) || 0;
       if (!height) return 0;
       const pitch = height / Math.max(1, glyphCount);
-      // 예전에는 (계수, 하한, 상한) 삼중쌍이 세 갈래였다. 근거가 없어 하나로 합쳤다 — 아래 참조.
-      // 상·하한도 pitch 배수라 무차원이다. 예전 절대값 하한은 세로 판형 문서에서 99.6% 가 걸려
-      // 무차원 규칙을 통째로 덮었다(실측). 이제 정상 경로에선 계수가 이기고, pitch 가 이상치일 때만 걸린다.
-      const padOf = () => pdfVerticalPadPct(pitch, PDF_VERTICAL_BOTTOM_PAD_FACTOR,
-        pitch * PDF_VERTICAL_BOTTOM_PAD_MIN_MUL, pitch * PDF_VERTICAL_BOTTOM_PAD_MAX_MUL);
-      if (item.verticalRunExpanded) return padOf();
+      // 세 갈래가 (계수, 하한, 상한) 삼중쌍만 다르다. 표로 뽑아 값들을 나란히 보이게 한다 —
+      // 흩어져 있을 때는 measured 와 기본이 계수·상한이 같고 하한만 다르다는 것이 안 보였다.
+      // 상·하한은 페이지 높이 % 절대값이라 규모 의존이다(실측: 3.2% 가 clamp 에 걸리고,
+      // 대부분 큰 글자다). pitch 배수로 바꾸면 무차원이 되지만 그때는 좌표가 바뀐다.
+      const [factor, minPad, maxPad] = item.verticalRunExpanded
+        ? (item.verticalRunMeasured ? [0.8, 0.9, 1.9] : [0.68, 0.55, 2.2])
+        : [0.8, 0.6, 1.9];
+      if (item.verticalRunExpanded) return pdfVerticalPadPct(pitch, factor, minPad, maxPad);
       // Lone glyph (× / 決 / a single stacked kana / a trailing bracket). Content glyphs fill their cell
       // and their ink descends ~0.6 below the advance box, so they need the pad (verified: ×××× ink sat
       // 0.9% below its box). But high-sitting punctuation — 」』）…。 — draws in the TOP of its cell
       // (measured: a trailing 」 ink ended 1.5% ABOVE its advance-box bottom), so padding it only bloats
       // the box downward into empty space. Exempt pure-punctuation fragments.
       if (isPdfVerticalPunctuationFragment(item.text || item.str || '')) return 0;
-      return padOf();
+      return pdfVerticalPadPct(pitch, factor, minPad, maxPad);
     }
 
     function normalizeCompactOverlayRect(rect, minWidth, minHeight) {
@@ -18613,21 +18608,14 @@
       });
     }
 
-    const PDF_OVERLAY_MIN_BOX_PCT = 1.2;
-
     function normalizeOverlayRect(rect) {
       const source = rect || {};
       const rawLeft = Math.max(0, Math.min(99, Number(source.left) || 0));
       const rawTop = Math.max(0, Math.min(99, Number(source.top) || 0));
       const rawWidth = Math.max(0, Math.min(100, Number(source.width) || 0));
       const rawHeight = Math.max(0, Math.min(100, Number(source.height) || 0));
-      // 최소 폭 2% 는 페이지 폭 **절대값**이라 규모 의존이다. 세로쓰기 각본의 컬럼 폭은
-      // 1.24~1.43%, 컬럼 피치는 1.3~2.1% 다(실측 2026-08-09). 즉 2% 는 컬럼 폭보다 60% 넘게 크고
-      // 피치보다도 커서, 중심 대칭으로 부풀려도 **좌우 이웃 컬럼을 반드시 침범한다** —
-      // 표지의 등장인물 컬럼(폭 1.28%)이 2% 박스로 부풀어 옆 칸에 겹쳐 보이는 것이 그 증상이었다.
-      // 최소 피치(1.3%)보다 작은 1.2 로 낮춘다. 912px 폭에서 11px 이라 집기에도 충분하다.
-      const width = Math.max(PDF_OVERLAY_MIN_BOX_PCT, rawWidth);
-      const height = Math.max(PDF_OVERLAY_MIN_BOX_PCT, rawHeight);
+      const width = Math.max(2, rawWidth);
+      const height = Math.max(2, rawHeight);
       const vertical = Boolean(source.vertical || (Number(source.height) > Number(source.width) * OVERLAY_VERTICAL_ASPECT));
       // When a thin column/row box is inflated up to the 2% minimum, grow it
       // symmetrically around the glyph center instead of only rightward/downward,
