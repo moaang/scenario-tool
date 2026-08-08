@@ -9122,26 +9122,35 @@
     // 태그를 못 믿을 문서에서 컬럼 여러 개가 한 박스로 뭉치는 것을 막는 안전장치다.
     const PDF_JS_MARKED_COLUMN_X_LIMIT_PCT = 2.5;
 
-    function nearestPdfJsVerticalColumn(cols, item, key) {
-      // 마크드 콘텐츠가 있으면 그것이 컬럼 경계의 정답이다. 색이 바뀌어 visualGroupKey 가
-      // 갈리는 한 줄짜리 빨간 수정도 여기서 같은 컬럼으로 붙는다.
-      // 태그가 없는 문서는 그대로 아래 좌표 경로로 간다.
-      const markId = item && item.markId;
-      if (markId != null) {
-        const tagged = (cols || []).find(entry => entry && entry.markId === markId
-          && Math.abs(Number(entry.x) - Number(item.centerXPct)) <= PDF_JS_MARKED_COLUMN_X_LIMIT_PCT);
-        if (tagged) return tagged;
-      }
+    // 어느 기준으로 걸러도 고르는 규칙은 하나다 — 가장 가까운 컬럼. 기준과 허용치만 받는다.
+    // (첫 매치로 고르면 아이템 순서가 결과를 바꾼다.)
+    function nearestPdfJsColumnBy(cols, item, accept, limitPct) {
       let match = null;
       let bestDiff = Infinity;
       (cols || []).forEach((entry) => {
-        if (!entry || entry.key !== key) return;
+        if (!entry || !accept(entry)) return;
         const diff = Math.abs(Number(entry.x) - Number(item && item.centerXPct));
-        if (!Number.isFinite(diff) || diff > PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT || diff >= bestDiff) return;
+        if (!Number.isFinite(diff) || diff > limitPct || diff >= bestDiff) return;
         match = entry;
         bestDiff = diff;
       });
       return match;
+    }
+
+    function nearestPdfJsVerticalColumn(cols, item, key) {
+      // 마크드 콘텐츠가 있으면 먼저 본다. 색이 바뀌어 visualGroupKey 가 갈리는
+      // 한 줄짜리 빨간 수정도 여기서 같은 컬럼으로 붙는다.
+      // 다만 태그의 알갱이는 문서마다 다르다 — 한 markId 가 인쇄 컬럼 하나인 문서도,
+      // 여러 컬럼에 걸치는 문서도, 글자 하나씩인 문서도 실측됐다. 그래서 거리 한계를
+      // 함께 건다. 한계를 넘으면 태그를 버리고 아래 좌표 기준으로 떨어진다.
+      const markId = item && item.markId;
+      if (markId != null) {
+        const tagged = nearestPdfJsColumnBy(cols, item, entry => entry.markId === markId,
+          PDF_JS_MARKED_COLUMN_X_LIMIT_PCT);
+        if (tagged) return tagged;
+      }
+      return nearestPdfJsColumnBy(cols, item, entry => entry.key === key,
+        PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT);
     }
 
     function pdfJsOverlayLine(items, vertical) {
@@ -16208,7 +16217,9 @@
         // DOM 실측치이지 pdf.js 좌표가 아니다. 좌표원을 PDF 로 위장하면
         // isCurrentPdfCoordinateSource 가 최신 PDF 좌표로 인정해 버린다.
         // 직접 대입하지 않고 정규 경로로 저장해야 pageSpans 도 함께 갱신된다.
-        setBlockOverlayRectForPage(block, overlayPageNoForBlock(block), {
+        // 렌더 중인 페이지에 저장한다. 블록의 pageNo 를 보면 지금 그리는 페이지와
+        // 어긋날 수 있다 — 이 함수는 인자로 그 페이지를 이미 받는다.
+        setBlockOverlayRectForPage(block, pageNo, {
           left, top, width, height,
           vertical: height > width * 1.25,
           coordinateSource: 'rendered-docx-dom-v1'
