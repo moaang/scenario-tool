@@ -7980,10 +7980,8 @@
       // pitch is now derived from pdf.js's real column heights, so pitch*extraGlyphs already lands on
       // the recovered glyphs' true cells; only a small descender margin is needed on top. (The old
       // 2.85x/6% pad dated from when the base height was a fontSize estimate and had to overshoot.)
-      const ratio = extraGlyphs > 0 ? 0.7 : 0.55;
-      const min = extraGlyphs > 0 ? 0.5 : 0.4;
-      const max = extraGlyphs > 0 ? 1.8 : 1.4;
-      return Math.min(max, Math.max(min, sourcePitch * ratio));
+      const [factor, minPad, maxPad] = extraGlyphs > 0 ? [0.7, 0.5, 1.8] : [0.55, 0.4, 1.4];
+      return pdfVerticalPadPct(sourcePitch, factor, minPad, maxPad);
     }
 
     function pdfVerticalLinePitchPct(line, rect, glyphCount) {
@@ -9360,6 +9358,19 @@
       };
     }
 
+    // 세로 여백은 어디서 계산하든 같은 수학이다 — pitch 에 계수를 곱하고 상·하한으로 자른다.
+    // 두 곳이 각자 적고 있었다(런 아래 여백 / 논리 꼬리 아래 여백). 유사도로는 8% 라
+    // 문자열 비교로는 안 잡히고, **식의 모양**을 봐야 보이는 중복이었다.
+    //
+    // 계수는 무차원이라 규모에 안전하지만 **상·하한은 페이지 높이 % 절대값**이다
+    // (실측: 런 쪽에서 3.2% 가 상·하한에 걸리고 대부분 큰 글자다). pitch 배수로 바꾸면
+    // 무차원이 되지만 그때는 좌표가 바뀌므로 별건이다.
+    function pdfVerticalPadPct(pitch, factor, minPad, maxPad) {
+      const source = Number(pitch) || 0;
+      if (!source) return 0;
+      return Math.min(maxPad, Math.max(minPad, source * factor));
+    }
+
     function pdfVerticalRunBottomPadPct(item, rawHeight, vertical) {
       // pdf.js item.height is the glyph ADVANCE box, but the actual rendered ink of the bottom glyph
       // descends ~0.6 of a glyph below it (pixel-scanned from rasterized renders: cast columns
@@ -9382,14 +9393,14 @@
       const [factor, minPad, maxPad] = item.verticalRunExpanded
         ? (item.verticalRunMeasured ? [0.8, 0.9, 1.9] : [0.68, 0.55, 2.2])
         : [0.8, 0.6, 1.9];
-      if (item.verticalRunExpanded) return Math.min(maxPad, Math.max(minPad, pitch * factor));
+      if (item.verticalRunExpanded) return pdfVerticalPadPct(pitch, factor, minPad, maxPad);
       // Lone glyph (× / 決 / a single stacked kana / a trailing bracket). Content glyphs fill their cell
       // and their ink descends ~0.6 below the advance box, so they need the pad (verified: ×××× ink sat
       // 0.9% below its box). But high-sitting punctuation — 」』）…。 — draws in the TOP of its cell
       // (measured: a trailing 」 ink ended 1.5% ABOVE its advance-box bottom), so padding it only bloats
       // the box downward into empty space. Exempt pure-punctuation fragments.
       if (isPdfVerticalPunctuationFragment(item.text || item.str || '')) return 0;
-      return Math.min(maxPad, Math.max(minPad, pitch * factor));
+      return pdfVerticalPadPct(pitch, factor, minPad, maxPad);
     }
 
     function normalizeCompactOverlayRect(rect, minWidth, minHeight) {
