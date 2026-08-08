@@ -4147,20 +4147,6 @@
       pdfOverlayDrops.clear();
     }
 
-    function pdfOverlayDropTotal() {
-      let total = 0;
-      pdfOverlayDrops.forEach((entry) => { total += entry.count; });
-      return total;
-    }
-
-    function pdfOverlayDropDetail() {
-      const parts = [];
-      pdfOverlayDrops.forEach((entry, kind) => {
-        parts.push(kind + ' ' + entry.count + (entry.last ? ' (' + entry.last + ')' : ''));
-      });
-      return parts.join(' / ');
-    }
-
     function pdfBodyRangeForPage(doc, pageNo) {
       const cut = pdfBodyLinePctForPage(doc, pageNo, 'cut');
       const topLine = pdfBodyLinePctForPage(doc, pageNo, 'top');
@@ -19622,12 +19608,17 @@
     function renderPdfOverlayDropChip() {
       const chip = $('stripOverlayDrops');
       if (!chip) return;
-      const total = pdfOverlayDropTotal();
+      let total = 0;
+      const parts = [];
+      pdfOverlayDrops.forEach((entry, kind) => {
+        total += entry.count;
+        parts.push(kind + ' ' + entry.count + (entry.last ? ' (' + entry.last + ')' : ''));
+      });
       chip.classList.toggle('hidden', total === 0);
       if (!total) return;
       const count = $('stripOverlayDropCount');
       if (count) count.textContent = total;
-      chip.title = pdfOverlayDropDetail();
+      chip.title = parts.join(' / ');
     }
 
     function renderStats() {
@@ -20205,7 +20196,9 @@
       });
     }
 
-    // IndexedDB 접근은 이 둘로만 한다. 아홉 곳이 열기·트랜잭션·close 를 각자 적고 있었고,
+    // IndexedDB 접근은 이 둘로만 한다. 서로 닮았지만 하나로 합치지 않는 이유는
+    // 완료 신호가 다르기 때문이다 — 읽기는 요청이(req.onsuccess), 쓰기는 트랜잭션이
+    // (tx.oncomplete) 끝을 알린다. 아홉 곳이 열기·트랜잭션·close 를 각자 적고 있었고,
     // 그중 여덟이 close 를 await 뒤에 두어 트랜잭션이 실패하면 연결이 닫히지 않았다.
     // 여기서는 finally 로 닫는다.
     async function readSettingsStore(storeName, key) {
