@@ -4250,7 +4250,7 @@
 
     function pdfBaseBodyLinesForPage(page) {
       if (!page) return [];
-      return page.bodyBaseLines || page.bodySourceLines || page.lines || [];
+      return page.bodyBaseLines || page.lines || [];
     }
 
     function pdfBodyLinesForPageRange(page, doc) {
@@ -7650,8 +7650,6 @@
         const horizontalMetadataLines = pdfJsHorizontalMetadataLinesForBodyItems(textItems, bodyLines, pageNo);
         const logicalTextWithoutRuby = removePdfRubyLinesFromLogicalText(rawLogicalText, rubyLines);
         const logicalText = normalizePdfLogicalLineGuideNumbersByOverlayLines(logicalTextWithoutRuby, bodyLines);
-        const logicalLines = logicalText ? logicalText.split(/\n+/).map(line => line.trim()).filter(Boolean) : [];
-        const bodyReviewText = pdfBodyReviewTextFromLines(bodyLines);
         pages.push({
           id: 'pdfjs-page-' + pageNo,
           pageNo,
@@ -7661,7 +7659,6 @@
           height: viewport.height,
           textItems,
           lines: bodyLines,
-          bodySourceLines: bodyLines,
           bodyBaseLines: bodyLines,
           colorLines: lineGroups.colorLines,
           horizontalMetadataLines,
@@ -7669,14 +7666,12 @@
           bodyCutLineCandidatePct,
           bodyTopLineCandidatePct,
           layoutDividers,
-          bodyCutLinePct: null,
-          bodyTopLinePct: null,
           rawLogicalText,
           logicalText,
-          logicalLines,
-          bodyReviewText,
+          // bodyReviewText / text / bodyCutLinePct / bodyTopLinePct 는 여기서 쓰지 않는다 —
+          // applyStablePdfJsBodyCutLineToPages 가 이 객체가 밖으로 나가기 전에 전부 덮어쓴다.
+          // 두 벌을 두면 반드시 갈라진다(logicalLines 가 그렇게 아무도 못 읽는 사본이 됐다).
           textSource: usingLogicalFallbackItems ? 'pdf-logical-fallback' : (logicalText ? 'pdf-logical' : 'pdfjs-overlay'),
-          text: bodyReviewText || logicalText || lineGroups.bodyLines.map(line => line.text).filter(Boolean).join('\n'),
           annotations: mergedAnnotations
         });
         if (pageNo % 3 === 0) await yieldToBrowser();
@@ -7715,7 +7710,6 @@
           sourcePageIndex: pageNo,
           textItems: items,
           lines,
-          bodySourceLines: lines,
           bodyBaseLines: lines,
           horizontalMetadataLines,
           pdfJsMergedBodyLines: lines,
@@ -7741,7 +7735,7 @@
       const stableCut = pdfJsStableBodyCutLineFromCandidates((pages || []).map(page => page && page.bodyCutLineCandidatePct), (pages || []).length);
       const stableTopLine = pdfJsStableBodyTopLineFromCandidates((pages || []).map(page => page && page.bodyTopLineCandidatePct), (pages || []).length);
       (pages || []).forEach((page) => {
-        const sourceLines = page.bodyBaseLines || page.bodySourceLines || page.lines || [];
+        const sourceLines = page.bodyBaseLines || page.lines || [];
         const pageTopCandidate = Number(page && page.bodyTopLineCandidatePct);
         const pageTopLine = stableTopLine != null && Number.isFinite(pageTopCandidate) && Math.abs(pageTopCandidate - stableTopLine) <= 1.5
           ? stableTopLine
@@ -7782,7 +7776,6 @@
         const bodyReviewText = pdfBodyReviewTextFromLines(bodyLines);
         page.bodyReviewText = bodyReviewText;
         page.text = bodyReviewText || normalizePdfLogicalPageText(page.logicalText) || bodyLines.map(line => line.text).filter(Boolean).join('\n');
-        delete page.bodySourceLines;
         delete page.bodyCutLineCandidatePct;
         delete page.bodyTopLineCandidatePct;
       });
@@ -7870,26 +7863,6 @@
       return normalizePdfCompactTextPreserveMarks(text);
     }
 
-    function pdfLogicalTailFromMatchedLine(compact, logicalLine) {
-      const base = String(compact || '');
-      const logical = String(logicalLine || '');
-      if (!base || !logical) return '';
-      const exactIndex = logical.indexOf(base);
-      if (exactIndex >= 0) return logical.slice(exactIndex + base.length);
-      if (base.length < 8 || !/[「『]/.test(base) || !/[」』]/.test(logical)) return '';
-      // PDF.js can keep one guide digit that the logical ToUnicode stream drops; only tolerate that case for dialog-tail recovery.
-      for (let index = 0; index < base.length; index += 1) {
-        const ch = base[index];
-        if (!/[0-9０-９]/u.test(ch)) continue;
-        const variant = base.slice(0, index) + base.slice(index + 1);
-        if (variant.length < 8) continue;
-        const matchIndex = logical.indexOf(variant);
-        if (matchIndex < 0) continue;
-        return logical.slice(matchIndex + variant.length);
-      }
-      return '';
-    }
-
     function isPdfLogicalDashLeaderText(text) {
       const compact = String(text || '').normalize('NFKC').replace(/\s+/g, '');
       return Boolean(compact && /^[\u2010-\u2015\u2212\u2500-\u257f－-]+$/u.test(compact));
@@ -7904,7 +7877,6 @@
     }
 
     function expandPdfOverlayLineBoundsForMissingLogicalTails(lines, logicalText, options) {
-      if (options && options.skipLogicalTailExpansion) return lines || [];
       // (No page-level skip: title/cast pages used to be excluded wholesale because tail matching
       // corrupted cast entries, but the same-tail agreement rule below blocks that class per line — a
       // cast entry always matches its own complete logical line too, whose empty tail disagrees.)
@@ -7944,9 +7916,12 @@
         let extraGlyphs = 0;
         let extraText = '';
         logicalLines.forEach((logicalLine) => {
-          if (!logicalLine.includes(compact)) return;
-          let extra = pdfLogicalTailFromMatchedLine(compact, logicalLine);
-          extra = String(extra || '').replace(/[0-9０-９]+$/u, '');
+          // 예전에는 includes 로 한 번, pdfLogicalTailFromMatchedLine 안에서 indexOf 로 또 한 번
+          // 같은 문자열을 찾았다. 탐색이 두 벌이라 그 함수의 근접 폴백(한 자리 숫자 누락 허용)이
+          // 구조적으로 도달 불가였다 — indexOf 가 언제나 먼저 성공했다. 탐색을 한 번으로 줄인다.
+          const matchIndex = logicalLine.indexOf(compact);
+          if (matchIndex < 0) return;
+          const extra = logicalLine.slice(matchIndex + compact.length).replace(/[0-9０-９]+$/u, '');
           tailKeys.add(normalizePdfLogicalLineGuideMatchText(extra));
           if (!extra) return;
           if (shouldSkipPdfLogicalTailForOverlayLine(line, extra)) return;
@@ -9313,13 +9288,14 @@
       const entries = source.map((rect, index) => {
         const item = items && items[index] || {};
         const text = String(item.text || item.str || '');
-        const glyphCount = Number(item.verticalGlyphCount) || pdfVerticalRunGlyphCount(item.text);
+        // 같은 item.text 를 인접 두 줄에서 다른 자로 셌다 — 위는 NFC+공백제거 코드포인트,
+        // 아래는 원문 그대로의 코드포인트. 그리고 위의 값은 이 함수 어디서도 읽히지 않았다.
         const textLen = charLen(text);
         const punctuation = isPdfVerticalPunctuationFragment(text);
         const main = !punctuation && !item.rotatedLatinRun
           && Boolean(item.verticalTextItem || item.verticalRunExpanded)
           && textLen >= 3;
-        return { rect, item, glyphCount, textLen, punctuation, main };
+        return { rect, item, textLen, punctuation, main };
       });
       const mainEntries = entries
         .filter(entry => entry.main && Number(entry.rect.width || 0) > 0)
@@ -10309,7 +10285,6 @@
             text,
             textItems: markPdfLogicalFallbackTextItems(items, sourcePageIndex),
             lines: overlayLines,
-            bodySourceLines: overlayLines,
             bodyBaseLines: overlayLines,
             horizontalMetadataLines,
             pdfJsMergedBodyLines: overlayLines,
@@ -15340,7 +15315,6 @@
       if (!key) return [];
       const lines = []
         .concat(page.lines || [])
-        .concat(page.bodySourceLines || [])
         .concat(page.pdfJsMergedBodyLines || [])
         .concat(page.bodyBaseLines || [])
         .concat(page.colorLines || []);
@@ -17042,7 +17016,6 @@
       const sourceLines = []
         .concat(page.lines || [])
         .concat(page.bodyBaseLines || [])
-        .concat(page.bodySourceLines || [])
         .concat(page.pdfJsMergedBodyLines || [])
         .filter(Boolean);
       const out = [];
@@ -22092,7 +22065,14 @@
       // 2026-08-08 상수 실측이 이 둘로 돌았다 — 앞은 로드된 상수를 소스로 확인하는 데,
       // 뒤는 union gap 을 바꿔 넣어 그 값이 결과를 가르는지 비교하는 데 썼다.
       rectForPdfMatchedItems,
-      compactPdfItemUnionRect
+      compactPdfItemUnionRect,
+      // 측정용. 밖에서 다시 구현하면 그 순간 측정기가 앱과 갈라진다 — 바로 위 두 줄이
+      // 같은 이유로 이미 나가 있다. 텍스트 파이프라인 재설계의 게이트가 이 다섯을 부른다.
+      activeDocument,
+      normalizePdfCompactTextPreserveMarks,
+      normalizePdfCoordinateMatchText,
+      isNumberedRoleCharacterName,
+      pdfScriptBodyReviewTextFromDraftPages
     };
   </script>
 
