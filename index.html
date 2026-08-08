@@ -21949,7 +21949,13 @@
       pdfOverlayDetectedScriptBodyVerticalBand,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
-      splitPdfGuideLinesForOverlayMatching
+      splitPdfGuideLinesForOverlayMatching,
+      // 좌표 후보정이 실제로 몇 개를 움직이는지 세기 위한 것. 둘 다 순수 함수라
+      // 같은 입력을 밖에서 넣어 입출력을 비교할 수 있다.
+      // (expandCollapsedPdfJsVerticalRunBounds 는 아이템에 verticalRunExpanded 를 남기므로
+      //  노출하지 않아도 센다.)
+      compactPdfItemRectForLine,
+      alignPdfVerticalFragmentRectsForLine
     };
   </script>
 
