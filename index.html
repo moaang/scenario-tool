@@ -10083,24 +10083,31 @@
       return context;
     }
 
-    function buildPdfFontInfoMap(source) {
+    // PDF 의 /Font 사전을 훑어 항목마다 콜백을 부른다. 두 곳이 같은 골격을 적고 있었고
+    // 다른 것은 항목에서 무엇을 꺼내느냐 한 줄뿐이었다.
+    function eachPdfFontEntry(source, visit) {
       const objectMap = buildPdfObjectMap(source);
-      const fontInfo = Object.create(null);
       const fontBlockPattern = /\/Font\s*<<([\s\S]*?)>>/g;
       let blockMatch;
       while ((blockMatch = fontBlockPattern.exec(source))) {
-        const block = blockMatch[1];
         const entryPattern = /\/([A-Za-z0-9._-]+)\s+(\d+)\s+\d+\s+R/g;
         let entryMatch;
-        while ((entryMatch = entryPattern.exec(block))) {
-          const name = entryMatch[1];
-          const objectId = entryMatch[2];
-          const body = objectMap[objectId] || '';
-          const baseFont = (body.match(/\/BaseFont\s+\/([^\s/>]+)/) || [])[1] || '';
-          const toUnicodeObjectId = (body.match(/\/ToUnicode\s+(\d+)\s+\d+\s+R/) || [])[1] || '';
-          fontInfo[name] = { objectId, baseFont, toUnicodeObjectId };
+        while ((entryMatch = entryPattern.exec(blockMatch[1]))) {
+          visit(entryMatch[1], entryMatch[2], objectMap);
         }
       }
+    }
+
+    function buildPdfFontInfoMap(source) {
+      const fontInfo = Object.create(null);
+      eachPdfFontEntry(source, (name, objectId, objectMap) => {
+        const body = objectMap[objectId] || '';
+        fontInfo[name] = {
+          objectId,
+          baseFont: (body.match(/\/BaseFont\s+\/([^\s/>]+)/) || [])[1] || '',
+          toUnicodeObjectId: (body.match(/\/ToUnicode\s+(\d+)\s+\d+\s+R/) || [])[1] || ''
+        };
+      });
       return fontInfo;
     }
 
@@ -10164,19 +10171,11 @@
     }
 
     function buildPdfFontFallbackMap(source) {
-      const objectMap = buildPdfObjectMap(source);
       const fontFallbacks = Object.create(null);
-      const fontBlockPattern = /\/Font\s*<<([\s\S]*?)>>/g;
-      let blockMatch;
-      while ((blockMatch = fontBlockPattern.exec(source))) {
-        const block = blockMatch[1];
-        const entryPattern = /\/([A-Za-z0-9._-]+)\s+(\d+)\s+\d+\s+R/g;
-        let entryMatch;
-        while ((entryMatch = entryPattern.exec(block))) {
-          const fallback = pdfFontObjectFallback(objectMap, entryMatch[2], Object.create(null));
-          if (fallback) fontFallbacks[entryMatch[1]] = fallback;
-        }
-      }
+      eachPdfFontEntry(source, (name, objectId, objectMap) => {
+        const fallback = pdfFontObjectFallback(objectMap, objectId, Object.create(null));
+        if (fallback) fontFallbacks[name] = fallback;
+      });
       return fontFallbacks;
     }
 
