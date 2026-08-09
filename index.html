@@ -7633,7 +7633,7 @@
         const colorKeys = operatorSignals && operatorSignals.colorKeys || [];
         const layoutDividers = operatorSignals && operatorSignals.horizontalDividers || [];
         const logicalPage = logicalPageByNo.get(pageNo) || null;
-        let textItems = pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys);
+        let textItems = await pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo, colorKeys);
         const usingLogicalFallbackItems = shouldUsePdfLogicalFallbackTextItems(textItems, logicalPage);
         if (usingLogicalFallbackItems) {
           textItems = pdfLogicalFallbackTextItems(logicalPage, pageNo);
@@ -17344,7 +17344,7 @@
           pdfJsTextItemColorKeysForPage(page, pdfjsLib).catch(() => [])
         ]);
         const logicalPage = pdfLogicalPageForDocument(doc, pageNo);
-        items = pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys);
+        items = await pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo, colorKeys);
         if (shouldUsePdfLogicalFallbackTextItems(items, logicalPage)) {
           items = pdfLogicalFallbackTextItems(logicalPage, pageNo);
         }
@@ -17878,6 +17878,99 @@
     function pdfRubyLinesFromTextItems(items) {
       if (items && Array.isArray(items.pdfRubyLines)) return items.pdfRubyLines;
       return annotatePdfRubyTextItems(items || []);
+    }
+
+    // ── getTextContent 가 빠뜨린 글자를 렌더 명령에서 되찾는다 ────────────────
+    // 세로쓰기 CMap 폰트에서 pdf.js 는 글자를 빠뜨린다(한 표본에서 페이지당 3~4%; 각본가
+    // 이름의 뒤 두 글자가 그렇게 사라져 박스가 이름을 덜 덮었다). 렌더 명령에는 온전히 있다.
+    //
+    // **좌표는 계산하지 않는다.** 어디에 놓을지는 pdf.js 가 이미 정확히 안다(문서에 따라
+    // 글자마다 행렬을 새로 세우거나 TJ 조정값으로 미는데 그것을 다 풀어서 준다). 직접 전진을
+    // 계산해 보니 폰트가 vertical 을 안 밝히는 문서에서 글자가 가로로 밀렸다 — 그 계산은 버렸다.
+    // 여기서는 **무엇이 빠졌는지만** 묻고, 자리는 그 글자를 잃은 아이템에서 이어 붙인다.
+    async function pdfDrawnGlyphTextForPage(page, pdfjsLib) {
+      const OPS = pdfjsLib && pdfjsLib.OPS;
+      if (!OPS || !page || typeof page.getOperatorList !== 'function') return '';
+      let ops = null;
+      try { ops = await page.getOperatorList(); }
+      catch (error) { console.warn('operator list unavailable', error); return ''; }
+      const fnArray = (ops && ops.fnArray) || [];
+      const argsArray = (ops && ops.argsArray) || [];
+      let out = '';
+      for (let i = 0; i < fnArray.length; i += 1) {
+        if (fnArray[i] !== OPS.showText) continue;
+        const run = (argsArray[i] || [])[0];
+        if (!Array.isArray(run)) continue;
+        for (let k = 0; k < run.length; k += 1) {
+          const glyph = run[k];
+          if (!glyph || typeof glyph === 'number' || glyph.isSpace) continue;
+          const unicode = String(glyph.unicode || '');
+          if (unicode.trim()) out += unicode;
+        }
+      }
+      return out;
+    }
+
+    function pdfItemGlyphText(item) {
+      return String(item && item.text || '').replace(/\s+/g, '');
+    }
+
+    // 되찾은 글자는 그것을 잃은 아이템의 **뒤에** 한 글자씩 이어 붙인다. 세로 아이템이면
+    // 아래로, 가로면 오른쪽으로. 앞 아이템이 이미 옳은 자리에 있으므로 그 연장이면 족하다.
+    function pdfAppendRecoveredGlyphs(out, item, chars) {
+      const vertical = Boolean(item && item.verticalTextItem);
+      const own = Math.max(1, charLen(pdfItemGlyphText(item)));
+      const span = vertical ? Number(item.heightPct) || 0 : Number(item.widthPct) || 0;
+      const unit = span / own;
+      if (!(unit > 0)) return;
+      Array.from(chars).forEach((ch, n) => {
+        const leftPct = vertical ? Number(item.leftPct) || 0 : (Number(item.leftPct) || 0) + unit * (own + n);
+        const topPct = vertical ? (Number(item.topPct) || 0) + unit * (own + n) : Number(item.topPct) || 0;
+        const widthPct = vertical ? Number(item.widthPct) || 0 : unit;
+        const heightPct = vertical ? unit : Number(item.heightPct) || 0;
+        out.push(Object.assign({}, item, {
+          text: ch,
+          recoveredGlyph: true,
+          verticalGlyphCount: 1,
+          leftPct, topPct, widthPct, heightPct,
+          centerXPct: leftPct + widthPct / 2,
+          centerYPct: topPct + heightPct / 2
+        }));
+      });
+    }
+
+    function pdfItemsWithMissingGlyphs(items, drawnText) {
+      const source = Array.isArray(items) ? items : [];
+      const drawn = String(drawnText || '');
+      if (!drawn || !source.length) return source;
+      const extractedLength = source.reduce((n, item) => n + pdfItemGlyphText(item).length, 0);
+      if (drawn.length <= extractedLength) return source;
+      const out = [];
+      let at = 0;
+      source.forEach((item, index) => {
+        out.push(item);
+        const own = pdfItemGlyphText(item);
+        if (!own) return;
+        const found = drawn.indexOf(own, at);
+        if (found < 0) return;
+        at = found + own.length;
+        const next = source[index + 1];
+        const nextOwn = next ? pdfItemGlyphText(next) : '';
+        const nextAt = nextOwn ? drawn.indexOf(nextOwn, at) : drawn.length;
+        const gapEnd = nextAt < 0 ? at : nextAt;
+        if (gapEnd <= at) return;
+        pdfAppendRecoveredGlyphs(out, item, drawn.slice(at, gapEnd));
+        at = gapEnd;
+      });
+      return out;
+    }
+
+    async function pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo, colorKeys) {
+      const items = pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys);
+      const drawn = await pdfDrawnGlyphTextForPage(page, pdfjsLib);
+      const filled = pdfItemsWithMissingGlyphs(items, drawn);
+      if (filled.length > items.length) notePdfOverlayDrop('glyphsRecovered', 'p' + pageNo + '×' + (filled.length - items.length));
+      return filled;
     }
 
     function pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys) {
