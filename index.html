@@ -8282,12 +8282,22 @@
 
     function splitPdfJsOverlayLinesForBodyAndAnnotations(lines, pageNo, options) {
       const bodyCandidateContext = options && options.bodyCandidateContext || createPdfOverlayBodyCandidateContext(lines || [], pageNo);
+      // 본문 밴드 **밖**의 줄은 본문이 아니다 — 페이지마다 머리에 찍히는 제목·날짜·각본가가 그것이다.
+      // 그것을 본문에 넣으면 블록이 페이지 꼭대기까지 늘어나 본문 영역이 통째로 어긋난다
+      // (실측: 밴드가 24.0~74.6 인 페이지에서 밴드 밖은 머리글 줄 하나뿐이었고 나머지 서른아홉은 안이었다).
+      // 밴드는 컨텍스트가 이미 잰 것을 쓴다 — 같은 것을 두 번 재지 않는다.
+      // 밴드가 서지 않는 페이지(표지 · 표 문서)에서는 아무것도 빼지 않는다.
+      const band = bodyCandidateContext && bodyCandidateContext.band;
       const bodyLines = [];
       const colorLines = [];
       (lines || []).forEach((line) => {
-        const colorNote = isPdfJsOverlayLineColorNote(line, lines, pageNo, bodyCandidateContext);
-        if (colorNote) colorLines.push(line);
-        else bodyLines.push(line);
+        if (isPdfJsOverlayLineColorNote(line, lines, pageNo, bodyCandidateContext)) {
+          colorLines.push(line);
+          return;
+        }
+        const rect = band ? pdfOverlayLineRectForBodyCheck(line) : null;
+        if (rect && !pdfOverlayRectInsideDetectedScriptBodyBand(rect, band)) return;
+        bodyLines.push(line);
       });
       return {
         bodyLines,
@@ -8916,11 +8926,7 @@
       const out = [];
       (items || []).forEach((item) => {
         const chars = Array.from(String(item && item.text || ''));
-        // 실측 없이 늘린 세로 런은 박스가 글자 배치와 어긋난다(실측: 두 글자 런의 실제 높이가
-        // 2.71 인데 5.86 으로 잡혔다). 그런 박스를 글자 수로 나누면 뒷 글자가 아래 아이템
-        // 영역까지 밀려 두 줄이 서로 끼어든다. 늘린 값이 실측(verticalRunMeasured)일 때만 쪼갠다.
-        const estimatedRun = Boolean(item && item.verticalRunExpanded && !item.verticalRunMeasured);
-        if (chars.length <= 1 || estimatedRun) {
+        if (chars.length <= 1) {
           if (item) out.push(item);
           return;
         }
@@ -18187,7 +18193,11 @@
           });
         }
       }
-      const glyphPitch = Math.max(Number(fontSize) || 0, currentHeight, currentWidth) * 1.08;
+      // 피치는 **글자 하나**의 크기다. 여기에 런 전체 높이(currentHeight)를 섞으면, 이미 온전히
+      // 잰 런까지 글자 수만큼 다시 곱해진다 — glyphCount 가 2 만 돼도 1.08 × 2 = 2.16 이라 아래
+      // 1.35 배 문턱을 언제나 넘어, 붕괴되지 않은 런도 무조건 늘어났다(실측: 실제 2.71 인 두 글자
+      // 런이 5.86 으로 잡혔고, 그 박스를 글자 수로 나누자 뒷 글자가 옆 컬럼을 침범했다).
+      const glyphPitch = Math.max(Number(fontSize) || 0, currentWidth) * 1.08;
       const expectedHeight = glyphPitch * glyphCount;
       if (!Number.isFinite(expectedHeight) || expectedHeight <= currentHeight * 1.35) return bounds;
       const height = Math.min(expectedHeight, Math.max(currentHeight, clampToPage(expectedHeight)));
@@ -22282,6 +22292,11 @@
       // 그 구조는 1단계가 놓친 것이 2단계 파라미터에도 빠져 계속 놓이는 결함을 낳는다
       // (행번호가 그랬다). tools/band_probe.js 가 이 셋을 쓴다.
       pdfOverlayDetectedScriptBodyVerticalBand,
+      // 본문/주석/밴드 밖을 가르는 자리. 밖에서 다시 구현하면 측정이 앱과 갈라진다.
+      splitPdfJsOverlayLinesForBodyAndAnnotations,
+      createPdfOverlayBodyCandidateContext,
+      // 행번호 판정의 임계를 실측으로 정하려면 실제 값 분포를 봐야 한다.
+      stripPdfJsLineGuideNumberItems,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
       splitPdfGuideLinesForOverlayMatching,
