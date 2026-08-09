@@ -9022,17 +9022,14 @@
       );
     }
 
-    // 한 축을 골라 놓고 그 축으로 줄을 끊는다. 끊는 자리는 **글자 간격의 몇 배**다 —
-    // 몇 칸 떨어져 같은 좌표를 공유하는 글자는 다른 것(상단 가로 머리글)이므로 같은 줄로
-    // 묶지 않고 다른 축으로 다시 모은다.
-    function pdfGlyphRunsForAxis(source, main) {
-      const step = main.step || 2;
+    // 한 줄은 **끊기지 않고 이어지는** 글리프의 연속이다. 끊는 자리는 글자 간격의 몇 배다.
+    function pdfGlyphSplitClusterRuns(clusters, along, step) {
       const runs = [];
-      main.axis.clusters.forEach((cluster) => {
+      (clusters || []).forEach((cluster) => {
         let current = [];
         cluster.items.forEach((item, i) => {
           const prev = cluster.items[i - 1];
-          if (prev && (Number(item[main.axis.other]) || 0) - (Number(prev[main.axis.other]) || 0) > step * PDF_GLYPH_RUN_BREAK_STEPS) {
+          if (prev && (Number(item[along]) || 0) - (Number(prev[along]) || 0) > step * PDF_GLYPH_RUN_BREAK_STEPS) {
             if (current.length) runs.push(current);
             current = [];
           }
@@ -9040,15 +9037,27 @@
         });
         if (current.length) runs.push(current);
       });
-      const kept = runs.filter(run => run.length >= 2);
+      return runs;
+    }
+
+    // 한 축을 골라 놓고 그 축으로 줄을 끊는다. 몇 칸 떨어져 같은 좌표를 공유하는 글자는 다른
+    // 것(상단 가로 머리글)이므로 같은 줄로 묶지 않고 다른 축으로 다시 모은다.
+    function pdfGlyphRunsForAxis(source, main) {
+      const step = main.step || 2;
+      const kept = pdfGlyphSplitClusterRuns(main.axis.clusters, main.axis.other, step).filter(run => run.length >= 2);
       const claimed = new Set();
       kept.forEach(run => run.forEach(item => claimed.add(item)));
       const leftover = source.filter(item => !claimed.has(item));
       const cross = [];
-      if (leftover.length >= 2) {
-        pdfGlyphClusterAxis(leftover, main.key === 'x' ? 'y' : 'x').clusters.forEach((c) => {
-          if (c.items.length >= 2) cross.push(c.items);
-        });
+      if (leftover.length) {
+        const crossAxis = pdfGlyphClusterAxis(leftover, main.key === 'x' ? 'y' : 'x');
+        // **다른 축으로 모을 때도 같은 연속 규칙을 쓴다.** 안 그러면 컬럼마다 하나씩 띄엄띄엄
+        // 찍힌 표시(장면을 가르는 × 따위)가 한 가로줄로 뭉쳐, 박스가 여러 컬럼을 가로질러
+        // 좌표가 어긋난다(실측: 두 컬럼에 걸친 폭 9.3 짜리 줄 넷). 머리글은 가로로 붙어 있어
+        // 그대로 묶이고, 마커는 가로로도 떨어져 있어 갈린다.
+        // 어느 쪽으로도 안 묶인 글자는 **버리지 않고 홀로 한 줄로 둔다** — 그 자리에 그렇게
+        // 찍힌 것이므로, 지우면 본문이 조용히 사라진다.
+        pdfGlyphSplitClusterRuns(crossAxis.clusters, crossAxis.other, step).forEach(run => cross.push(run));
       }
       return { runs: kept, cross };
     }
@@ -9107,7 +9116,9 @@
           const ar = a.overlayRect || {}, br = b.overlayRect || {};
           return vertical ? (Number(br.left) || 0) - (Number(ar.left) || 0) : (Number(ar.top) || 0) - (Number(br.top) || 0);
         })
-        .map((line, index) => Object.assign({}, line, { index, overlayRect: Object.assign({}, line.overlayRect || {}, { vertical }) }))
+        // 축은 줄을 만들 때 이미 실렸다(본줄은 페이지 축, 다른 축으로 모은 줄은 그 반대).
+        // 여기서 페이지 축으로 덮으면 그 구분이 통째로 사라진다 — 실제로 그렇게 덮고 있었다.
+        .map((line, index) => Object.assign({}, line, { index }))
         .map(stripPdfPageBottomArtifactRunFromLine)
         .filter(Boolean);
     }
