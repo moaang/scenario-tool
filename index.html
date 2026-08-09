@@ -8904,15 +8904,22 @@
     // 글자마다 아이템이 따로 오는 문서에서는 아무것도 답하지 않는다(null) — 그 경우는
     // 정사각 글자뿐이라 모양으로 가를 것이 없다.
     function pdfGlyphAxisFromItemShape(items) {
-      let vertical = 0, horizontal = 0;
+      let vertical = 0, horizontal = 0, total = 0;
       (items || []).forEach((item) => {
         const n = Array.from(String(item && item.text || '')).length;
+        total += n;
         if (n < 2) return;
         const w = Number(item.widthPct) || 0;
         const h = Number(item.heightPct) || 0;
         if (w > h * PDF_GLYPH_RUN_ASPECT) horizontal += n;
         else if (h > w * PDF_GLYPH_RUN_ASPECT) vertical += n;
       });
+      // 모양은 **페이지의 글자 대부분이 그 모양일 때만** 페이지를 대표한다. 세로쓰기 각본에
+      // 가로 주석 몇 줄이 얹히면 그 몇 줄이 판정을 통째로 뒤집는다 — 실측에서 한 문서는 여러 글자
+      // 아이템이 글자 기준 5~29% 뿐인데 그것이 죄다 가로라, 세로쓰기 페이지가 가로로 뒤집혀
+      // 화자명 컬럼들의 첫 글자가 한 가로줄로 묶였다. 표본이 얇으면 답하지 않고 본문 밴드에 넘긴다.
+      // 실측 분포가 갈라 준다: 가로쓰기 표 0.997~0.999, 세로쓰기 각본 0.03~0.92, 문제의 문서 0.05~0.29.
+      if (!total || vertical + horizontal < total * PDF_GLYPH_SHAPE_MIN_SHARE) return null;
       // 한쪽이 두 배 넘게 우세할 때만 답한다. 세로쓰기 페이지에도 가로 머리글이 몇 줄 섞이므로
       // 근소한 차이는 답이 아니다(실측: 세로 각본 한 쪽이 세로 635 대 가로 28, 가로 표가 0 대 2002).
       if (vertical > horizontal * 2) return true;
@@ -8962,6 +8969,8 @@
     // 대상이 다르다 — 저것은 완성된 오버레이 **박스**가 세로인가이고, 이것은 여러 글자를 담은
     // **아이템**이 어느 방향으로 자랐는가다. 두 글자만 돼도 비가 2 이므로 그 사이를 가른다.
     const PDF_GLYPH_RUN_ASPECT = 1.5;
+    // 여러 글자 아이템이 페이지 글자의 이 몫은 돼야 그 모양을 페이지의 축으로 받아들인다.
+    const PDF_GLYPH_SHAPE_MIN_SHARE = 0.5;
 
     function pdfMedian(values) {
       const sorted = (values || []).slice().sort((a, b) => a - b);
