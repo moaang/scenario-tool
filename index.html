@@ -1164,6 +1164,8 @@
     }
     .pdf-overlay-tag { color: #123d6b; }
     .pdf-overlay-box.dialog .pdf-overlay-tag { color: var(--speaker-color, #1d516d); }
+    /* 분류 실패는 이름표가 없다. 테두리를 흐린 회색 점선으로 두어 「아직 못 정했다」로 읽히게 한다. */
+    .pdf-overlay-box.unclassified { border-style: dashed; border-color: rgba(120,120,120,.55); }
     .pdf-overlay-box.action .pdf-overlay-tag { color: #7b6a22; }
     .pdf-overlay-box.text .pdf-overlay-tag,
     .pdf-overlay-box.body_text .pdf-overlay-tag,
@@ -5634,6 +5636,12 @@
 
     // Real cast lists rarely name more characters than this; a longer run almost always means
     // cast-list detection failed to hand off to the body text (see the hard-cap warning below).
+    // 분류에 실패한 줄이 가는 곳. 예전 이름은 'unknown' 이었는데 「모르는 무언가」로 읽혀서
+    // 다른 타입과 나란한 하나처럼 보였다. 이것은 타입이 아니라 **아직 아무것도 못 정했다**는
+    // 표시다. 오버레이에서는 박스만 그리고 이름표를 붙이지 않는다 — 이름이 붙으면 무언가로
+    // 분류된 것처럼 보인다.
+    const UNCLASSIFIED_BLOCK_TYPE = 'unclassified';
+
     const CAST_LIST_HARD_CAP = 120;
     // Past this many entries, a still-open cast list is unusual enough that entries are scored
     // with lower confidence so they surface for manual review instead of silently trusted.
@@ -6316,7 +6324,7 @@
         }
         if (context.castEntryCount >= context.castHardCap) {
           quality.warnings.push('cast hard cap exceeded; body detection likely failed');
-          return classification('unknown', 'low_confidence', false, 'none', 0.35, ['cast hard cap exceeded'], ['上限超過']);
+          return classification(UNCLASSIFIED_BLOCK_TYPE, 'low_confidence', false, 'none', 0.35, ['cast hard cap exceeded'], ['上限超過']);
         }
         return classification('cast_note', 'cast_list', false, 'none', 0.56, ['inside cast list before body'], ['cast note / body boundary review']);
       }
@@ -6382,7 +6390,7 @@
         c.text = dialog.text;
         return c;
       }
-      if (charLen(raw) <= 1) return classification('unknown', 'low_confidence', false, 'none', 0.30, ['too short'], ['manual review recommended']);
+      if (charLen(raw) <= 1) return classification(UNCLASSIFIED_BLOCK_TYPE, 'low_confidence', false, 'none', 0.30, ['too short'], ['manual review recommended']);
       return classification('action', 'body', true, 'action', quality.verticalPdfSuspected ? 0.52 : 0.72, evidence.concat(['action fallback']));
     }
 
@@ -17448,12 +17456,15 @@
       const typeClass = isNote ? 'pdf_note' : isDialog ? 'dialog' : (isAppendixText ? 'appendix_text' : isBodyText ? 'body_text' : isCast ? 'cast_entry' : isFrontText ? 'front_summary' : (block.type || 'action'));
       const verticalClass = rect.vertical || rect.height > rect.width * OVERLAY_VERTICAL_ASPECT ? ' vertical' : '';
       const continuedLabel = block.overlayLabel || continuedOverlayLabelForBlock(block, pageNo);
-      const label = continuedLabel || (isNote ? 'NOTE' : block.type === 'scene_heading' ? 'SCENE' : isDialog ? 'DIALOG' : block.type === 'end_marker' ? 'END' : isCast ? 'CAST' : (isBodyText || isFrontText) ? 'TEXT' : 'ACTION');
-      const continuedClass = continuedLabel ? ' continued' : '';
+      // 분류에 실패한 줄에는 이름표를 붙이지 않는다. 박스는 그대로 그려서 사람이 그 자리를
+      // 보고 고칠 수 있게 두되, 이름이 없어야 「아직 못 정했다」가 화면에 그대로 드러난다.
+      const label = block.type === UNCLASSIFIED_BLOCK_TYPE ? '' : (continuedLabel || (isNote ? 'NOTE' : block.type === 'scene_heading' ? 'SCENE' : isDialog ? 'DIALOG' : block.type === 'end_marker' ? 'END' : isCast ? 'CAST' : (isBodyText || isFrontText) ? 'TEXT' : 'ACTION'));
+      const continuedClass = continuedLabel && label ? ' continued' : '';
+      const tools = label
+        ? `<div class="pdf-overlay-tools"><span class="pdf-overlay-tag" title="${esc(label)}">${esc(label)}</span></div>`
+        : '';
       return `<div class="pdf-overlay-box ${esc(typeClass)}${verticalClass}${continuedClass} ${state.selectedBlockId === block.id ? 'selected' : ''}" data-overlay-block="${esc(block.id)}" data-overlay-page-no="${esc(pageNo)}" data-overlay-continued-from="${esc(block.continuedFromPageNo || '')}" style="${style}">
-        <div class="pdf-overlay-tools">
-          <span class="pdf-overlay-tag" title="${esc(label)}">${esc(label)}</span>
-        </div>
+        ${tools}
         <span class="pdf-overlay-resize" data-overlay-resize="${esc(block.id)}"></span>
       </div>`;
     }
