@@ -5747,7 +5747,11 @@
       const source = (lines || []).map(norm).filter(Boolean);
       const head = source.slice(0, 12);
       if (!head.length) return false;
-      if (pageHasBodySignal(source, profile)) return false;
+      // 표지를 끄는 조건은 **대사가 되풀이되는가**다. 예전에는 「본문 신호」를 봤는데, 표지의
+      // 등장인물 목록(이름 + 설명)이 지문으로 읽혀 그 신호가 서 버렸다 — 목록이 긴 문서일수록
+      // 표지를 놓쳤다(실측: 이름 열두 줄짜리 표지가 본문으로, 짧은 표지는 표지로 갈렸다).
+      // 본문 시작 판정과 같은 자를 쓴다.
+      if (scenarioPageLooksLikeBody(source, profile)) return false;
       if (head.some(isCastSectionLine)) return true;
       const actionSignals = source.filter(line => isLikelyActionNarrativeLine(line, profile)).length;
       const explicitFront = head.some(line => /検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成|登場人物|キャラクター|CAST|第\s*[0-9０-９一二三四五六七八九十]+\s*話/.test(line));
@@ -22427,6 +22431,10 @@
       mergeDetachedPdfBodyLines,
       // 행번호 판정의 임계를 실측으로 정하려면 실제 값 분포를 봐야 한다.
       stripPdfJsLineGuideNumberItems,
+      // PDF 임포트가 실제로 타는 길. classifyTextToBlocks 는 텍스트 임포트 쪽이라, 이 둘을 안 부르면
+      // 측정이 화면과 다른 경로를 본다(실제로 그렇게 정반대 결과를 낸 적이 있다).
+      buildSourceReviewItems,
+      sourceReviewItemsToBlocks,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
       splitPdfGuideLinesForOverlayMatching,
