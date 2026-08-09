@@ -8296,7 +8296,8 @@
           return;
         }
         const rect = band ? pdfOverlayLineRectForBodyCheck(line) : null;
-        if (rect && !pdfOverlayRectInsideDetectedScriptBodyBand(rect, band)) return;
+        if (rect && !pdfOverlayRectInsideDetectedScriptBodyBand(rect, band)
+          && !pdfOverlayLineHeadsBodyColumn(line, lines, band)) return;
         bodyLines.push(line);
       });
       return {
@@ -8404,6 +8405,28 @@
       const vertical = Boolean(rect.vertical || Number(rect.height || 0) > Number(rect.width || 0) * OVERLAY_VERTICAL_ASPECT);
       if (!vertical) return false;
       return pdfOverlayRectInsideDetectedScriptBodyBand(rect, band);
+    }
+
+    // 밴드 **바로 위**에 앉은 짧은 줄이 언제나 머리글인 것은 아니다. 각본은 씬 번호를 컬럼
+    // 꼭대기에 쓰므로 그 한 글자가 본문 밴드 위로 삐져나온다(실측: 번호의 중심이 26.0 인데
+    // 밴드 상한이 26.1 이라 0.1 차이로 잘려 나갔고, 그 문서의 씬이 그만큼 사라졌다).
+    // 아래로 이어지는 같은 컬럼의 본문이 있으면 그 줄은 컬럼의 머리이지 페이지의 머리가 아니다.
+    // 페이지 머리글은 가로로 길어 어느 컬럼과도 이어지지 않으므로 그대로 잘린다.
+    function pdfOverlayLineHeadsBodyColumn(line, lines, band) {
+      const rect = pdfOverlayLineRectForBodyCheck(line);
+      if (!rect) return false;
+      const left = Number(rect.left) || 0;
+      const width = Number(rect.width) || 0;
+      const height = Number(rect.height) || 0;
+      const bottom = (Number(rect.top) || 0) + height;
+      return (lines || []).some((other) => {
+        if (other === line) return false;
+        const r = pdfOverlayLineRectForBodyCheck(other);
+        if (!r || !pdfOverlayRectInsideDetectedScriptBodyBand(r, band)) return false;
+        if (Math.abs((Number(r.left) || 0) - left) > Math.max(0.6, width)) return false;
+        const gap = (Number(r.top) || 0) - bottom;
+        return gap >= -0.5 && gap <= Math.max(2, height * 4);
+      });
     }
 
     function pdfOverlayRectInsideDetectedScriptBodyBand(rect, band) {
@@ -9121,9 +9144,18 @@
       const vertical = chosen.main.key === 'x';
       const lines = chosen === options[0] && verticalLines ? verticalLines : pdfGlyphOverlayLinesForAxis(chosen);
       return lines
+        // 주 축이 같은 자리면 **다른 축으로 마저 가른다.** 한 컬럼에 여러 줄이 겹쳐 서는 일이
+        // 실제로 있다(머리의 씬 번호 · 그 아래 장소 · 그 위 주석). 주 축만 보면 그 셋의 순서가
+        // 정해지지 않아, 번호 바로 아래에 장소가 오는데도 엉뚱한 줄이 사이에 낀다.
         .sort((a, b) => {
           const ar = a.overlayRect || {}, br = b.overlayRect || {};
-          return vertical ? (Number(br.left) || 0) - (Number(ar.left) || 0) : (Number(ar.top) || 0) - (Number(br.top) || 0);
+          const main = vertical
+            ? (Number(br.left) || 0) - (Number(ar.left) || 0)
+            : (Number(ar.top) || 0) - (Number(br.top) || 0);
+          if (Math.abs(main) > 0.4) return main;
+          return vertical
+            ? (Number(ar.top) || 0) - (Number(br.top) || 0)
+            : (Number(ar.left) || 0) - (Number(br.left) || 0);
         })
         // 축은 줄을 만들 때 이미 실렸다(본줄은 페이지 축, 다른 축으로 모은 줄은 그 반대).
         // 여기서 페이지 축으로 덮으면 그 구분이 통째로 사라진다 — 실제로 그렇게 덮고 있었다.
