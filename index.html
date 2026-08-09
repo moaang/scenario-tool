@@ -15965,14 +15965,27 @@
           || pageHasBodyReview
           || isBodyTextInsertLine(reviewText, conversionProfile)
           || isNonSceneMarkerTextLine(reviewText, conversionProfile));
-        pushBlock(item, reviewText, {
-          type: textInScene ? 'body_text' : 'front_summary',
-          zone: textInScene ? 'body' : (Number(item.pageNo || 0) <= 2 ? 'front_matter' : 'manual_text'),
+        if (textInScene) {
+          pushBlock(item, reviewText, {
+            type: 'body_text',
+            zone: 'body',
+            assignableToCut: false,
+            assignDefault: 'none',
+            confidence: 0.88,
+            evidence: ['source review body text']
+          });
+          return;
+        }
+        // 표지 줄은 작품명·화수·원고 차수·날짜·각본가로 갈린다. **그 판정은 이미 classifyFront 에
+        // 있다** — 여기서 다시 세우면 두 경로가 표지를 다르게 읽어 화면과 데이터가 갈린다.
+        // (실제로 갈려 있었다: 텍스트 임포트는 다섯 종류로 나누는데 PDF 는 전부 front_summary 였다.)
+        const frontClass = classifyFront(reviewText, frontScore(reviewText, Number(item.pageNo || 1), Number(item.order || 0), false, conversionProfile));
+        pushBlock(item, reviewText, Object.assign({}, frontClass, {
+          zone: Number(item.pageNo || 0) <= 2 ? 'front_matter' : 'manual_text',
           assignableToCut: false,
           assignDefault: 'none',
-          confidence: textInScene ? 0.88 : 0.78,
-          evidence: [textInScene ? 'source review body text' : (textIsFront ? 'source review front text' : 'source review text')]
-        });
+          evidence: [textIsFront ? 'source review front text' : 'source review text']
+        }));
       });
       return blocks;
     }
