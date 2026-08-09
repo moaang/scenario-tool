@@ -9061,7 +9061,12 @@
       const flowKey = vertical ? 'centerYPct' : 'centerXPct';
       const crossA = pdfOverlayLineItemsAverage(itemsA, crossKey);
       const crossB = pdfOverlayLineItemsAverage(itemsB, crossKey);
-      const crossTolerance = vertical ? PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT : 0.9;
+      // 임계는 폭 기준 하나다. 가로쓰기 줄의 cross 축은 y(높이 %)라서 그대로 쓰면 같은 숫자가
+      // 다른 물리 거리를 뜻한다 — 종횡비로 환산해서 넘긴다. 예전에는 세로쓰기 0.58(폭)과
+      // 가로쓰기 0.9(높이)가 따로 있었고, 가로 판형에서는 우연히 비슷했지만(1.10배)
+      // 세로 판형에서는 2.19배로 벌어졌다.
+      const pageAspect = Number((itemsA[0] || itemsB[0] || {}).pageAspect) || 1;
+      const crossTolerance = PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT * (vertical ? 1 : pageAspect);
       if (!Number.isFinite(crossA) || !Number.isFinite(crossB) || Math.abs(crossA - crossB) > crossTolerance) return false;
       const rangeA = pdfOverlayLineItemsRange(itemsA, flowKey);
       const rangeB = pdfOverlayLineItemsRange(itemsB, flowKey);
@@ -17928,7 +17933,9 @@
           fontName: item.fontName || '',
           // 판형은 viewport 를 아는 여기서만 알 수 있다. 그루핑 함수들은 아이템만 받으므로
           // 여기 실어 보내야 임포트 경로와 렌더 경로가 같은 축으로 판정한다.
-          pagePortrait: Number(viewport.width || 0) < Number(viewport.height || 0)
+          // 종횡비도 같이 싣는다 — % 임계를 다른 축으로 옮기려면 불리언으로는 부족하다.
+          pagePortrait: Number(viewport.width || 0) < Number(viewport.height || 0),
+          pageAspect: Number(viewport.height) > 0 ? Number(viewport.width) / Number(viewport.height) : 1
         };
         rect.colorKey = pdfJsColorKeyForTextItem(colorKeys, colorIndex);
         rect.visualGroupKey = rect.colorKey || '';
