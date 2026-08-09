@@ -5349,21 +5349,22 @@
       return true;
     }
 
-    // Part-membership labels (アバン / プロローグ / Aパート) group scenes without being scenes
-    // themselves. OP / CM / ED / オープニング / エンディング stay as their own markers.
-    const SCENARIO_PART_MEMBERSHIP_RE = /^(?:アバン|プロローグ|[A-Z]パート)$/;
-    function isScenarioPartMembershipLine(raw) {
+    // 각본을 구획하는 이름표는 두 갈래다. 아래 SECTION_LABEL_RE 가 전부(OP·CM·ED·아반·파트…)이고,
+    // 그중 **파트 소속**(아반 · 프롤로그 · A파트)만 여기 걸린다 — 그것들은 씬을 묶는 이름표이지
+    // 그 자체가 씬은 아니다. 나머지(OP · CM · ED)는 그 자리가 곧 하나의 마커다.
+    const PART_LABEL_RE = /^(?:アバン|プロローグ|[A-Z]パート)$/;
+    function isPartLabelLine(raw) {
       const source = norm(raw).normalize('NFKC').trim();
       if (!source || charLen(source) > 12) return false;
       const payload = standaloneStructureMarkerPayload(source);
-      return Boolean(payload) && SCENARIO_PART_MEMBERSHIP_RE.test(payload);
+      return Boolean(payload) && PART_LABEL_RE.test(payload);
     }
     // SINGLE decision point (used by classifyBody AND sourceReviewItemsToBlocks): in a
     // numbered-scene document a part label is a part marker, not a scene of its own.
-    function isScenarioPartMarkerText(raw, profile) {
-      return Boolean(profile && profile.numberedSceneHeadings && isScenarioPartMembershipLine(raw));
+    function isPartMarkerText(raw, profile) {
+      return Boolean(profile && profile.numberedSceneHeadings && isPartLabelLine(raw));
     }
-    function scenarioPartMarkerLabel(raw) {
+    function partMarkerLabel(raw) {
       return norm(raw)
         .replace(/^[【\[\(（]\s*/, '')
         .replace(/\s*[】\]\)）]$/g, '')
@@ -5379,7 +5380,7 @@
         if (!family) return;
         const body = raw.replace(/^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*/, '').trim();
         if (!body || isBodyTextInsertTriggerText(raw) || isCastSectionLine(raw)) return;
-        if (hasLocationSignal(body) || isScenarioSectionLabel(body)) {
+        if (hasLocationSignal(body) || isSectionLabel(body)) {
           counts.set(family, (counts.get(family) || 0) + 1);
         }
       });
@@ -6323,17 +6324,16 @@
 
     function classifyBody(raw, context, quality, evidence, profile) {
       if (isEndMarkerLine(raw)) return classification('end_marker', 'body_end', false, 'none', 0.96, evidence.concat(['end marker']));
-      if (isScenarioPartMarkerText(raw, profile)) {
+      if (isPartMarkerText(raw, profile)) {
         const c = classification('section_marker', 'body', true, 'action', 0.82, evidence.concat(['scenario part marker']));
-        c.scenePart = scenarioPartMarkerLabel(raw);
+        c.scenePart = partMarkerLabel(raw);
         return c;
       }
-      if (isScenarioSectionMarkerLine(raw)) return classification('scene_heading', 'body', true, 'action', 0.88, evidence.concat(['scenario section marker']));
+      if (isSectionMarkerLine(raw)) return classification('scene_heading', 'body', true, 'action', 0.88, evidence.concat(['scenario section marker']));
       if (isBodyTextInsertLine(raw, profile)) return classification('body_text', 'body', true, 'action', 0.88, evidence.concat(['body text/title insert']));
       if (isSceneHeading(raw, profile)) return classification('scene_heading', 'body', true, 'action', 0.84, evidence.concat(['scene heading']));
       if (isNonSceneMarkerTextLine(raw, profile)) return classification('body_text', 'body', true, 'action', 0.74, evidence.concat(['non-scene marker text']));
       if (/^□/.test(raw)) return classification('section_marker', 'body', true, 'action', 0.82, evidence.concat(['title/section marker']));
-      if (isSectionMarker(raw)) return classification('section_marker', 'body', true, 'action', 0.86, evidence.concat(['section marker']));
       if (/^(暗転|回想|フラッシュバック|カットバック|戻って|×××)/.test(raw)) return classification('transition', 'body', true, 'action', 0.76, evidence.concat(['transition']));
       if (/^(SE|ＳＥ|BGM|Ｍ|音楽|無音|環境音)[：:「]/.test(raw)) return classification('sound_cue', 'body', true, 'dialog', 0.78, evidence.concat(['sound/music cue']));
       const dialog = parseDialog(raw, profile);
@@ -6374,12 +6374,11 @@
         || /^\[\s*(登場人物|キャラクター|人物|キャスト)\s*\]$/.test(clean);
     }
     function isRevisionLine(raw) { return /^[※＊*]|^メモ|^テーマ|^■前回|^・原作設定|^・制作サイド/.test(raw); }
-    function isStrongBodyStart(raw, profile) { return isScenarioSectionMarkerLine(raw) || isSceneHeading(raw, profile) || /^(アバン|プロローグ|[A-ZＡ-Ｚ]パート|OP|ＯＰ|○オープニング|●OP)/.test(raw); }
-    const SCENARIO_SECTION_LABEL_RE = /^(?:オープニング|OP|アバン|プロローグ|[A-Z]パート|CM|中CM|エンディング|ED)[0-9０-９]*$/i;
-    const SCENARIO_SECTION_LABEL_PREFIX_RE = /^(?:アバン|プロローグ|オープニング|OP|ＯＰ|[A-ZＡ-Ｚ]パート|CM|ＣＭ|中CM|中ＣＭ|ED|ＥＤ|エンディング)\s*[0-9０-９]*\s*/i;
-    const SCENARIO_SECTION_LABEL_PART_RE = /^((?:アバン|プロローグ|オープニング|OP|ＯＰ|[A-ZＡ-Ｚ]パート|CM|ＣＭ|中CM|中ＣＭ|ED|ＥＤ|エンディング)\s*[0-9０-９]*)(?:[・／/\s]+(.+))?$/i;
+    function isStrongBodyStart(raw, profile) { return isSectionMarkerLine(raw) || isSceneHeading(raw, profile) || /^(アバン|プロローグ|[A-ZＡ-Ｚ]パート|OP|ＯＰ|○オープニング|●OP)/.test(raw); }
+    const SECTION_LABEL_RE = /^(?:オープニング|OP|アバン|プロローグ|[A-Z]パート|CM|中CM|エンディング|ED)[0-9０-９]*$/i;
+    const SECTION_LABEL_SPLIT_RE = /^((?:アバン|プロローグ|オープニング|OP|ＯＰ|[A-ZＡ-Ｚ]パート|CM|ＣＭ|中CM|中ＣＭ|ED|ＥＤ|エンディング)\s*[0-9０-９]*)(?:[・／/\s]+(.+))?$/i;
 
-    function normalizeScenarioSectionLabel(value) {
+    function normalizeSectionLabel(value) {
       return norm(value)
         .normalize('NFKC')
         .replace(/^[【\[]\s*/, '')
@@ -6388,26 +6387,26 @@
         .toUpperCase();
     }
 
-    function isScenarioSectionLabel(value) {
-      return SCENARIO_SECTION_LABEL_RE.test(normalizeScenarioSectionLabel(value));
+    function isSectionLabel(value) {
+      return SECTION_LABEL_RE.test(normalizeSectionLabel(value));
     }
 
-    function splitScenarioSectionLabelAndLocation(value) {
+    function splitSectionLabelAndLocation(value) {
       const source = norm(value);
       if (!source) return { scenePart: '', locationText: '' };
-      const match = source.match(SCENARIO_SECTION_LABEL_PART_RE);
+      const match = source.match(SECTION_LABEL_SPLIT_RE);
       if (!match) return { scenePart: '', locationText: source };
       const scenePart = norm(match[1]);
       const locationText = norm(match[2] || '');
       return { scenePart, locationText };
     }
 
-    function isScenarioSectionMarkerLine(raw) {
+    function isSectionMarkerLine(raw) {
       const source = norm(raw).normalize('NFKC').trim();
       if (!source || charLen(source) > 32) return false;
-      if (isScenarioSectionLabel(source)) return true;
+      if (isSectionLabel(source)) return true;
       const payload = standaloneStructureMarkerPayload(source);
-      return Boolean(payload && isScenarioSectionLabel(payload));
+      return Boolean(payload && isSectionLabel(payload));
     }
 
     function standaloneStructureMarkerPayload(value) {
@@ -6428,7 +6427,7 @@
       if (!hasWrapper && !hasMarker) return false;
       const payload = standaloneStructureMarkerPayload(source);
       if (!payload) return false;
-      if (isScenarioSectionLabel(payload)) return true;
+      if (isSectionLabel(payload)) return true;
       return /^(?:タイトル|サブタイトル|ロゴタイトル|タイトルロゴ|アイキャッチ|テロップ|字幕|画面文字|画面テキスト|文字情報|クレジット)$/.test(payload);
     }
 
@@ -6439,9 +6438,6 @@
       return /^[×✕]{2,}/.test(norm(raw));
     }
 
-    function isSectionMarker(raw) {
-      return isScenarioSectionMarkerLine(raw);
-    }
     function isEndMarkerLine(raw) {
       const source = norm(raw).normalize('NFKC');
       const compact = source.replace(/\s+/g, '');
@@ -6509,7 +6505,7 @@
       const dominantFamilies = profile && Array.isArray(profile.sceneMarkerFamilies) ? profile.sceneMarkerFamilies : [];
       const markerAllowed = !dominantFamilies.length || !markerFamily || dominantFamilies.includes(markerFamily);
       if (isMarkedScenarioSectionHeading(source, markerFamily, markerAllowed)) return true;
-      if (isSectionMarker(source)) return false;
+      if (isSectionMarkerLine(source)) return false;
       const markerHead = markerAllowed && /^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*\S+/.test(source);
       const hasHeadMarker = markerHead || /^\d{1,3}\s+\S+/.test(source) || (markerAllowed && /[○●◯〇◎]\s*\S+/.test(source));
       const hasPlaceSignal = hasLocationSignal(clean);
@@ -6528,7 +6524,7 @@
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
       if (!/^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*\S+/.test(source)) return false;
       const label = source.replace(/^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*/, '');
-      return isScenarioSectionLabel(label);
+      return isSectionLabel(label);
     }
 
     function hasLocationSignal(line) {
@@ -6734,7 +6730,7 @@
         .replace(/^[SC＃#No.]+\s*[0-9０-９]*\s*/i, '')
         .replace(/^[○●◯〇◎□■△▲▽▼]\s*/, '')
         .trim();
-      const sectionSplit = splitScenarioSectionLabelAndLocation(clean);
+      const sectionSplit = splitSectionLabelAndLocation(clean);
       const scenePart = sectionSplit.scenePart || '';
       if (sectionSplit.scenePart) clean = sectionSplit.locationText;
       const timeOfDay = inferTimeOfDay(clean);
@@ -6863,7 +6859,7 @@
     function isBareFrontCharacterLine(text, index, pageNo) {
       const raw = norm(text);
       if (!isFrontCastLine(raw, index, pageNo)) return false;
-      if (isCastSectionLine(raw) || isSectionMarker(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
+      if (isCastSectionLine(raw) || isSectionMarkerLine(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
       if (/^[○●◯〇◎□■△▲▽▼]\s*\S+/.test(raw)) return false;
       if (/^(?:検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成)$/i.test(raw)) return false;
       if (/[、，。！？!?「」『』]|──|…/.test(raw)) return false;
@@ -6880,7 +6876,7 @@
       if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(raw)) return false;
       if (/^[【\[][^】\]]+[】\]]$/.test(raw)) return false;
       if (/[、，。！？!?「」『』]|──|…/.test(raw)) return false;
-      if (isSceneHeading(raw) || isSectionMarker(raw) || isRevisionLine(raw)) return false;
+      if (isSceneHeading(raw) || isSectionMarkerLine(raw) || isRevisionLine(raw)) return false;
       const names = extractCastNames(raw);
       if (!names.length) return false;
       if (charLen(raw) <= 32) return true;
@@ -7852,7 +7848,7 @@
       if (!isPdfLogicalDashLeaderText(tailText)) return false;
       const text = String(line && line.text || '').trim();
       if (!text) return false;
-      if (isSceneHeading(text, null) || isScenarioSectionMarkerLine(text)) return true;
+      if (isSceneHeading(text, null) || isSectionMarkerLine(text)) return true;
       return /^[0-9０-９]*\s*[○●◯〇◎□■△▲▽▼]\s*\S+/.test(text);
     }
 
@@ -12111,7 +12107,7 @@
     function isFrontCharacterInfoLine(text) {
       const raw = norm(text);
       if (!raw || charLen(raw) < 3 || charLen(raw) > 120) return false;
-      if (isCastSectionLine(raw) || isSceneHeading(raw) || isSectionMarker(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
+      if (isCastSectionLine(raw) || isSceneHeading(raw) || isSectionMarkerLine(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
       if (/第|話|稿|脚本|原作|監督|文芸|構成|年|月|日|ペラ|換算|枚|ページ/i.test(raw)) return false;
       return /[。！？、，]|主人公|貴族|軍人|故人|隊長|老人|若者|研究者|旅人|リーダー|巫女|護衛|男性|女性/.test(raw);
     }
@@ -12175,7 +12171,7 @@
         if (meta.locationName) candidates.push(meta.locationName);
       });
       // 파트 마커(ＯＰ·ＥＤ·Ｃパート…)는 이야기의 구간 표시이지 장소가 아니다.
-      if (isScenarioPartMembershipLine(text) || isScenarioSectionLabel(cleanPlaceName(text))) return candidates;
+      if (isPartLabelLine(text) || isSectionLabel(cleanPlaceName(text))) return candidates;
       const raw = resolveRelativeLocationName(cleanPlaceName(text), previous);
       if (raw && !isLikelyNonPlaceName(raw)) candidates.push(raw);
       String(raw || text || '').split(/[○●◯〇◎□■△▲▽▼／/]/).forEach((part) => {
@@ -14048,7 +14044,7 @@
             reviewBodyEnded = true;
             continue;
           }
-          if (isScenarioSectionMarkerLine(raw)) {
+          if (isSectionMarkerLine(raw)) {
             bodyTextInsertOpen = false;
             flushText();
             pushSourceReviewItem(items, 'scene', page.pageNo, raw, orderRef);
@@ -14277,7 +14273,7 @@
     function isBodyTextInsertLine(raw, profile) {
       const text = norm(raw);
       if (!text) return false;
-      if (isScenarioSectionMarkerLine(text)) return false;
+      if (isSectionMarkerLine(text)) return false;
       if (isStandaloneStructureMarkerLine(text)) return true;
       const firstLine = norm(String(raw || '').split(/\n/)[0]);
       if ([text, firstLine].some(isBodyTextInsertTriggerText)) return true;
@@ -14287,7 +14283,7 @@
     function isBodyTextInsertTriggerText(text) {
       const source = norm(text);
       if (!source) return false;
-      if (isScenarioSectionMarkerLine(source)) return false;
+      if (isSectionMarkerLine(source)) return false;
       if (isStandaloneStructureMarkerLine(source)) return true;
       if (/^(?:ロゴタイトル|タイトルロゴ|ロゴ|タイトル|サブタイトル|アイキャッチ|テロップ|字幕|画面文字|画面テキスト|文字情報|クレジット)$/.test(source)) return true;
       if (/^(?:ロゴ|タイトル|サブタイトル|テロップ|字幕|画面文字|画面テキスト|文字情報|クレジット)[：:「『]/.test(source)) return true;
@@ -14528,7 +14524,7 @@
           bufferType = 'text';
           return;
         }
-        if (isScenarioSectionMarkerLine(raw) || isSceneHeading(raw, profile)) {
+        if (isSectionMarkerLine(raw) || isSceneHeading(raw, profile)) {
           textInsertOpen = false;
           flush();
           pushSourceReviewItem(target, 'scene', pageNo, raw, orderRef);
@@ -15832,14 +15828,14 @@
         }
         if (item.type === 'scene') {
           const sceneRaw = sourceReviewItemText(item);
-          if (isScenarioPartMarkerText(sceneRaw, conversionProfile)) {
+          if (isPartMarkerText(sceneRaw, conversionProfile)) {
             // Part label (アバン / Aパート): a part-membership marker, not a scene.
             pushBlock(item, sceneRaw, {
               type: 'section_marker',
               zone: 'body',
               assignableToCut: true,
               assignDefault: 'action',
-              scenePart: scenarioPartMarkerLabel(sceneRaw),
+              scenePart: partMarkerLabel(sceneRaw),
               confidence: 0.9,
               evidence: ['source review part marker']
             });
