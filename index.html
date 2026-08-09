@@ -18025,8 +18025,12 @@
         || Math.hypot(Number(tx[0]) || 0, Number(tx[1]) || 0)
         || Math.abs(Number(item && item.height) || 0) * scale
         || 10;
-      const fontSize = Math.max(2, matrixFontHeight);
-      const advance = Math.max(2, Math.abs(Number(item && item.width) || 0) * scale || charCount * fontSize * 0.55);
+      // 하한은 px 인데 결과는 곧 viewport 로 나뉘어 % 가 된다. 고정 2px 로 두면 임포트(scale 1)와
+      // 렌더(폭비 clamp, 0.65~2.6)가 같은 PDF 에 서로 다른 % 하한을 적용한다 — 최대 4배 차이다.
+      // scale 을 태워 어느 배율에서 재도 같은 % 가 나오게 한다(임포트 값은 그대로다).
+      const floorPx = 2 * scale;
+      const fontSize = Math.max(floorPx, matrixFontHeight);
+      const advance = Math.max(floorPx, Math.abs(Number(item && item.width) || 0) * scale || charCount * fontSize * 0.55);
       const angle = Math.atan2(Number(tx[1]) || 0, Number(tx[0]) || 0);
       // 폰트가 세로쓰기용이라고 pdf.js 가 말하면 그것이 답이다. 행렬 성분 비교와 dir 은
       // 그 정보가 없을 때의 폴백으로 남긴다(스타일 표가 비어 오는 PDF 가 있다).
