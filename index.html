@@ -10844,9 +10844,33 @@
       };
     }
 
+    // 행번호는 90도 눕혀 인쇄되고, 두 자리 수는 위아래 두 글리프로 갈라져 들어온다
+    // (라스터로 확인: 한 자리 수는 아래 줄에만 있고, 두 자리 수만 위 줄에 짝이 생긴다).
+    // 값 판정은 하한이 1 이라 일의 자리 `0` 을 못 잡고, 그 하나가 본문 줄 머리에 붙어 남았다
+    // — 표본에서 자체 파서 텍스트 19줄이 전부 `0` + 본문 첫 글자였다.
+    // 값으로 두 자리를 복원하는 것은 배치가 흔들려 취약하다. 대신 **이미 행번호로 확정된
+    // 글리프들이 만드는 격자**를 재서 그 위에 있는 `0` 만 회수한다 — 확정 집합이 비면
+    // 아무것도 추가하지 않으므로, 행번호가 없는 문서에는 손대지 않는다.
     function stripPdfLineGuideNumberItems(items) {
       const source = Array.isArray(items) ? items : [];
-      return source.filter(item => !isPdfLineGuideNumberItem(item, source));
+      const guides = source.filter(item => isPdfLineGuideNumberItem(item, source));
+      if (!guides.length) return source;
+      const removed = new Set(guides);
+      const xs = guides.map(item => Number(item && item.x) || 0);
+      const ys = guides.map(item => Number(item && item.y) || 0);
+      const xMin = Math.min.apply(null, xs);
+      const xMax = Math.max.apply(null, xs);
+      const yMin = Math.min.apply(null, ys);
+      const yMax = Math.max.apply(null, ys);
+      source.forEach((item) => {
+        if (removed.has(item)) return;
+        if (String(item && item.text || '').normalize('NFKC').trim() !== '0') return;
+        const x = Number(item && item.x) || 0;
+        const y = Number(item && item.y) || 0;
+        if (x < xMin || x > xMax || y < yMin || y > yMax) return;
+        removed.add(item);
+      });
+      return source.filter(item => !removed.has(item));
     }
 
     function stripPdfJsLineGuideNumberItems(items, pageNo) {
