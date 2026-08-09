@@ -7640,8 +7640,7 @@
         }
         annotatePdfJsTextItemsFromLogicalAnnotations(textItems, logicalPage && logicalPage.annotations);
         const preSplitLogicalText = normalizePdfLogicalPageText(logicalPage && logicalPage.text);
-        const isPortraitPage = Number(viewport.width || 0) < Number(viewport.height || 0);
-        const allLines = groupPdfJsTextItemsToOverlayLines(textItems, pageNo, isPortraitPage)
+        const allLines = groupPdfJsTextItemsToOverlayLines(textItems, pageNo)
           .filter(line => !isPdfPageArtifactOverlayLine(line, pageNo));
         const bodyCandidateContext = createPdfOverlayBodyCandidateContext(allLines, pageNo, preSplitLogicalText);
         const lineGroups = splitPdfJsOverlayLinesForBodyAndAnnotations(allLines, pageNo, { bodyCandidateContext });
@@ -8871,9 +8870,8 @@
       return keys[keyIndex] || '';
     }
 
-    function groupPdfJsTextItemsToOverlayLines(items, pageNo, isPortrait) {
-      const source = pdfJsItemsForLayoutGuide(items, pageNo);
-      return groupPdfJsBodyItemsToOverlayLines(source, isPortrait);
+    function groupPdfJsTextItemsToOverlayLines(items, pageNo) {
+      return groupPdfJsBodyItemsToOverlayLines(pdfJsItemsForLayoutGuide(items, pageNo));
     }
 
     function pdfJsItemsForLayoutGuide(items, pageNo) {
@@ -8881,25 +8879,250 @@
       return stripPdfJsLineGuideNumberItems(source, pageNo);
     }
 
-    function groupPdfJsBodyItemsToOverlayLines(source, isPortrait) {
+    // ── 줄은 좌표에서 복원한다 ────────────────────────────────────────────────
+    // PDF 는 구조를 알려 주지 않는다. 표본 다섯 중 넷이 세로쓰기인데 폰트도 dir 도 가로라고
+    // 말했고, 아이템 경계는 한 글자부터 열일곱 글자까지 제각각이었다. 그래서 아이템을 글자로
+    // 되돌린 뒤 좌표만으로 축·줄·읽는 방향을 정한다. 판형도 폰트 선언도 보지 않는다.
+    // 행번호는 여기 오기 전에 아이템 층에서 지워진다(pdfJsItemsForLayoutGuide).
+    function groupPdfJsBodyItemsToOverlayLines(source) {
       if (!source.length) return [];
-      // 인자가 없으면 아이템이 실어 온 판형을 쓴다 — 호출부 여섯 중 다섯이 안 넘겨서
-      // 같은 페이지가 경로에 따라 세로/가로로 갈리고 있었다.
-      const portrait = isPortrait === undefined ? Boolean(source[0] && source[0].pagePortrait) : isPortrait;
-      const horizontal = groupPdfJsTextItemsHorizontal(source);
-      const verticalAll = groupPdfJsTextItemsVertical(source);
-      const verticalSource = source.filter(isPdfJsVerticalTextItemForColumnGrouping);
-      const verticalStrict = verticalSource.length === source.length ? verticalAll : groupPdfJsTextItemsVertical(verticalSource);
-      const useVertical = isPdfJsPageLikelyVertical(source, horizontal, verticalAll, portrait)
-        || isPdfJsPageLikelyVertical(verticalSource, horizontal, verticalStrict, portrait);
-      const vertical = useVertical && shouldUseStrictPdfJsVerticalGrouping(source, verticalStrict, verticalAll)
-        ? verticalStrict
-        : verticalAll;
-      const selectedLines = useVertical ? applyPdfVerticalCompactLineBounds(vertical) : horizontal;
-      return selectedLines.map((line, index) => Object.assign({}, line, {
-        index,
-        overlayRect: Object.assign({}, line.overlayRect || {}, { vertical: useVertical })
-      })).map(stripPdfPageBottomArtifactRunFromLine).filter(Boolean);
+      return groupPdfGlyphsToOverlayLines(pdfGlyphItemsForGrouping(source), pdfGlyphAxisFromItemShape(source));
+    }
+
+    // 여러 글자를 담은 아이템은 **그 글자들이 늘어선 방향으로 길다.** 폰트가 세로를 밝히는지와
+    // 달리 이것은 실제 배치에서 나온 값이라, 세로쓰기인데 가로라고 말하는 문서에서도 맞다.
+    // 글자마다 아이템이 따로 오는 문서에서는 아무것도 답하지 않는다(null) — 그 경우는
+    // 정사각 글자뿐이라 모양으로 가를 것이 없다.
+    function pdfGlyphAxisFromItemShape(items) {
+      let vertical = 0, horizontal = 0;
+      (items || []).forEach((item) => {
+        const n = Array.from(String(item && item.text || '')).length;
+        if (n < 2) return;
+        const w = Number(item.widthPct) || 0;
+        const h = Number(item.heightPct) || 0;
+        if (w > h * PDF_GLYPH_RUN_ASPECT) horizontal += n;
+        else if (h > w * PDF_GLYPH_RUN_ASPECT) vertical += n;
+      });
+      // 한쪽이 두 배 넘게 우세할 때만 답한다. 세로쓰기 페이지에도 가로 머리글이 몇 줄 섞이므로
+      // 근소한 차이는 답이 아니다(실측: 세로 각본 한 쪽이 세로 635 대 가로 28, 가로 표가 0 대 2002).
+      if (vertical > horizontal * 2) return true;
+      if (horizontal > vertical * 2) return false;
+      return null;
+    }
+
+    // 아이템을 글자 단위로 되돌린다. 자리는 pdfItemGlyphSlot 이 낸다 — 되찾은 글자를 이어
+    // 붙일 때와 **같은 산식**이다. px 필드도 함께 옮긴다(pct 와 갈라지면 하류가 조용히 어긋난다).
+    function pdfGlyphItemsForGrouping(items) {
+      const out = [];
+      (items || []).forEach((item) => {
+        const chars = Array.from(String(item && item.text || ''));
+        // 실측 없이 늘린 세로 런은 박스가 글자 배치와 어긋난다(실측: 두 글자 런의 실제 높이가
+        // 2.71 인데 5.86 으로 잡혔다). 그런 박스를 글자 수로 나누면 뒷 글자가 아래 아이템
+        // 영역까지 밀려 두 줄이 서로 끼어든다. 늘린 값이 실측(verticalRunMeasured)일 때만 쪼갠다.
+        const estimatedRun = Boolean(item && item.verticalRunExpanded && !item.verticalRunMeasured);
+        if (chars.length <= 1 || estimatedRun) {
+          if (item) out.push(item);
+          return;
+        }
+        const scaleX = Number(item.widthPct) > 0 ? Number(item.width) / Number(item.widthPct) : 0;
+        const scaleY = Number(item.heightPct) > 0 ? Number(item.height) / Number(item.heightPct) : 0;
+        let split = 0;
+        chars.forEach((ch, n) => {
+          if (!ch.trim()) return;
+          const slot = pdfItemGlyphSlot(item, n, chars.length);
+          if (!slot) return;
+          split += 1;
+          const piece = Object.assign({}, item, { text: ch, verticalGlyphCount: 1 }, slot);
+          if (scaleX > 0) {
+            piece.left = slot.leftPct * scaleX;
+            piece.width = slot.widthPct * scaleX;
+            piece.right = piece.left + piece.width;
+          }
+          if (scaleY > 0) {
+            piece.top = slot.topPct * scaleY;
+            piece.height = slot.heightPct * scaleY;
+            piece.bottom = piece.top + piece.height;
+          }
+          out.push(piece);
+        });
+        if (!split) out.push(item);
+      });
+      return out;
+    }
+
+    const PDF_GLYPH_CLUSTER_TOLERANCE_PCT = 0.35;
+    const PDF_GLYPH_RUN_BREAK_STEPS = 2.2;
+    // 아이템 런이 어느 축으로 늘어섰는가. OVERLAY_VERTICAL_ASPECT(1.25)와 식은 같지만 재는
+    // 대상이 다르다 — 저것은 완성된 오버레이 **박스**가 세로인가이고, 이것은 여러 글자를 담은
+    // **아이템**이 어느 방향으로 자랐는가다. 두 글자만 돼도 비가 2 이므로 그 사이를 가른다.
+    const PDF_GLYPH_RUN_ASPECT = 1.5;
+
+    function pdfMedian(values) {
+      const sorted = (values || []).slice().sort((a, b) => a - b);
+      return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+    }
+
+    function pdfGlyphClusterAxis(items, key) {
+      const self = key === 'x' ? 'centerXPct' : 'centerYPct';
+      const other = key === 'x' ? 'centerYPct' : 'centerXPct';
+      const clusters = [];
+      items.slice().sort((a, b) => (Number(a[self]) || 0) - (Number(b[self]) || 0)).forEach((item) => {
+        const v = Number(item[self]) || 0;
+        const last = clusters[clusters.length - 1];
+        if (last && Math.abs(last.p - v) < PDF_GLYPH_CLUSTER_TOLERANCE_PCT) {
+          last.items.push(item);
+          last.p = (last.p * (last.items.length - 1) + v) / last.items.length;
+        } else clusters.push({ p: v, items: [item] });
+      });
+      clusters.forEach(c => c.items.sort((a, b) => (Number(a[other]) || 0) - (Number(b[other]) || 0)));
+      return { self, other, clusters };
+    }
+
+    // 쓰기 축은 **클러스터 간격 ÷ 클러스터 안쪽 글자 간격**이 1 에 가까운 축이다.
+    // 일본어 조판은 격자가 정사각형이라 진짜 축에서만 둘이 같아진다(실측 5/5: 진짜 축
+    // 0.85~1.33, 가짜 축 0.04~0.80). 폰트가 세로라고 말하는지는 보지 않는다.
+    function pdfGlyphAxisScore(items, key) {
+      const axis = pdfGlyphClusterAxis(items, key);
+      const big = axis.clusters.filter(c => c.items.length >= 3);
+      if (big.length < 2) return { key, axis, score: 0, step: 0 };
+      const pos = big.map(c => c.p).sort((a, b) => a - b);
+      const gaps = [];
+      for (let i = 1; i < pos.length; i += 1) gaps.push(pos[i] - pos[i - 1]);
+      const pitch = pdfMedian(gaps);
+      const regular = gaps.filter(g => Math.abs(g - pitch) <= pitch * 0.15).length / gaps.length;
+      const covered = big.reduce((n, c) => n + c.items.length, 0) / items.length;
+      const steps = [];
+      big.forEach((c) => {
+        for (let i = 1; i < c.items.length; i += 1) {
+          const d = (Number(c.items[i][axis.other]) || 0) - (Number(c.items[i - 1][axis.other]) || 0);
+          if (d > 0.01) steps.push(d);
+        }
+      });
+      const step = pdfMedian(steps);
+      const ratio = step > 0 ? pitch / step : 0;
+      const shape = (ratio > 0.55 && ratio < 1.9) ? 1 : 0.25;
+      return { key, axis, score: regular * covered * shape, step: step || pitch };
+    }
+
+    // 축을 가르는 자 — 그 축으로 조립한 줄에 각본 문법이 얼마나 서는가.
+    // 뒤집어 읽은 것도 함께 재는 것은 **방향을 고르기 위해서가 아니라** 축이 맞는지 보기
+    // 위해서다: 축이 맞으면 어느 쪽으로 읽든 낱말이 이어지고, 틀리면 양쪽 다 무너진다.
+    function pdfGlyphAxisSyntaxScore(runs, across) {
+      const ordered = runs.map(run => run.slice().sort((a, b) => (Number(a[across]) || 0) - (Number(b[across]) || 0)));
+      const asText = (list) => list.map(run => run.map(item => item.text).join('')).filter(Boolean);
+      return Math.max(
+        pdfScenarioSyntaxScore(asText(ordered)),
+        pdfScenarioSyntaxScore(asText(ordered.map(run => run.slice().reverse())))
+      );
+    }
+
+    // 한 축을 골라 놓고 그 축으로 줄을 끊는다. 끊는 자리는 **글자 간격의 몇 배**다 —
+    // 몇 칸 떨어져 같은 좌표를 공유하는 글자는 다른 것(상단 가로 머리글)이므로 같은 줄로
+    // 묶지 않고 다른 축으로 다시 모은다.
+    function pdfGlyphRunsForAxis(source, main) {
+      const step = main.step || 2;
+      const runs = [];
+      main.axis.clusters.forEach((cluster) => {
+        let current = [];
+        cluster.items.forEach((item, i) => {
+          const prev = cluster.items[i - 1];
+          if (prev && (Number(item[main.axis.other]) || 0) - (Number(prev[main.axis.other]) || 0) > step * PDF_GLYPH_RUN_BREAK_STEPS) {
+            if (current.length) runs.push(current);
+            current = [];
+          }
+          current.push(item);
+        });
+        if (current.length) runs.push(current);
+      });
+      const kept = runs.filter(run => run.length >= 2);
+      const claimed = new Set();
+      kept.forEach(run => run.forEach(item => claimed.add(item)));
+      const leftover = source.filter(item => !claimed.has(item));
+      const cross = [];
+      if (leftover.length >= 2) {
+        pdfGlyphClusterAxis(leftover, main.key === 'x' ? 'y' : 'x').clusters.forEach((c) => {
+          if (c.items.length >= 2) cross.push(c.items);
+        });
+      }
+      return { runs: kept, cross };
+    }
+
+    // 글리프 경로 전용 줄 빌더. pdfJsOverlayLine 은 세로쓰기일 때 items 를 sourceIndex 로
+    // 다시 정렬하는데, 그것은 「아이템이 이미 읽는 순서로 온다」를 전제한 것이다. 글리프는
+    // 좌표로 순서가 정해지므로 여기서는 받은 순서를 그대로 쓴다.
+    function pdfGlyphOverlayLine(orderedItems, vertical) {
+      const clean = (orderedItems || []).filter(Boolean);
+      if (!clean.length) return null;
+      const compactRect = compactPdfItemUnionRect(clean, vertical, 0.04);
+      return {
+        text: normalizePdfJapaneseInlineSpacing(clean.map(item => item.text).join('').replace(/\s+/g, ' ').trim()),
+        items: clean,
+        pageNo: clean[0] && clean[0].pageNo || 0,
+        visualGroupKey: pdfJsTextItemVisualGroupKey(clean[0]),
+        compactOverlayRect: compactRect,
+        overlayRect: compactRect
+      };
+    }
+
+    // 쓰기 축은 **기하로 못 가른다.** 일본어 조판은 격자가 정사각형이라 세로쓰기 페이지에서
+    // 가로축의 비도 1 에 가까워지고, 그 박빙에서 축이 뒤집히면 페이지가 통째로 글자 죽이 된다
+    // (실측: 한 문서 25쪽 중 3쪽이 뒤집혀 대사 줄이 글자 단위로 흩어졌다).
+    // 그래서 축도 방향과 같은 것으로 가른다 — 두 축으로 조립해 각본 문법이 서는 쪽이 옳다.
+    // 둘 다 문장이 안 서면(표·그림 페이지) 그때만 기하 점수로 떨어진다.
+    function groupPdfGlyphsToOverlayLines(items, shapeVertical) {
+      const source = (items || []).filter(item => item && String(item.text || '').trim());
+      if (!source.length) return [];
+      // options[0] 이 x 축(= 세로쓰기), options[1] 이 y 축(= 가로쓰기)이다.
+      const options = ['x', 'y'].map((key) => {
+        const main = pdfGlyphAxisScore(source, key);
+        const built = pdfGlyphRunsForAxis(source, main);
+        return { main, runs: built.runs, cross: built.cross, syntax: pdfGlyphAxisSyntaxScore(built.runs, main.axis.other) };
+      });
+      // 판정 넷을 순서로 둔다. 앞의 것이 답하면 뒤는 묻지 않는다.
+      //   1. 아이템 모양 — pdf.js 가 실제 배치에서 낸 값이라 가장 세다.
+      //   2. 본문 밴드 — **앱이 이미 본문을 알아보는 자**(pdfOverlayDetectedScriptBodyVerticalBand)를
+      //      그대로 쓴다. 축이 틀린 페이지에서는 이 밴드가 서지 않는다(실측: 오판 페이지 전부 NOBAND).
+      //      밴드는 세로 줄만 세므로 세로 후보에만 답한다.
+      //   3. 각본 문법 — 방향 판정과 같은 자.
+      //   4. 기하 점수 — 아무도 답하지 않을 때만.
+      // 문법을 모양보다 앞에 두면 표 문서가 뒤집힌다 — 표의 내용 열에 대사가 인용돼 있어
+      // 세로로 읽어도 점수가 붙는다(실측). 그래서 모양이 첫째다.
+      const verticalLines = shapeVertical === false ? null : pdfGlyphOverlayLinesForAxis(options[0]);
+      const chosen = shapeVertical === true ? options[0]
+        : shapeVertical === false ? options[1]
+        : pdfOverlayDetectedScriptBodyVerticalBand(verticalLines) ? options[0]
+        : options[0].syntax !== options[1].syntax
+        ? (options[0].syntax > options[1].syntax ? options[0] : options[1])
+        : (options[0].main.score >= options[1].main.score ? options[0] : options[1]);
+      const vertical = chosen.main.key === 'x';
+      const lines = chosen === options[0] && verticalLines ? verticalLines : pdfGlyphOverlayLinesForAxis(chosen);
+      return lines
+        .sort((a, b) => {
+          const ar = a.overlayRect || {}, br = b.overlayRect || {};
+          return vertical ? (Number(br.left) || 0) - (Number(ar.left) || 0) : (Number(ar.top) || 0) - (Number(br.top) || 0);
+        })
+        .map((line, index) => Object.assign({}, line, { index, overlayRect: Object.assign({}, line.overlayRect || {}, { vertical }) }))
+        .map(stripPdfPageBottomArtifactRunFromLine)
+        .filter(Boolean);
+    }
+
+    // 한 축 후보를 실제 줄로 조립한다. 축을 고르기 전에도 불러야 하므로(밴드 판정이 줄을 본다)
+    // 고르는 쪽과 만드는 쪽을 갈라 둔다.
+    function pdfGlyphOverlayLinesForAxis(option) {
+      const main = option.main;
+      const vertical = main.key === 'x';
+      // 읽는 순서는 **좌표 그대로**다. getViewport() 가 페이지 회전을 이미 반영하므로 뷰포트
+      // 좌표에서 위 → 아래가 곧 읽는 순서이고, 문서마다 달라지지 않는다. 두 방향을 조립해
+      // 문법으로 고르는 판정을 두었다가 걷어냈다 — 다섯 문서에서 그것이 바꾼 것은 표지 한 장뿐이었고
+      // 그마저 제목을 거꾸로 뒤집었다. 나머지 네 문서는 판정 유무로 결과가 한 글자도 달라지지 않았다.
+      const readRun = (run) => run.slice().sort((a, b) => (Number(a[main.axis.other]) || 0) - (Number(b[main.axis.other]) || 0));
+      // 다른 축으로 모은 줄은 그 축으로 읽고 그 축으로 표시한다. 세로쓰기 페이지에 가로로
+      // 인쇄되는 것이 실제로 있다(구분 기호 · 상단 머리글).
+      const crossRun = (run) => run.slice().sort((a, b) => (Number(a[main.axis.self]) || 0) - (Number(b[main.axis.self]) || 0));
+      return option.runs
+        .map(run => pdfGlyphOverlayLine(readRun(run), vertical))
+        .concat(option.cross.map(run => pdfGlyphOverlayLine(crossRun(run), !vertical)))
+        .filter(line => line && line.text);
     }
 
     // Page-number decorations ("— 3 —") printed at the bottom margin share the X band of a
@@ -8948,30 +9171,6 @@
       return height > width * 1.35;
     }
 
-    function shouldUseStrictPdfJsVerticalGrouping(source, strictLines, allLines) {
-      const totalItems = (source || []).filter(Boolean).length;
-      const verticalItems = (source || []).filter(isPdfJsVerticalTextItemForColumnGrouping).length;
-      if (!totalItems || verticalItems === totalItems) return false;
-      const strictUseful = (strictLines || []).filter(line => charLen(line && line.text || '') >= 2);
-      const allUseful = (allLines || []).filter(line => charLen(line && line.text || '') >= 2);
-      if (strictUseful.length < 4) return false;
-      // Strict grouping keeps only items individually flagged vertical (tall glyph runs). On a
-      // tategaki page whose body glyphs are near-square, that subset can collapse to just the
-      // tall fragments (line-number columns, "―――", "……") and DROP the entire dialogue while
-      // still matching on LINE COUNT (many short fragment lines ≈ few long body lines). Compare
-      // captured TEXT VOLUME too: if strict holds far less text than the full vertical grouping,
-      // it is discarding body content, not cleaning noise — never use it. (Real regression: the
-      // last page of a script lost its whole climactic dialogue this way.)
-      const strictChars = strictUseful.reduce((sum, line) => sum + charLen(line && line.text || ''), 0);
-      const allChars = allUseful.reduce((sum, line) => sum + charLen(line && line.text || ''), 0);
-      if (allChars > 0 && strictChars < allChars * 0.6) return false;
-      if (strictUseful.length >= Math.max(4, allUseful.length * 0.45)) return true;
-      const tallStrict = strictUseful.filter((line) => {
-        const rect = line && line.overlayRect || {};
-        return Number(rect.height || 0) >= Math.max(4, Number(rect.width || 0) * 1.45);
-      });
-      return tallStrict.length >= 4 && verticalItems / Math.max(1, totalItems) >= 0.35;
-    }
 
     function pdfJsHorizontalMetadataLinesForBodyItems(items, bodyLines, pageNo) {
       const used = new Set();
@@ -9005,21 +9204,6 @@
 
     const PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT = 0.58;
 
-    function groupPdfJsTextItemsVertical(items) {
-      const cols = [];
-      items.slice().sort((a, b) => b.centerXPct - a.centerXPct || a.centerYPct - b.centerYPct).forEach((item) => {
-        const key = pdfJsTextItemVisualGroupKey(item);
-        let col = nearestPdfJsVerticalColumn(cols, item, key);
-        if (!col) {
-          col = { x: item.centerXPct, key, markId: item && item.markId, items: [] };
-          cols.push(col);
-        }
-        col.items.push(item);
-        col.x = col.items.reduce((sum, next) => sum + next.centerXPct, 0) / col.items.length;
-      });
-      const lines = cols.map(col => pdfJsOverlayLine(sortPdfJsVerticalItemsTopToBottom(col.items), true));
-      return mergePdfJsColorFragmentedOverlayLines(lines, true).filter(line => line.text);
-    }
 
     // A single printed line can be split into separate same-position line groups when an inline
     // color change (e.g. a red in-line correction) breaks the visual-group key mid-line, even though
@@ -9130,50 +9314,7 @@
       });
     }
 
-    // 같은 markId 라도 x 가 멀면 붙이지 않는다. 실측 최대 편차가 0.8% 라 그 세 배를 한계로 둔다 —
-    // 태그를 못 믿을 문서에서 컬럼 여러 개가 한 박스로 뭉치는 것을 막는 안전장치다.
-    const PDF_JS_MARKED_COLUMN_X_LIMIT_PCT = 2.5;
 
-    // 어느 기준으로 걸러도 고르는 규칙은 하나다 — 가장 가까운 컬럼. 기준과 허용치만 받는다.
-    // (첫 매치로 고르면 아이템 순서가 결과를 바꾼다.)
-    function nearestPdfJsColumnBy(cols, item, accept, limitPct) {
-      let match = null;
-      let bestDiff = Infinity;
-      (cols || []).forEach((entry) => {
-        if (!entry || !accept(entry)) return;
-        const diff = Math.abs(Number(entry.x) - Number(item && item.centerXPct));
-        if (!Number.isFinite(diff) || diff > limitPct || diff >= bestDiff) return;
-        match = entry;
-        bestDiff = diff;
-      });
-      return match;
-    }
-
-    function nearestPdfJsVerticalColumn(cols, item, key) {
-      // 마크드 콘텐츠가 있으면 먼저 본다. 색이 바뀌어 visualGroupKey 가 갈리는
-      // 한 줄짜리 빨간 수정도 여기서 같은 컬럼으로 붙는다.
-      // 다만 태그의 알갱이는 문서마다 다르다 — 한 markId 가 인쇄 컬럼 하나인 문서도,
-      // 여러 컬럼에 걸치는 문서도, 글자 하나씩인 문서도 실측됐다. 그래서 거리 한계를
-      // 함께 건다. 한계를 넘으면 태그를 버리고 아래 좌표 기준으로 떨어진다.
-      const markId = item && item.markId;
-      if (markId != null) {
-        // 한계를 페이지 % 절대값으로만 두면 컬럼이 넓은 문서에서 이웃 컬럼을 삼킨다.
-        // 실측(2026-08-08): 컬럼 피치가 문서마다 1.3~2.1% 로 갈리는데 2.5% 는 그 전부보다 크다 —
-        // 다른 문서는 markId 가 컬럼 하나 단위라 우연히 안 걸렸을 뿐이다. 한 문서에서는
-        // 씬 헤딩 컬럼과 대사 컬럼이 한 라인으로 묶여 6줄이 병합됐고, 그 줄은 dialog 로
-        // 분류돼 씬 마커가 통째로 잘려 나갔다(씬 20개 중 5개 누락).
-        // 글자 폭이 곧 컬럼 폭이므로 그것으로 무차원화한다 — 같은 markId 안의 실측 최대
-        // 편차 0.8% 는 담고(글자 폭 1.25~1.43 × 0.7 = 0.88~1.0), 어느 문서에서도 피치는 안 넘는다.
-        const glyphWidth = Number(item.widthPct) || 0;
-        const markedLimit = glyphWidth > 0
-          ? Math.min(PDF_JS_MARKED_COLUMN_X_LIMIT_PCT, glyphWidth * 0.7)
-          : PDF_JS_MARKED_COLUMN_X_LIMIT_PCT;
-        const tagged = nearestPdfJsColumnBy(cols, item, entry => entry.markId === markId, markedLimit);
-        if (tagged) return tagged;
-      }
-      return nearestPdfJsColumnBy(cols, item, entry => entry.key === key,
-        PDF_JS_VERTICAL_COLUMN_X_TOLERANCE_PCT);
-    }
 
     function pdfJsOverlayLine(items, vertical) {
       const clean = (items || []).filter(Boolean);
@@ -9476,21 +9617,6 @@
       };
     }
 
-    function applyPdfVerticalCompactLineBounds(lines) {
-      const source = (lines || []).filter(line => line && line.items && line.items.length);
-      if (!source.length) return lines || [];
-      const entries = source.map((line) => {
-        const rect = compactPdfItemUnionRect(line.items || [], true, 0.02) || normalizeCompactOverlayRect(line.overlayRect || {}, 0.24, 0.75);
-        const center = line.items.reduce((sum, item) => sum + (Number(item.centerXPct) || 0), 0) / Math.max(1, line.items.length);
-        return { line, rect, center };
-      }).sort((a, b) => a.center - b.center);
-      entries.forEach((entry) => {
-        const rect = normalizeCompactOverlayRect(Object.assign({}, entry.rect, { vertical: true }), 0.24, 0.75);
-        entry.line.compactOverlayRect = rect;
-        entry.line.overlayRect = rect;
-      });
-      return lines;
-    }
 
     function isPdfPageArtifactOverlayLine(line, pageNo) {
       const text = norm(line && line.text || line || '');
@@ -9521,55 +9647,6 @@
       return false;
     }
 
-    function isPdfJsPageLikelyVertical(items, horizontal, vertical, isPortrait) {
-      const source = items || [];
-      const cols = vertical || [];
-      const rows = horizontal || [];
-      if (!cols.length) return false;
-      const usefulCols = cols.filter(line => charLen(line && line.text || '') >= 2);
-      if (!usefulCols.length) return false;
-      const tallCols = usefulCols.filter((line) => {
-        const rect = line && line.overlayRect || {};
-        return Number(rect.height || 0) >= Math.max(4, Number(rect.width || 0) * 1.45);
-      });
-      const collisionRows = rows.map(line => line && line.text || '').filter(isPdfColumnCollisionRow);
-      const oneGlyphRatio = source.filter(item => charLen(item.text) <= 2).length / Math.max(1, source.length);
-      const narrowGlyphRatio = source.filter((item) => Number(item.widthPct || 0) <= Math.max(0.8, Number(item.heightPct || 0) * 1.25)).length / Math.max(1, source.length);
-      const tallRatio = tallCols.length / Math.max(1, usefulCols.length);
-
-      // A pdf.js text item that is both long (>=4 chars) and much WIDER than tall (w > h*2.2)
-      // can only come from a horizontal (left-to-right) font run — vertical Japanese script
-      // never produces that shape here (each vertical glyph is its own near-square item).
-      // Excluding note/annotation-colored items (margin comments are legitimately horizontal
-      // even on an otherwise-vertical page), if such runs dominate the page's real body text,
-      // it is prose, not a screenplay column. Validated across 16 known-vertical documents
-      // (0-90 pages each, incl. horizontal margin notes) with zero false positives; a portrait
-      // prose treatment showed 92-98% of its body in such runs. Both thresholds matter: one script's
-      // p2 hit ratio 0.81 from one unflagged note but only 80 chars, well under the floor.
-      const noteFreeUseful = source.filter(item => item && item.text && charLen(item.text) >= 2
-        && !isPdfJsBlueTextItem(item) && !isPdfJsAnnotationColorTextItem(item));
-      const totalChars = noteFreeUseful.reduce((sum, item) => sum + charLen(item.text || ''), 0);
-      const wideLongChars = noteFreeUseful
-        .filter(item => charLen(item.text || '') >= 4 && Number(item.widthPct || 0) > Number(item.heightPct || 0) * 2.2)
-        .reduce((sum, item) => sum + charLen(item.text || ''), 0);
-      if (totalChars > 0 && wideLongChars >= 200 && wideLongChars / totalChars >= 0.6) return false;
-
-      const signals = [
-        tallCols.length >= 6 && tallRatio >= 0.45 && oneGlyphRatio >= 0.45,
-        tallCols.length >= 4 && collisionRows.length >= 1,
-        tallCols.length >= 8 && narrowGlyphRatio >= 0.62,
-        oneGlyphRatio > 0.72 && tallCols.length >= 4 && cols.length <= rows.length * 1.25
-      ];
-      const signalCount = signals.filter(Boolean).length;
-      if (!signalCount) return false;
-      // This tool's vertical screenplay/conte layouts are landscape two-column pages; every
-      // portrait page seen in the sample corpus was prose or a table, never a vertical script.
-      // Default a portrait page to horizontal, requiring two independent signals (not just one)
-      // to flip it back to vertical — a single signal alone false-positived on a horizontal
-      // prose document (the wideLongChars veto above now also catches that specific case, but
-      // this is a second line of defense for thinner/low-text portrait pages).
-      return isPortrait ? signalCount >= 2 : true;
-    }
 
     async function readDocxText(file) {
       if (typeof DecompressionStream === 'undefined') {
@@ -10934,10 +11011,9 @@
       const values = source
         .map(pdfJsLineGuideNumberValue)
         .filter(value => Number.isFinite(value));
-      const ys = source.map(item => Number(item.centerYPct)).sort((a, b) => a - b);
       const minValue = values.length ? Math.min(...values) : 1;
       const maxValue = values.length ? Math.max(...values) : 999;
-      const medianY = ys.length ? ys[Math.floor(ys.length / 2)] : NaN;
+      const medianY = source.length ? pdfMedian(source.map(item => Number(item.centerYPct))) : NaN;
       // 행번호는 균등 간격 컬럼에 놓인다. 그 간격을 여기서 재 둔다 —
       // 아래에 본문이 없어 앵커를 못 찾은 컬럼의 행번호는 후보에 못 들어오고,
       // 그러면 minValue/maxValue 가 실제보다 좁게 잡혀 그 숫자들이 값 범위 검사에서
@@ -10948,14 +11024,13 @@
         const gap = xs[i] - xs[i - 1];
         if (gap > 0.2) gaps.push(gap);
       }
-      gaps.sort((a, b) => a - b);
       return {
         minValue,
         maxValue,
         yMin: Number.isFinite(medianY) ? medianY - 1.4 : -Infinity,
         yMax: Number.isFinite(medianY) ? medianY + 1.4 : Infinity,
         xRef: xs.length ? xs[0] : NaN,
-        xPitch: gaps.length ? gaps[Math.floor(gaps.length / 2)] : NaN
+        xPitch: gaps.length ? pdfMedian(gaps) : NaN
       };
     }
 
@@ -17915,27 +17990,41 @@
       return String(item && item.text || '').replace(/\s+/g, '');
     }
 
-    // 되찾은 글자는 그것을 잃은 아이템의 **뒤에** 한 글자씩 이어 붙인다. 세로 아이템이면
-    // 아래로, 가로면 오른쪽으로. 앞 아이템이 이미 옳은 자리에 있으므로 그 연장이면 족하다.
-    function pdfAppendRecoveredGlyphs(out, item, chars) {
+    // 아이템 박스에서 n 번째 글자의 자리를 낸다. 세로 아이템은 아래로, 가로는 오른쪽으로
+    // 자란다. 일본어 조판은 격자가 전각 정사각형이라 균등 분할이 맞다.
+    // **되찾은 글자를 이어 붙일 때와 줄을 다시 묶을 때 같은 산식이어야 한다** —
+    // 갈리면 같은 글자가 경로에 따라 두 자리를 갖는다.
+    // slotIndex 는 glyphCount 를 넘어도 된다(아이템 뒤로 이어지는 자리).
+    function pdfItemGlyphSlot(item, slotIndex, glyphCount) {
       const vertical = Boolean(item && item.verticalTextItem);
+      const count = Math.max(1, Number(glyphCount) || 0);
+      const span = vertical ? Number(item && item.heightPct) || 0 : Number(item && item.widthPct) || 0;
+      const unit = span / count;
+      if (!(unit > 0)) return null;
+      const n = Number(slotIndex) || 0;
+      const leftPct = vertical ? Number(item.leftPct) || 0 : (Number(item.leftPct) || 0) + unit * n;
+      const topPct = vertical ? (Number(item.topPct) || 0) + unit * n : Number(item.topPct) || 0;
+      const widthPct = vertical ? Number(item.widthPct) || 0 : unit;
+      const heightPct = vertical ? unit : Number(item.heightPct) || 0;
+      return {
+        leftPct, topPct, widthPct, heightPct,
+        centerXPct: leftPct + widthPct / 2,
+        centerYPct: topPct + heightPct / 2
+      };
+    }
+
+    // 되찾은 글자는 그것을 잃은 아이템의 **뒤에** 한 글자씩 이어 붙인다.
+    // 앞 아이템이 이미 옳은 자리에 있으므로 그 연장이면 족하다.
+    function pdfAppendRecoveredGlyphs(out, item, chars) {
       const own = Math.max(1, charLen(pdfItemGlyphText(item)));
-      const span = vertical ? Number(item.heightPct) || 0 : Number(item.widthPct) || 0;
-      const unit = span / own;
-      if (!(unit > 0)) return;
       Array.from(chars).forEach((ch, n) => {
-        const leftPct = vertical ? Number(item.leftPct) || 0 : (Number(item.leftPct) || 0) + unit * (own + n);
-        const topPct = vertical ? (Number(item.topPct) || 0) + unit * (own + n) : Number(item.topPct) || 0;
-        const widthPct = vertical ? Number(item.widthPct) || 0 : unit;
-        const heightPct = vertical ? unit : Number(item.heightPct) || 0;
+        const slot = pdfItemGlyphSlot(item, own + n, own);
+        if (!slot) return;
         out.push(Object.assign({}, item, {
           text: ch,
           recoveredGlyph: true,
-          verticalGlyphCount: 1,
-          leftPct, topPct, widthPct, heightPct,
-          centerXPct: leftPct + widthPct / 2,
-          centerYPct: topPct + heightPct / 2
-        }));
+          verticalGlyphCount: 1
+        }, slot));
       });
     }
 
@@ -22185,6 +22274,9 @@
       // 컬럼 그루핑을 밖에서 재려면 이 둘이 필요하다. 측정 도구가 같은 로직을 다시 짜면
       // 그 순간 갈라지므로 재현하지 말고 여기서 그대로 부른다(tools/column_truth.js).
       pdfJsTextItemsFromContent,
+      // 아이템의 정본 진입점. 위의 것은 getTextContent 가 빠뜨린 글자를 아직 안 되찾은 중간
+      // 단계라, 이것을 안 부르면 측정이 앱보다 글자가 모자란 상태를 본다(실측: 이름 뒤 두 글자).
+      pdfTextItemsForPage,
       groupPdfJsTextItemsToOverlayLines,
       // 「후보에서 파라미터를 뽑아 다시 필터링」 구조를 밖에서 재기 위한 것들.
       // 그 구조는 1단계가 놓친 것이 2단계 파라미터에도 빠져 계속 놓이는 결함을 낳는다
