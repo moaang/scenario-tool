@@ -5331,7 +5331,10 @@
       const rest = norm(match[2]);
       if (!rest || charLen(rest) > 40) return null;
       if (/^[○●◯〇◎□■△▲▽▼]/.test(rest)) return null;
-      if (/[。！？!?「」『』]/.test(rest)) return null;
+      // 문장이 끝났거나 대사가 붙은 것만 막는다. **물음표·느낌표는 막지 않는다** —
+      // 장소 이름에 정당하게 들어간다(미정을 뜻하는 「…？」 따위). 그것까지 막았더니 한 문서에서
+      // 씬 하나가 통째로 사라졌다.
+      if (/[。「」『』]/.test(rest)) return null;
       if (requireLocation && !hasLocationSignal(rest)) return null;
       const parsed = parseInt(String(match[1]).normalize('NFKC'), 10);
       return Number.isFinite(parsed) ? parsed : null;
