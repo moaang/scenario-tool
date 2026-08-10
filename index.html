@@ -17009,43 +17009,106 @@
     // LLM-facing debug copy: only the readable page content (text + structured blocks).
     // Coordinates, rects, render internals and the full JSON dump are dropped — an LLM
     // reading/correcting the script never needs them.
-    function pageDebugBlockLines(doc, pageNo) {
+    // 이 목록은 **코드가 실제로 부르는 순서**다. 단계를 늘리면 여기도 늘린다 —
+    // 이 창을 보고 「어디까지 갔고 어디서 어긋났나」를 판단하기 때문이다.
+    const PDF_IMPORT_PIPELINE_STEPS = Object.freeze([
+      '1. readDocumentFileSelfContained          PDF → 페이지별 줄(draftPages)',
+      '2. buildSourceReviewItemsForDocument',
+      '   2-1 buildSourceReviewItems             줄 → 리뷰 아이템 (pushFrontCastItem 이 등장인물 줄을 이름/설명으로 나눈다)',
+      '   2-2 attachSourceReviewPageSpans        아이템마다 페이지 조각(span)을 만든다',
+      '   2-3 attachPdfOverlayRectsToReviewItems span 텍스트로 원본 글자를 되찾아 **아이템에** 사각형을 붙인다',
+      '3. sourceReviewItemsToBlocks              아이템 → 블록 (블록은 아이템의 사각형을 그대로 복사한다)',
+      '4. finalizeImportedBlocks                 normalizeImportedBlocks → reinforceCastBlocks → attachSceneContext',
+      '5. computePdfOverlayRectsForPage          사각형이 **없는** 블록만 다시 잡는다(있으면 건너뛴다)'
+    ]);
+
+    function debugShortText(value) {
+      return String(value == null ? '' : value).replace(/\n/g, '⏎').slice(0, 44);
+    }
+
+    function debugRectText(rect) {
+      if (!rect) return '(사각형 없음)';
+      const n = (v) => Number(v || 0).toFixed(1);
+      return 'left=' + n(rect.left) + ' top=' + n(rect.top) + ' w=' + n(rect.width) + ' h=' + n(rect.height)
+        + ' src=' + (rect.coordinateSource || '?') + (rect.manual ? ' manual' : '') + (rect.inferred ? ' inferred' : '');
+    }
+
+    function pageDebugReviewItemLines(doc, pageNo) {
+      return (doc && doc.reviewItems || [])
+        .filter(item => item && Number(item.pageNo || 0) === Number(pageNo))
+        .map((item) => {
+          const head = '  [' + (item.order || 0) + '] ' + (item.type || '?') + ' "' + debugShortText(sourceReviewItemText(item)) + '"';
+          const own = '        item ' + debugRectText(item.overlayRect);
+          const spans = (item.pageSpans || []).map(span => '        span "' + debugShortText(span && span.text) + '" ' + debugRectText(span && span.overlayRect));
+          return [head, own].concat(spans).join('\n');
+        });
+    }
+
+    function pageDebugBlockDetailLines(doc, pageNo) {
       return sortedDocumentBlocks(doc)
         .filter(block => blockHasOverlayPage(block, pageNo) || Number(block.pageNo || 0) === Number(pageNo))
         .filter(isScriptPreviewBlock)
         .map((b) => {
-          const speaker = b.speaker || b.characterName || '';
-          const body = String(b.text || b.rawText || '').trim();
-          if (!body) return '';
-          const kind = b.type === 'dialog' || speaker ? '' : (b.type === 'scene_heading' ? '◇ ' : b.type === 'action' ? '· ' : '');
-          return (speaker ? speaker + '「' + body + '」' : kind + body);
-        })
-        .filter(Boolean);
+          const evidence = b.meta && b.meta.evidence || [];
+          return ['  ' + (b.type || '?') + ' / ' + (b.zone || '?') + ' [' + overlayLabelForBlock(b, {}) + '] "' + debugShortText(b.text || b.rawText) + '"',
+            '        ' + debugRectText(overlayRectForBlockPage(b, pageNo)) + '  item=' + (b.reviewItemId || '(없음)'),
+            evidence.length ? '        evidence ' + evidence.join(', ') : ''
+          ].filter(Boolean).join('\n');
+        });
     }
 
+    function pageDebugDropLines() {
+      const out = [];
+      pdfOverlayDrops.forEach((info, kind) => {
+        out.push('  ' + kind + ' ×' + info.count + (info.last ? ' (' + info.last + ')' : ''));
+      });
+      return out;
+    }
+
+    // 화면에서 어긋난 것을 **밖에서 재면 앱과 다른 답이 나온다**(실제로 여러 번 났다).
+    // 그래서 이 창은 한 페이지가 지금 모습이 되기까지의 전부를 낸다 — 지나온 함수 순서,
+    // 원문 줄, 아이템과 그 사각형, 블록과 그 사각형, 그리고 좌표를 못 잡아 버린 것까지.
     function buildActivePageDebugText() {
       const doc = activeDocument();
       const pageNo = state.activeScriptPageNo;
       const page = pdfLogicalPageForDocument(doc, pageNo);
       // 사다리는 파싱 쪽 한 곳뿐이다 — 여기서 다시 세우면 사용자가 보는 텍스트와
       // 파서가 먹는 텍스트가 갈린다(예전에 세 곳이 서로 다른 순서로 세우고 있었다).
-      const text = page && page.text || '';
-      const blockLines = pageDebugBlockLines(doc, pageNo);
+      const itemLines = pageDebugReviewItemLines(doc, pageNo);
+      const blockLines = pageDebugBlockDetailLines(doc, pageNo);
+      const dropLines = pageDebugDropLines();
       return [
         `# ${doc && (doc.title || doc.id) || ''} — p.${pageNo}`,
         '',
-        text,
-        blockLines.length ? '\n---\n' + blockLines.join('\n') : ''
-      ].filter(Boolean).join('\n');
+        '## 지나온 길',
+        PDF_IMPORT_PIPELINE_STEPS.join('\n'),
+        '',
+        '## 원문 줄',
+        page && page.text || '(없음)',
+        '',
+        '## 리뷰 아이템 — 좌표가 여기 붙고 블록이 그것을 물려받는다',
+        itemLines.join('\n') || '  (없음)',
+        '',
+        '## 블록 — 화면 박스 하나가 여기 한 항목이다',
+        blockLines.join('\n') || '  (없음)',
+        '',
+        '## 좌표를 못 잡아 버린 것',
+        dropLines.join('\n') || '  (없음)'
+      ].join('\n');
     }
 
     function buildAllPagesDebugText(allDump) {
-      const lines = [`# ${allDump.document ? (allDump.document.title || allDump.document.id) : ''} — all pages`, ''];
+      const doc = activeDocument();
+      const lines = [`# ${allDump.document ? (allDump.document.title || allDump.document.id) : ''} — all pages`, '',
+        '## 지나온 길', PDF_IMPORT_PIPELINE_STEPS.join('\n'), ''];
       (allDump.pages || []).forEach((p) => {
         lines.push(`## p.${p.pageNo}`);
         if (p.text) lines.push(p.text);
+        const blockLines = pageDebugBlockDetailLines(doc, p.pageNo);
+        if (blockLines.length) lines.push('', '### 블록', blockLines.join('\n'));
         lines.push('');
       });
+      lines.push('## 좌표를 못 잡아 버린 것', pageDebugDropLines().join('\n') || '  (없음)');
       return lines.join('\n');
     }
 
