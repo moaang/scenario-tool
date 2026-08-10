@@ -7062,15 +7062,7 @@
       doc.pageMetadata = sourcePagesToPageMetadata(importedPages);
       doc.pdfAnnotations = pdfAnnotationsFromPages(importedPages);
       doc.pdfExtractionSignals = pdfReviewSignalsFromAnnotations(doc.pdfAnnotations);
-      let importedBlocks = normalizeImportedBlocks(parsed.blocks || []);
-      importedBlocks = importedBlocks.map((block, index) => {
-        const localId = block.id || ('b' + pad(index + 1, 4));
-        return Object.assign(block, {
-          id: doc.id + '-' + localId.replace(new RegExp('^' + escapeRegExp(doc.id) + '-'), ''),
-          sourceDocumentId: doc.id,
-          sourceFileName: doc.importedFileName || block.sourceFileName || ''
-        });
-      });
+      const importedBlocks = finalizeImportedBlocks(parsed.blocks || [], doc);
       // 품질 신호는 **여기서 한 번 잰다.** 호출부마다 parsed.quality 를 손수 만들어 넘기는데
       // 그중 셋이 warnings: [] 로 넘겨서, 임포트 때 잡은 경고가 본문범위 적용이나 재확정 한
       // 번에 지워졌다. 넘어온 값은 보태기만 하고 판정은 문서를 보고 다시 한다.
@@ -7096,8 +7088,6 @@
       if (!project.project.title || doc.documentKind === 'project_common') project.project.title = doc.title;
       if (!project.project.episode) project.project.episode = doc.episode;
       project.project.documentKind = doc.documentKind || project.project.documentKind;
-      reinforceCastBlocks(importedBlocks);
-      attachSceneContext(importedBlocks);
       const oldDocBlockIds = new Set((project.sourceBlocks || []).filter(block => block.sourceDocumentId === doc.id).map(block => block.id));
       clearDocumentAutoEntityRefs(project, doc.id, oldDocBlockIds);
       project.sourceBlocks = (project.sourceBlocks || []).filter(block => block.sourceDocumentId !== doc.id).concat(importedBlocks);
@@ -7117,6 +7107,26 @@
       markProjectChanged('confirm_source_review');
       syncAll();
       undoResetAll();
+    }
+
+    // 임포트가 블록에 하는 일 **전부**가 여기 있다. 저장과 상태 변경은 호출부 몫이다.
+    // 이 경계가 없으면 재는 쪽이 이 순서를 손으로 다시 적게 되고, 단계가 하나 늘 때마다
+    // 측정만 뒤처져 화면과 다른 답을 낸다 — 실제로 뗀 조각이 뒤에서 되돌려지는 것을
+    // 그래서 못 봤다. 단계를 늘릴 자리는 여기 하나이고, 재는 쪽은 이것만 부른다.
+    function finalizeImportedBlocks(parsedBlocks, doc) {
+      const docId = doc && doc.id || '';
+      const fileName = doc && doc.importedFileName || '';
+      const blocks = normalizeImportedBlocks(parsedBlocks || []).map((block, index) => {
+        const localId = block.id || ('b' + pad(index + 1, 4));
+        return Object.assign(block, {
+          id: docId ? docId + '-' + localId.replace(new RegExp('^' + escapeRegExp(docId) + '-'), '') : localId,
+          sourceDocumentId: docId,
+          sourceFileName: fileName || block.sourceFileName || ''
+        });
+      });
+      reinforceCastBlocks(blocks);
+      attachSceneContext(blocks);
+      return blocks;
     }
 
     function normalizeImportedBlocks(blocks) {
@@ -15847,6 +15857,15 @@
       };
     }
 
+    // 좌표는 블록 텍스트로 원본 글자를 되찾아 붙는다. 그런데 뗀 두 블록은 한 아이템에서
+    // 나므로 **페이지 조각의 텍스트를 원래 줄 통째로** 물려받는다 — 그대로 두면 둘 다 줄
+    // 전체를 되찾아 정확히 포개지고, 화면에는 나중에 그린 쪽만 보인다.
+    function setSplitBlockPageSpanText(block, text) {
+      (block && block.pageSpans || []).forEach((span) => {
+        if (span) span.text = text;
+      });
+    }
+
     function splitCastBlockOverlayRects(nameBlock, noteBlock, headChars, totalChars) {
       if (!nameBlock || !noteBlock) return;
       const whole = splitOverlayRectByCharRatio(nameBlock.overlayRect, headChars, totalChars);
@@ -15957,7 +15976,11 @@
             // 그 인물의 설명이 통째로 사라진다. 붙이는 쪽은 이 표시를 먼저 본다.
             evidence: castEvidence.concat(['cast entry description'])
           }) : null;
-          if (nameBlock && noteBlock) splitCastBlockOverlayRects(nameBlock, noteBlock, charLen(parts.name), charLen(raw));
+          if (nameBlock && noteBlock) {
+            setSplitBlockPageSpanText(nameBlock, parts.name);
+            setSplitBlockPageSpanText(noteBlock, parts.description);
+            splitCastBlockOverlayRects(nameBlock, noteBlock, charLen(parts.name), charLen(raw));
+          }
           return;
         }
         if (item.type === 'dialog') {
@@ -22626,9 +22649,9 @@
       // 측정이 화면과 다른 경로를 본다(실제로 그렇게 정반대 결과를 낸 적이 있다).
       buildSourceReviewItems,
       sourceReviewItemsToBlocks,
-      // 블록을 만든 **뒤에** 도는 후처리다. 이것을 빼고 재면 앞 단계에서 갈라 놓은 것이
-      // 되돌려지는 것을 못 본다 — 화면에서 두 칸이 둘 다 CAST 로 나오던 것을 이렇게 놓쳤다.
-      reinforceCastBlocks,
+      // 블록을 만든 **뒤**가 여기 다 들어 있다. 조각을 따로 열지 않는다 — 열면 재는 쪽이
+      // 순서를 다시 적게 되고, 그것이 화면과 갈라지는 길이다.
+      finalizeImportedBlocks,
       pdfJsPageOperatorSignals,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
