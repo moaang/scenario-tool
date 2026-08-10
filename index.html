@@ -6703,14 +6703,19 @@
       return clean;
     }
 
-    function normalizeSpeakerName(value) {
-      const clean = cleanDialogSpeakerNameCore(value);
-      const splitNames = splitDialogSpeakerNamesFromClean(clean);
-      if (splitNames.length > 1) return splitNames.join('・');
+    // 이미 정리된 이름 하나를 무엇으로 볼지. 정리를 겹쳐 하면 꼬리가 두 번 깎인다.
+    function speakerNameFromClean(clean) {
       if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|テロップ|字幕|ナレーション)$/i.test(clean)) return '';
       if (isGenericDialogSpeakerName(clean)) return clean;
       if (isDirectDialogSpeakerName(clean)) return clean;
       return normalizeEntityName(clean, 'character');
+    }
+
+    function normalizeSpeakerName(value) {
+      const clean = cleanDialogSpeakerNameCore(value);
+      const splitNames = splitDialogSpeakerNamesFromClean(clean);
+      if (splitNames.length > 1) return splitNames.join('・');
+      return speakerNameFromClean(clean);
     }
 
     function splitDialogSpeakerNames(value) {
@@ -6734,11 +6739,7 @@
     }
 
     function normalizeSingleSpeakerName(value) {
-      const clean = cleanDialogSpeakerNameCore(value);
-      if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|テロップ|字幕|ナレーション)$/i.test(clean)) return '';
-      if (isGenericDialogSpeakerName(clean)) return clean;
-      if (isDirectDialogSpeakerName(clean)) return clean;
-      return normalizeEntityName(clean, 'character');
+      return speakerNameFromClean(cleanDialogSpeakerNameCore(value));
     }
 
     function isCollectiveDialogSpeakerName(name) {
