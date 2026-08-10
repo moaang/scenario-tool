@@ -5656,6 +5656,8 @@
     // 막아 주고 있어서 그 어긋남이 드러나지 않았을 뿐이다.
     // 표지 타입을 늘릴 자리는 classifyFront 이고, 늘렸으면 여기도 같이 늘린다.
     const CAST_BLOCK_TYPES = Object.freeze(['cast_entry', 'cast_section', 'cast_note']);
+    // 뗀 설명이라는 표시. 다는 쪽과 보는 쪽이 이 한 벌을 쓴다.
+    const CAST_DESCRIPTION_EVIDENCE = 'cast entry description';
     const FRONT_MATTER_BLOCK_TYPES = Object.freeze([
       'front_title', 'front_episode', 'front_draft_status', 'front_writer',
       'front_date', 'front_page_count_note', 'front_summary'
@@ -12254,7 +12256,7 @@
     }
 
     function isSplitCastDescriptionBlock(block) {
-      return (block && block.meta && block.meta.evidence || []).includes('cast entry description');
+      return (block && block.meta && block.meta.evidence || []).includes(CAST_DESCRIPTION_EVIDENCE);
     }
 
     function attachCastNotesToCharacters(project) {
@@ -13785,13 +13787,11 @@
     // 그대로 되돌아간다** — rectForPdfMatchedItems 는 세로 갈래에서 union 을 버리고
     // 이 괘선 사각형으로 통째로 갈아치우기 때문이다(그 함수 주석에 적혀 있다).
     function pdfGuideLineRectForCharSlot(rect, index, total) {
-      const count = Math.max(1, Number(total) || 1);
-      const height = Number(rect && rect.height) || 0;
-      if (!rect || count <= 1 || !(height > 0)) return rect;
-      const unit = height / count;
+      const slot = rect && Number(total) > 1 ? glyphSlotSpan(rect.height, index, total) : null;
+      if (!slot) return rect;
       return Object.assign({}, rect, {
-        top: (Number(rect.top) || 0) + unit * (Number(index) || 0),
-        height: unit
+        top: (Number(rect.top) || 0) + slot.start,
+        height: slot.length
       });
     }
 
@@ -14056,7 +14056,7 @@
       const parts = castLineSplitParts(text);
       if (!parts.description) return pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER, pageNo, text, orderRef);
       const nameItem = pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER, pageNo, parts.name, orderRef);
-      const noteItem = pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER_NOTE, pageNo, parts.descriptionSpan || parts.description, orderRef);
+      const noteItem = pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER_NOTE, pageNo, parts.descriptionSpan, orderRef);
       return nameItem || noteItem;
     }
 
@@ -15059,6 +15059,8 @@
         item.age = profile.age || '';
         item.profile = Object.assign({}, profile);
         item.tags = ['character'].concat(characterProfileTags(profile));
+      } else if (safeType === SCENARIO_UNIT.CHARACTER_NOTE) {
+        item.tags = [SCENARIO_UNIT.CHARACTER_NOTE];
       } else if (safeType === 'dialog') {
         const dialog = parseDialog(rawText);
         const start = dialog ? null : parseDialogStart(rawText);
@@ -15276,6 +15278,7 @@
       if (raw === 'action') return t('tagAction');
       if (raw === 'scene') return t('tagScene');
       if (raw === 'character') return t('tagCharacter');
+      if (raw === SCENARIO_UNIT.CHARACTER_NOTE) return t('sourceReviewTypeCharacterNote');
       if (raw === 'end') return t('tagEnd');
       if (raw === 'note') return t('tagNote');
       if (raw === 'link') return t('tagLink');
@@ -15999,7 +16002,7 @@
             // 뗀 자리에서 남기는 표시다. 뗀 조각을 **검사로 다시 알아보려 하면 실패한다** —
             // 문장부호도 신분 낱말도 없는 설명이 실제로 있고, 그런 조각은 검사를 통과하지 못해
             // 그 인물의 설명이 통째로 사라진다. 붙이는 쪽은 이 표시를 먼저 본다.
-            evidence: (item.section === 'front' ? ['front cast'] : ['source review cast']).concat(['cast entry description'])
+            evidence: (item.section === 'front' ? ['front cast'] : ['source review cast']).concat([CAST_DESCRIPTION_EVIDENCE])
           });
           return;
         }
@@ -18437,17 +18440,24 @@
     // **되찾은 글자를 이어 붙일 때와 줄을 다시 묶을 때 같은 산식이어야 한다** —
     // 갈리면 같은 글자가 경로에 따라 두 자리를 갖는다.
     // slotIndex 는 glyphCount 를 넘어도 된다(아이템 뒤로 이어지는 자리).
+    // n 번째 글자 칸의 시작과 길이. 아이템 좌표(topPct/heightPct)와 괘선 좌표(top/height)는
+    // 필드 이름이 다르므로 **호출 전에 길이만 뽑아 넘긴다** — 커널에 좌표계 분기를 넣지 않는다.
+    function glyphSlotSpan(length, index, total) {
+      const count = Math.max(1, Number(total) || 0);
+      const span = Number(length) || 0;
+      if (!(span > 0)) return null;
+      const unit = span / count;
+      return { start: unit * (Number(index) || 0), length: unit };
+    }
+
     function pdfItemGlyphSlot(item, slotIndex, glyphCount) {
       const vertical = Boolean(item && item.verticalTextItem);
-      const count = Math.max(1, Number(glyphCount) || 0);
-      const span = vertical ? Number(item && item.heightPct) || 0 : Number(item && item.widthPct) || 0;
-      const unit = span / count;
-      if (!(unit > 0)) return null;
-      const n = Number(slotIndex) || 0;
-      const leftPct = vertical ? Number(item.leftPct) || 0 : (Number(item.leftPct) || 0) + unit * n;
-      const topPct = vertical ? (Number(item.topPct) || 0) + unit * n : Number(item.topPct) || 0;
-      const widthPct = vertical ? Number(item.widthPct) || 0 : unit;
-      const heightPct = vertical ? unit : Number(item.heightPct) || 0;
+      const slot = glyphSlotSpan(vertical ? item && item.heightPct : item && item.widthPct, slotIndex, glyphCount);
+      if (!slot) return null;
+      const leftPct = vertical ? Number(item.leftPct) || 0 : (Number(item.leftPct) || 0) + slot.start;
+      const topPct = vertical ? (Number(item.topPct) || 0) + slot.start : Number(item.topPct) || 0;
+      const widthPct = vertical ? Number(item.widthPct) || 0 : slot.length;
+      const heightPct = vertical ? slot.length : Number(item.heightPct) || 0;
       return {
         leftPct, topPct, widthPct, heightPct,
         centerXPct: leftPct + widthPct / 2,
