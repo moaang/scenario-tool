@@ -16920,7 +16920,8 @@
         : `<div class="pdf-text-fallback"><pre>${esc(previewText)}</pre></div>`;
       const debugMode = Boolean(state.pdfOverlayDebugMode);
       const modeClass = debugMode ? ' debug-mode' : '';
-      const labelBelowIds = overlayLabelBelowIds(doc, overlayBlocks);
+      const overlayRects = new Map(overlayBlocks.map(block => [block.id, overlayRectForBlock(block, doc)]));
+      const labelBelowIds = overlayLabelBelowIds(overlayBlocks, overlayRects);
       return `<div class="body-preview-workspace${modeClass}">
         <div class="script-page">
           <div class="card-head"><div class="card-title">${esc(t('tabScript'))} ・ Page ${esc(pageNo)}</div><div class="chips">${renderPageTags(pageBlocks)}</div></div>
@@ -16932,7 +16933,7 @@
                 <div id="pdfLayoutGuideLayer" class="pdf-layout-guide-layer" data-pdf-layout-guide-layer></div>
                 <div id="pdfOverlayLayer" class="pdf-overlay-layer" data-pdf-overlay-layer>
                   ${renderBodyOverlayGroups(doc, pageNo, overlayBlocks)}
-                  ${overlayBlocks.map((block, index) => renderBodyOverlayBox(doc, block, index, overlayBlocks.length, labelBelowIds)).join('')}
+                  ${overlayBlocks.map(block => renderBodyOverlayBox(doc, block, overlayRects, labelBelowIds)).join('')}
                   <div id="pdfOverlaySelectionToolbar" class="pdf-overlay-selection-toolbar hidden"></div>
                 </div>
                 <div id="pdfFeedbackLayer" class="pdf-feedback-layer" data-pdf-feedback-layer></div>
@@ -17738,24 +17739,26 @@
     // 이름표는 박스 위에 붙는다. 세로쓰기에서 한 칸이 이름과 설명으로 나뉘면 아래 박스의
     // 이름표가 위 박스를 덮어 **위 박스가 없는 것처럼 보인다**. 위에 다른 박스를 이고 있는
     // 쪽만 이름표를 아래로 내린다.
-    function overlayLabelBelowIds(doc, blocks) {
+    function overlayLabelBelowIds(blocks, rectsById) {
       const source = blocks || [];
-      const rects = source.map(block => overlayRectForBlock(block, doc));
       const out = new Set();
-      source.forEach((block, index) => {
-        const rect = rects[index];
-        if (!block || !rect) return;
-        const hasBoxAbove = rects.some((other, otherIndex) => {
-          if (otherIndex === index || !other) return false;
-          const sharedWidth = Math.min(other.left + other.width, rect.left + rect.width) - Math.max(other.left, rect.left);
-          return sharedWidth > Math.min(other.width, rect.width) * 0.5 && other.top < rect.top;
+      source.forEach((block) => {
+        const rect = block && rectsById.get(block.id);
+        if (!rect) return;
+        const hasBoxAbove = source.some((other) => {
+          if (!other || other === block) return false;
+          const otherRect = rectsById.get(other.id);
+          if (!otherRect) return false;
+          const sharedWidth = Math.min(otherRect.left + otherRect.width, rect.left + rect.width)
+            - Math.max(otherRect.left, rect.left);
+          return sharedWidth > Math.min(otherRect.width, rect.width) * 0.5 && otherRect.top < rect.top;
         });
         if (hasBoxAbove) out.add(block.id);
       });
       return out;
     }
 
-    function renderBodyOverlayBox(doc, block, index, total, labelBelowIds) {
+    function renderBodyOverlayBox(doc, block, rectsById, labelBelowIds) {
       const isNote = isPdfNoteOverlayBlock(block);
       const isDialog = !isNote && (block.type === 'dialog' || block.speaker);
       const isAppendixText = block.type === 'appendix_text';
@@ -17768,7 +17771,7 @@
         notePdfOverlayDrop('noUsableRect', 'p' + Number(pageNo || 1));
         return '';
       }
-      const rect = overlayRectForBlock(block, doc);
+      const rect = rectsById && rectsById.get(block.id) || overlayRectForBlock(block, doc);
       if (!rect) {
         // 바로 위 noUsableRect 는 기록하는데 여기만 안 했다 — 박스가 사라지는 두 번째 길이다.
         notePdfOverlayDrop('noOverlayRect', 'p' + Number(pageNo || 1));
