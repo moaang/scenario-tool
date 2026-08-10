@@ -5765,7 +5765,7 @@
       const actionSignals = source.filter(line => isLikelyActionNarrativeLine(line, profile)).length;
       const explicitFront = head.some(line => /検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成|登場人物|キャラクター|CAST|第\s*[0-9０-９一二三四五六七八九十]+\s*話/.test(line));
       if (actionSignals >= 2 && !explicitFront) return false;
-      const frontSignals = head.filter((line, index) => frontScore(line, pageNo || 1, index, false, profile) >= 6).length;
+      const frontSignals = head.filter((line, index) => frontScore(line, pageNo || 1, index, profile) >= 6).length;
       return frontSignals >= 2;
     }
 
@@ -6352,11 +6352,11 @@
           context.bodyStarted = true;
           return classifyBody(raw, context, quality, ['dialog before scene heading; body assumed'], profile);
         }
-        const fs = frontScore(raw, pageNo, lineIndex, context.bodyStarted, profile);
+        const fs = frontScore(raw, pageNo, lineIndex, profile);
         if (fs >= 6 || pageNo <= 2) return classifyFront(raw, fs);
         return classification('front_summary', 'front_matter', false, 'none', 0.55, ['front matter before body']);
       }
-      if (context.bodyStarted && isCastSectionLine(raw)) {
+      if (isCastSectionLine(raw)) {
         return classification('technical_note', 'appendix', false, 'none', 0.55, ['late cast/list marker; not switching body to cast']);
       }
       context.zone = 'body';
@@ -6414,16 +6414,15 @@
       return classification('action', 'body', true, 'action', quality.verticalPdfSuspected ? 0.52 : 0.72, evidence.concat(['action fallback']));
     }
 
-    function frontScore(raw, pageNo, lineIndex, bodyStarted, profile) {
+    function frontScore(raw, pageNo, lineIndex, profile) {
       let score = 0;
-      if (pageNo <= 2 && !bodyStarted) score += 5;
+      if (pageNo <= 2) score += 5;
       if (/検討稿|決定稿|初稿|2稿|２稿|改稿|修正稿|コメント版|文芸整理済/.test(raw)) score += 4;
       if (/脚本|文芸|構成|Writer|監督|原作/.test(raw)) score += 4;
       if (/第\s*[0-9０-９一二三四五六七八九十]+\s*話|#\s*[0-9０-９]+|「.+」/.test(raw) && lineIndex < 8) score += 3;
       if (/\d{4}[./年]\d{1,2}|\d{6}/.test(raw)) score += 3;
       if (/ペラ|二百字換算|八百字換算|枚/.test(raw)) score += 3;
       if (lineIndex < 8 && charLen(raw) < 38) score += 2;
-      if (bodyStarted) score -= 5;
       if (parseDialog(raw, profile)) score -= 4;
       if (isStrongBodyStart(raw)) score -= 4;
       return score;
@@ -10579,7 +10578,7 @@
         }
         if (streamIndex % 3 === 0) await yieldToBrowser();
       }
-      return applyDetectedPdfPageNumbers(pages);
+      return pages;
     }
 
     function pdfContentStreamsGroupedByPage(streams) {
@@ -11257,7 +11256,7 @@
       const text = rawText.normalize('NFKC').trim();
       if (!/^[0-9]{1,3}$/.test(text)) return false;
       if (isPdfLineGuideNumberAttachedToText(item, items)) return false;
-      return Number.isFinite(rawValue) && rawValue <= 99 && hasPdfLineGuideNumberGrid(items);
+      return Number.isFinite(rawValue) && hasPdfLineGuideNumberGrid(items);
     }
 
     function isPdfLineGuideNumberAttachedToText(item, items) {
@@ -11419,10 +11418,6 @@
       if (!candidates.length) return null;
       candidates.sort((a, b) => Math.abs(a.x - 420) - Math.abs(b.x - 420));
       return candidates[0].pageNo;
-    }
-
-    function applyDetectedPdfPageNumbers(pages) {
-      return pages;
     }
 
     function pdfOperatorNumbers(op) {
@@ -16178,7 +16173,7 @@
         // 표지 줄은 작품명·화수·원고 차수·날짜·각본가로 갈린다. **그 판정은 이미 classifyFront 에
         // 있다** — 여기서 다시 세우면 두 경로가 표지를 다르게 읽어 화면과 데이터가 갈린다.
         // (실제로 갈려 있었다: 텍스트 임포트는 다섯 종류로 나누는데 PDF 는 전부 front_summary 였다.)
-        const frontClass = classifyFront(reviewText, frontScore(reviewText, Number(item.pageNo || 1), Number(item.order || 0), false, conversionProfile));
+        const frontClass = classifyFront(reviewText, frontScore(reviewText, Number(item.pageNo || 1), Number(item.order || 0), conversionProfile));
         // classifyFront 가 「이건 등장인물 목록의 머리다」라고 판정하면 그 zone 을 쓴다.
         // 예전에는 여기서 무조건 덮어써서 **타입만 살고 zone 은 조용히 탈락했다** —
         // 코드는 cast_list 라고 적혀 있는데 실제 블록은 front_matter 로 나왔다.
