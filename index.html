@@ -2767,6 +2767,7 @@
     const DRAFT_STATUS_ALT = DRAFT_STATUS_WORDS.join('|');
     const CREDIT_ROLE_ALT = CREDIT_ROLE_WORDS.join('|');
     // 줄 전체가 이 낱말 하나뿐 — 인물도 화자도 아니고 표지의 항목이다.
+    const CREDIT_ROLE_RE = new RegExp(CREDIT_ROLE_ALT, 'i');
     const FRONT_MATTER_WORD_ONLY_RE = new RegExp('^(?:' + DRAFT_STATUS_ALT + '|' + CREDIT_ROLE_ALT + ')$', 'i');
 
     const APP_VERSION = 'ver075';
@@ -6614,7 +6615,8 @@
       if (castLineHasLocationSignal(source)) return false;
       if (/^(?:ほか|その他|他|その他一同|ほか一同)$/.test(source)) return false;
       if (FRONT_MATTER_WORD_ONLY_RE.test(source)) return false;
-      if (/第|話|稿|脚本|原作|監督|文芸|構成|ペラ|換算|枚|ページ/i.test(source)) return false;
+      if (CREDIT_ROLE_RE.test(source)) return false;
+      if (/第|話|稿|ペラ|換算|枚|ページ/i.test(source)) return false;
       if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(source)) return false;
       if (/^[【\[][^】\]]+[】\]]$/.test(source)) return false;
       // 점선으로 이름과 설명을 잇는 것은 각본에서 가장 흔한 등장인물 표기다. 그 점선을
@@ -6868,7 +6870,7 @@
       const split = splitSceneHeadingActionTail(normalizedRaw);
       let clean = norm(split ? split.sceneText : normalizedRaw)
         .replace(/^\[[^\]]+\]\s*/, '')
-        .replace(/^\[?\s*(?:八百字換算|二百字換算|ペラ|ページ)[^\]○◯●◎□■△▲▽▼]*\]?\s*/, '')
+        .replace(new RegExp('^\\[?\\s*(?:八百字換算|二百字換算|ペラ|ページ)[^\\]' + SCENE_MARKER_CHARS + ']*\\]?\\s*'), '')
         .replace(/^[0-9０-９]+\s*/, '')
         // 씬 번호 접두를 뗀다. 문자 클래스로 적으면 S·C·N·o·. 이 **낱개로** 매치해서
         // 라틴으로 시작하는 장소 이름의 첫 글자를 먹는다. 대안 목록으로 적고, 번호가
@@ -7018,7 +7020,8 @@
       const raw = norm(text);
       if (!raw || charLen(raw) < 2) return false;
       if (index > 120 && Number(pageNo || 0) > 2) return false;
-      if (/第|話|稿|脚本|原作|監督|文芸|構成|ペラ|換算|枚|ページ/i.test(raw)) return false;
+      if (CREDIT_ROLE_RE.test(raw)) return false;
+      if (/第|話|稿|ペラ|換算|枚|ページ/i.test(raw)) return false;
       if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(raw)) return false;
       if (/^[【\[][^】\]]+[】\]]$/.test(raw)) return false;
       if (/[、，。！？!?「」『』]|──|…/.test(raw)) return false;
@@ -11916,7 +11919,8 @@
       if (isNumberedRoleCharacterName(clean)) return true;
       if (charLen(clean) < 2 && !/^[A-ZＡ-Ｚ]$/i.test(clean) && !/^[一-龠々]$/.test(clean)) return false;
       if (charLen(clean) > 28) return false;
-      if (/^(第|#|No\.?|P\.?|Page|ページ|話|稿|脚本|原作|監督|文芸|構成|制作|コメント|テーマ|メモ|登場人物|キャラクター|人物|CAST)$/i.test(clean)) return false;
+      if (new RegExp('^(?:' + CREDIT_ROLE_ALT + ')$', 'i').test(clean)) return false;
+      if (/^(第|#|No\.?|P\.?|Page|ページ|話|稿|制作|コメント|テーマ|メモ|登場人物|キャラクター|人物|CAST)$/i.test(clean)) return false;
       if (/https?|www\.|\.html?|[＊*→↑<>#＃]/i.test(clean)) return false;
       if (/^\d{1,4}$|^\d{4}[./年-]/.test(clean)) return false;
       if (/[、，。！？!?「」『』]/.test(clean)) return false;
@@ -11986,7 +11990,7 @@
     function cleanPlaceName(value) {
       let clean = stripSceneTimeExpressions(norm(value))
         .replace(/^\[[^\]]+\]\s*/, '')
-        .replace(/^\[?\s*(?:八百字換算|二百字換算|ペラ|ページ)[^\]○◯●◎□■△▲▽▼]*\]?\s*/, '')
+        .replace(new RegExp('^\\[?\\s*(?:八百字換算|二百字換算|ペラ|ページ)[^\\]' + SCENE_MARKER_CHARS + ']*\\]?\\s*'), '')
         .replace(SCENE_MARKER_OPTIONAL_PREFIX_RE, '')
         .replace(/[（(]\s*(朝|昼|夕|夕方|夜|深夜|早朝|夜明け前|同時刻|翌朝|翌日|直後|直前|現在|回想|回想的に挿入|過去|雨|雪|曇り)\s*[）)]/g, '')
         .replace(/[「『].*$/, '')
@@ -12276,7 +12280,8 @@
       const raw = norm(text);
       if (!raw || charLen(raw) < 3 || charLen(raw) > 120) return false;
       if (isCastSectionLine(raw) || isSceneHeading(raw) || isSectionMarkerLine(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
-      if (/第|話|稿|脚本|原作|監督|文芸|構成|年|月|日|ペラ|換算|枚|ページ/i.test(raw)) return false;
+      if (CREDIT_ROLE_RE.test(raw)) return false;
+      if (/第|話|稿|年|月|日|ペラ|換算|枚|ページ/i.test(raw)) return false;
       return /[。！？、，]|主人公|貴族|軍人|故人|隊長|老人|若者|研究者|旅人|リーダー|巫女|護衛|男性|女性/.test(raw);
     }
 
