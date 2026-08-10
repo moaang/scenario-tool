@@ -6539,10 +6539,13 @@
     function castLineSplitParts(raw) {
       const source = norm(raw);
       const at = source.search(CAST_LINE_DESCRIPTION_LEADER);
-      if (at < 0) return { name: source, description: '' };
+      if (at < 0) return { name: source, description: '', descriptionSpan: '' };
       return {
         name: source.slice(0, at).trim() || source,
-        description: source.slice(at).replace(CAST_LINE_DESCRIPTION_LEADER, '').trim()
+        description: source.slice(at).replace(CAST_LINE_DESCRIPTION_LEADER, '').trim(),
+        // 좌표를 잡을 때만 쓴다. 점선은 설명의 내용이 아니지만 **자리는 설명 쪽**이다 —
+        // 빼고 잡으면 이름 칸과 설명 칸 사이가 빈 띠로 남는다.
+        descriptionSpan: source.slice(at)
       };
     }
 
@@ -15978,7 +15981,7 @@
           }) : null;
           if (nameBlock && noteBlock) {
             setSplitBlockPageSpanText(nameBlock, parts.name);
-            setSplitBlockPageSpanText(noteBlock, parts.description);
+            setSplitBlockPageSpanText(noteBlock, parts.descriptionSpan || parts.description);
             splitCastBlockOverlayRects(nameBlock, noteBlock, charLen(parts.name), charLen(raw));
           }
           return;
@@ -22652,6 +22655,11 @@
       // 블록을 만든 **뒤**가 여기 다 들어 있다. 조각을 따로 열지 않는다 — 열면 재는 쪽이
       // 순서를 다시 적게 되고, 그것이 화면과 갈라지는 길이다.
       finalizeImportedBlocks,
+      // 좌표를 정하는 그 함수들. 블록이 갈렸는데 박스가 포개지는 일이 실제로 있었고,
+      // 그때 데이터만 봐서는 알 수 없다 — 블록 하나가 어느 사각형을 받는지 직접 물어야 한다.
+      createPdfItemTextMatcher,
+      inferOverlayRectFromPdfText,
+      markPdfItemMatchUsed,
       pdfJsPageOperatorSignals,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
