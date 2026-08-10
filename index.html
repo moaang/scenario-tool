@@ -6544,18 +6544,34 @@
     // 통째로 빠진다. **장소는 이름 쪽에서만 본다.**
     // 「이름 + 점선 + 설명」을 가르는 자리는 하나다. 오래 이름 쪽만 썼는데 설명 쪽도 쓸 곳이 생겼다.
     const CAST_LINE_DESCRIPTION_LEADER = /[…‥]{2,}|\.{3,}/;
+    // 점선을 쓰지 않는 원고는 「이름（나이）설명」으로 붙여 쓴다. 괄호 안이 숫자나 물음표일
+    // 때만 나이로 본다 — 머리 모양이나 연기 지시가 든 괄호는 이름의 일부다.
+    const CAST_LINE_AGE_PAREN = /[（(][0-9０-９？?〜~\-–—]{1,6}[）)]/;
 
     function castLineSplitParts(raw) {
       const source = norm(raw);
       const at = source.search(CAST_LINE_DESCRIPTION_LEADER);
-      if (at < 0) return { name: source, description: '', descriptionSpan: '' };
-      return {
-        name: source.slice(0, at).trim() || source,
-        description: source.slice(at).replace(CAST_LINE_DESCRIPTION_LEADER, '').trim(),
-        // 좌표를 잡을 때만 쓴다. 점선은 설명의 내용이 아니지만 **자리는 설명 쪽**이다 —
-        // 빼고 잡으면 이름 칸과 설명 칸 사이가 빈 띠로 남는다.
-        descriptionSpan: source.slice(at)
-      };
+      if (at >= 0) {
+        return {
+          name: source.slice(0, at).trim() || source,
+          description: source.slice(at).replace(CAST_LINE_DESCRIPTION_LEADER, '').trim(),
+          // 좌표를 잡을 때만 쓴다. 점선은 설명의 내용이 아니지만 **자리는 설명 쪽**이다 —
+          // 빼고 잡으면 이름 칸과 설명 칸 사이가 빈 띠로 남는다.
+          descriptionSpan: source.slice(at)
+        };
+      }
+      // 나이 괄호 **뒤**가 설명이다. 나이 자체는 이름 쪽에 남긴다 — 캐릭터 속성으로 이미
+      // 뽑아 쓰고 있어서, 떼면 그 파싱이 근거를 잃는다.
+      const age = source.match(CAST_LINE_AGE_PAREN);
+      const afterAge = age ? source.slice(age.index + age[0].length).trim() : '';
+      if (afterAge) {
+        return {
+          name: source.slice(0, age.index + age[0].length).trim(),
+          description: afterAge,
+          descriptionSpan: afterAge
+        };
+      }
+      return { name: source, description: '', descriptionSpan: '' };
     }
 
     function castLineNamePart(raw) {
@@ -6621,7 +6637,9 @@
       const source = norm(raw);
       if (!source || charLen(source) > 140) return false;
       if (isCastSectionLine(source) || isLikelyCastEntryLine(source, profile) || isSceneHeading(source, profile) || parseDialog(source, profile)) return false;
-      if (castLineHasLocationSignal(source)) return false;
+      // 장소 낱말은 배제 근거가 아니다 — 설명은 신분·소속을 적는 자리라 장소말이 흔히 든다.
+      // 실측에서 그런 줄 둘만 캐스트 설명에서 빠져 표지 제목으로 떨어졌다. 장소로 갈라야
+      // 하는 것은 씬 머리인데, 그것은 바로 위에서 이미 걸러진다.
       return /[。！？、，]|主人公|自由市民|貴族|軍人|故人|副官|司教|総主教|隊長|老人|若者|研究者|旅人|リーダー|巫女|暗殺者|間者|世話人|男|女|男性|女性/.test(source);
     }
     function isSceneHeading(raw, profile) {
