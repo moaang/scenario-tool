@@ -19399,7 +19399,8 @@
     }
 
     function findOverlayBoxForBlockId(blockId) {
-      return Array.from(document.querySelectorAll('[data-overlay-block]')).find(item => item.getAttribute('data-overlay-block') === blockId) || null;
+      // 값으로 바로 찾는다 — 전부 모아 고르면 블록 하나를 찾는 데 박스 수만큼 든다.
+      return document.querySelector('[data-overlay-block="' + String(blockId).replace(/["\\]/g, '\\$&') + '"]');
     }
 
     function syncBodyOverlaySelectionClasses() {
@@ -19559,7 +19560,7 @@
     }
 
     function currentOverlayRectForBlock(blockId) {
-      const box = Array.from(document.querySelectorAll('[data-overlay-block]')).find(item => item.getAttribute('data-overlay-block') === blockId);
+      const box = findOverlayBoxForBlockId(blockId);
       if (box) {
         const rect = {
           left: parseFloat(box.style.left) || 0,
