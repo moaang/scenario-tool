@@ -6024,10 +6024,15 @@
       const total = lines.length || 1;
       const single = lines.filter(l => charLen(l) <= 1).length;
       const avg = lines.reduce((sum, l) => sum + charLen(l), 0) / total;
-      const quoteChars = dialogQuotePairs(profile).flatMap(pair => [pair.open, pair.close]).map(escapeRegExp).join('');
+      const quotePairs = dialogQuotePairs(profile);
+      const quoteChars = quotePairs.flatMap(pair => [pair.open, pair.close]).map(escapeRegExp).join('');
+      // 닫는 쪽도 같은 자로 재야 한다 — 고정 부호로 재면 다른 부호를 쓰는 문서에서 분자가 0이 되고,
+      // 짝이 하나도 안 닫힌 것처럼 보여 세로 조판으로 오해한다.
+      const closeChars = quotePairs.map(pair => pair.close).map(escapeRegExp).join('');
       const quoteRegex = quoteChars ? new RegExp('[' + quoteChars + ']') : /[「『」』]/;
+      const closeRegex = closeChars ? new RegExp('[' + closeChars + ']') : /[」』]/;
       const quoteStarts = lines.filter(l => quoteRegex.test(l)).length;
-      const quoteEnds = lines.filter(l => /[」』]/.test(l)).length;
+      const quoteEnds = lines.filter(l => closeRegex.test(l)).length;
       const quotePairRecoveryRate = quoteStarts ? Math.min(quoteStarts, quoteEnds) / quoteStarts : 1;
       const verticalPdfSuspected = total > 30 && (single / total > 0.38 || (avg < 6 && quotePairRecoveryRate < 0.55));
       const warnings = [];
