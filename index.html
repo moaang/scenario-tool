@@ -4647,6 +4647,12 @@
         .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || String(a.title || a.id).localeCompare(String(b.title || b.id)));
     }
 
+    // 「본문」 탭이 무엇을 담는가. 칩과 목록이 각자 적으면 화면의 수치와 내용이 갈린다 —
+    // 실제로 칩만 manual_material 을 빼고 세고 있었다.
+    function isBodyTabBlock(block) {
+      return Boolean(block) && (block.zone === 'body' || block.zone === 'manual_material');
+    }
+
     function activeDocumentBlocks(project) {
       const p = project || state.project;
       const doc = activeDocument(p);
@@ -7153,7 +7159,7 @@
           markdownSourceLine: block.markdownSourceLine || '',
           markdownHeadingLevel: Number(block.markdownHeadingLevel) || 0,
           markdownLineIndex: Number.isInteger(block.markdownLineIndex) ? block.markdownLineIndex : -1,
-          type: block.type || 'unknown',
+          type: block.type || UNCLASSIFIED_BLOCK_TYPE,
           zone: block.zone || 'unknown',
           speaker: block.speaker || '',
           speakerNames: Array.isArray(block.speakerNames) ? block.speakerNames : splitDialogSpeakerNames(block.speaker || block.characterName || ''),
@@ -17832,6 +17838,7 @@
       appendix_text: 'TEXT',
       pdf_note: 'NOTE',
       pdf_link: 'LINK',
+      reference_url: 'LINK',
       revision_comment: 'NOTE',
       technical_note: 'NOTE'
     });
@@ -20557,7 +20564,7 @@
       const strip = $('stripBlocks');
       if (strip) strip.textContent = blocks.length;
       renderPdfOverlayDropChip();
-      const body = blocks.filter(b => b.zone === 'body').length;
+      const body = blocks.filter(isBodyTabBlock).length;
       const characters = (p.entities || []).filter(e => e.type === 'character' && entityVisibleInActiveDocument(e, p)).length;
       const places = (p.entities || []).filter(e => e.type === 'place' && entityVisibleInActiveDocument(e, p)).length;
       const low = blocks.filter(b => b.zone === 'low_confidence' || b.meta.confidence < 0.6).length;
@@ -20607,7 +20614,7 @@
         return;
       }
       const blocks = activeDocumentBlocks(p).filter(b => {
-        if (tab === 'body') return b.zone === 'body' || b.zone === 'manual_material';
+        if (tab === 'body') return isBodyTabBlock(b);
         if (tab === 'low') return b.zone === 'low_confidence' || (b.meta && b.meta.confidence < 0.6);
         return true;
       });
