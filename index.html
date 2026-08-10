@@ -6605,6 +6605,14 @@
       return { lines: collected, endIndex: index };
     }
 
+    // 표지·간지의 항목 — 직함, 지면 셈, 날짜, 대괄호 표제. 어느 쪽도 인물 이름이 아니다.
+    function isFrontMatterMetaLine(text) {
+      if (CREDIT_ROLE_RE.test(text)) return true;
+      if (/第|話|稿|ペラ|換算|枚|ページ/i.test(text)) return true;
+      if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(text)) return true;
+      return /^[【\[][^】\]]+[】\]]$/.test(text);
+    }
+
     function isExplicitCastListNameLine(raw, profile) {
       const source = norm(raw);
       if (!source || charLen(source) > 42) return false;
@@ -6613,10 +6621,7 @@
       if (castLineHasLocationSignal(source)) return false;
       if (/^(?:ほか|その他|他|その他一同|ほか一同)$/.test(source)) return false;
       if (FRONT_MATTER_WORD_ONLY_RE.test(source)) return false;
-      if (CREDIT_ROLE_RE.test(source)) return false;
-      if (/第|話|稿|ペラ|換算|枚|ページ/i.test(source)) return false;
-      if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(source)) return false;
-      if (/^[【\[][^】\]]+[】\]]$/.test(source)) return false;
+      if (isFrontMatterMetaLine(source)) return false;
       // 점선으로 이름과 설명을 잇는 것은 각본에서 가장 흔한 등장인물 표기다. 그 점선을
       // 말줄임표로 보고 거부하면 그렇게 쓴 줄이 통째로 캐스트에서 빠진다(실측: 열두 명 중 셋).
       // **점선으로 갈리면 이름 쪽만 보고 판정한다.** 갈리지 않으면 예전처럼 말줄임표로 본다.
@@ -7019,10 +7024,7 @@
       const raw = norm(text);
       if (!raw || charLen(raw) < 2) return false;
       if (index > 120 && Number(pageNo || 0) > 2) return false;
-      if (CREDIT_ROLE_RE.test(raw)) return false;
-      if (/第|話|稿|ペラ|換算|枚|ページ/i.test(raw)) return false;
-      if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(raw)) return false;
-      if (/^[【\[][^】\]]+[】\]]$/.test(raw)) return false;
+      if (isFrontMatterMetaLine(raw)) return false;
       if (/[、，。！？!?「」『』]|──|…/.test(raw)) return false;
       if (isSceneHeading(raw) || isSectionMarkerLine(raw) || isRevisionLine(raw)) return false;
       const names = extractCastNames(raw);
