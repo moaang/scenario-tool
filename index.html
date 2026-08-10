@@ -5371,6 +5371,10 @@
       if (!profile || !profile.numberedSceneHeadings) return false;
       if (numberedSceneHeadingLineNumber(raw, { requireLocation: false }) === null) return false;
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
+      // 표지의 원고 단계 표기와 날짜는 앞이 숫자라 「번호 + 이름」으로 읽힌다. 그 숫자는 씬 번호가
+      // 아니다 — 이 자리에서 막지 않으면 표지 한 장에 씬이 둘 서고 그 뒤가 본문으로 이어진다.
+      if (isFrontMatterMetaLine(source)) return false;
+      if (/^[0-9]{2,4}[./\-][0-9]{1,2}(?:[./\-][0-9]{0,2})?$/.test(source.normalize('NFKC').replace(/\s/g, ''))) return false;
       if (parseDialog(source, profile)) return false;
       if (isCastSectionLine(source) || isLikelyCastEntryLine(source, profile)) return false;
       return true;
