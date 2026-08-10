@@ -25,6 +25,7 @@
       --danger: #d4493e;
       --good: #2e8155;
       --info: #3a5f83;
+      --warn: #d97706;
       --chip: #f1f1ed;
       /* Feedback semantics (fact=green / retake=red / rewrite=amber) */
       --fact: #2e8155;      --fact-tint: #e9f5ee;   --fact-line: #bfe0cd;
@@ -185,7 +186,6 @@
       border-top: 1px solid var(--line-soft);
       color: var(--muted); font-size: 10px; font-weight: 650;
     }
-    .side-panel-foot .ver { font-family: var(--mono); font-size: 9.5px; }
     .panel-collapse {
       min-height: 24px; width: 26px; padding: 0;
       border: 0; background: transparent; box-shadow: none;
@@ -352,7 +352,7 @@
       padding: 5px 8px 5px 14px;
       background: var(--panel); border-radius: 999px; box-shadow: var(--shadow-chrome);
     }
-    .strip-warn .strip-k, .strip-warn .strip-mono { color: var(--warn, #d97706); }
+    .strip-warn .strip-k, .strip-warn .strip-mono { color: var(--warn); }
     .strip-item { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; white-space: nowrap; }
     .strip-k { color: var(--faint); font-size: 10px; font-weight: 750; }
     .strip-mono { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); font-weight: 700; }
@@ -658,10 +658,10 @@
     .chip.age { color: #4a3c11; background: #f8f1d7; border-color: #ded099; }
     .block-text { padding: 9px 11px 10px; white-space: pre-wrap; word-break: break-word; font-size: 12.5px; line-height: 1.62; color: var(--ink); }
     .block-card.front_matter { border-left: 4px solid #87877b; }
-    .block-card.cast_list, .block-card.cast { border-left: 4px solid #665f92; }
+    .block-card.cast_list { border-left: 4px solid #665f92; }
     .block-card.body { border-left: 4px solid #2e7653; }
     .block-card.manual_material { border-left: 4px solid #5c6f7a; }
-    .block-card.editorial_comment, .block-card.comment { border-left: 4px solid #9b6330; }
+    .block-card.editorial_comment { border-left: 4px solid #9b6330; }
     .block-card.low_confidence { border-left: 4px solid #b03d31; }
     .mini-table { width: 100%; border-collapse: collapse; font-size: 11px; }
     .mini-table th, .mini-table td { padding: 5px; border-bottom: 1px solid #ededdf; text-align: left; vertical-align: top; }
@@ -1119,7 +1119,7 @@
     .pdf-overlay-box.action { border-color: #7b6a22; }
     .pdf-overlay-box.text, .pdf-overlay-box.body_text, .pdf-overlay-box.appendix_text, .pdf-overlay-box.front_summary { border-color: #4f7d55; }
     .pdf-overlay-box.pdf_note { border-color: #4c93c8; border-style: dashed; }
-    .pdf-overlay-box.cast_entry, .pdf-overlay-box.cast_section, .pdf-overlay-box.cast_note { border-color: #5f5589; }
+    .pdf-overlay-box.cast_entry { border-color: #5f5589; }
     .pdf-overlay-box.scene_heading { border-color: #ff1744; }
     .pdf-overlay-box.end_marker { border-color: #7f1717; }
     .pdf-overlay-box.continued {
@@ -1171,9 +1171,7 @@
     .pdf-overlay-box.body_text .pdf-overlay-tag,
     .pdf-overlay-box.appendix_text .pdf-overlay-tag,
     .pdf-overlay-box.front_summary .pdf-overlay-tag { color: #2f6d39; }
-    .pdf-overlay-box.cast_entry .pdf-overlay-tag,
-    .pdf-overlay-box.cast_section .pdf-overlay-tag,
-    .pdf-overlay-box.cast_note .pdf-overlay-tag { color: #5f5589; }
+    .pdf-overlay-box.cast_entry .pdf-overlay-tag { color: #5f5589; }
     .pdf-overlay-box.scene_heading .pdf-overlay-tag { color: #ff1744; }
     .pdf-overlay-box.end_marker .pdf-overlay-tag { color: #7f1717; }
     .pdf-overlay-box.pdf_note .pdf-overlay-tag { color: #4c93c8; }
@@ -2009,7 +2007,6 @@
       .workspace { position: static; display: block; padding: 0; background-image: none; overflow: visible; cursor: auto; }
       .pane-center { position: static; transform: none !important; width: auto; }
       .side-panel { position: static; transform: none; display: flex !important; width: auto; max-height: none; }
-      #panelLeft { display: none !important; }
       .pane { border: 0; box-shadow: none; overflow: visible; }
       .pane-body { overflow: visible; }
       .annotation { color: #b00000; border-left-color: #b00000; }
@@ -5158,7 +5155,7 @@
       if (!entity || !anchor) return;
       closeEntityTagPicker();
       const menu = document.createElement('div');
-      menu.className = 'entity-tag-picker entity-tag-input-wrap';
+      menu.className = 'entity-tag-picker';
       menu.innerHTML = `<input type="text" class="entity-tag-input" placeholder="${esc(t('addTagPlaceholder'))}" /><button type="button" class="entity-tag-add-btn" title="${esc(t('addButton'))}">&#8629;</button>`;
       document.body.appendChild(menu);
       const r = anchor.getBoundingClientRect();
