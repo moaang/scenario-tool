@@ -17487,7 +17487,7 @@
       const continuedLabel = block.overlayLabel || continuedOverlayLabelForBlock(block, pageNo);
       // 분류에 실패한 줄에는 이름표를 붙이지 않는다. 박스는 그대로 그려서 사람이 그 자리를
       // 보고 고칠 수 있게 두되, 이름이 없어야 「아직 못 정했다」가 화면에 그대로 드러난다.
-      const label = block.type === UNCLASSIFIED_BLOCK_TYPE ? '' : (continuedLabel || (isNote ? 'NOTE' : block.type === 'scene_heading' ? 'SCENE' : isDialog ? 'DIALOG' : block.type === 'end_marker' ? 'END' : isCast ? 'CAST' : (isBodyText || isFrontText) ? 'TEXT' : 'ACTION'));
+      const label = block.type === UNCLASSIFIED_BLOCK_TYPE ? '' : (continuedLabel || overlayLabelForBlock(block, { isNote, isDialog, isCast, isBodyText, isFrontText }));
       const continuedClass = continuedLabel && label ? ' continued' : '';
       const tools = label
         ? `<div class="pdf-overlay-tools"><span class="pdf-overlay-tag" title="${esc(label)}">${esc(label)}</span></div>`
@@ -17496,6 +17496,48 @@
         ${tools}
         <span class="pdf-overlay-resize" data-overlay-resize="${esc(block.id)}"></span>
       </div>`;
+    }
+
+    // 이름표는 **타입을 따라간다.** 예전에는 분기 몇 개로 적어서, 타입이 갈려도 이름표가 안 따라왔다
+    // — 파트 마커가 지문으로, 표지의 작품명·화수·차수가 전부 한 이름으로 그려졌다.
+    // 여기 없는 타입은 지문으로 떨어진다(본문 기본값).
+    const OVERLAY_TYPE_LABELS = Object.freeze({
+      scene_heading: 'SCENE',
+      section_marker: 'PART',
+      dialog: 'DIALOG',
+      monologue: 'DIALOG',
+      narration: 'DIALOG',
+      end_marker: 'END',
+      transition: 'ACTION',
+      sound_cue: 'ACTION',
+      cast_section: 'CAST',
+      cast_entry: 'CAST',
+      cast_note: 'CAST',
+      front_title: 'TITLE',
+      front_episode: 'EPISODE',
+      front_draft_status: 'DRAFT',
+      front_date: 'DATE',
+      front_writer: 'WRITER',
+      front_page_count_note: 'PAGES',
+      front_summary: 'NOTE',
+      body_text: 'TEXT',
+      text_insert: 'TEXT',
+      appendix_text: 'TEXT',
+      pdf_note: 'NOTE',
+      pdf_link: 'LINK',
+      revision_comment: 'NOTE',
+      technical_note: 'NOTE'
+    });
+
+    function overlayLabelForBlock(block, shape) {
+      const known = OVERLAY_TYPE_LABELS[block && block.type];
+      if (known) return known;
+      // 타입에 이름표가 없을 때만 겉모습으로 떨어진다(대사는 화자가 붙어 있으면 그것으로 안다).
+      if (shape && shape.isNote) return 'NOTE';
+      if (shape && shape.isDialog) return 'DIALOG';
+      if (shape && shape.isCast) return 'CAST';
+      if (shape && (shape.isBodyText || shape.isFrontText)) return 'TEXT';
+      return 'ACTION';
     }
 
     function hasUsablePdfOverlayRect(block, pageNo) {
