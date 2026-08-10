@@ -5779,7 +5779,6 @@
       if (!raw || charLen(raw) < 6) return false;
       if (lineIsScriptBlockBoundary(raw, profile, { end: false, strongBody: false, cast: true })) return false;
       if (/^(###|##|#)/.test(raw)) return false;
-      if (/^(検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成)$/.test(raw)) return false;
       if (/[。！？!?]$/.test(raw) && /(が|は|を|に|へ|で|と|から|まで|いる|くる|する|した|放つ|飛ばす|触れる|対峙|制圧|交換|詰まって)/.test(raw)) return true;
       if (/(犯人|大型バイク|視界|背後|格闘戦|サイボーグ)/.test(raw) && /[。！？!?]$/.test(raw)) return true;
       const actionSignals = workTermAlternation(WORK_TERMS.actionSignals);
@@ -6722,9 +6721,8 @@
       const clean = norm(name).replace(/\s+/g, '');
       if (!clean) return false;
       if (/^(?:男|女|母|父|兄|弟|姉|妹|犬|猫|客|兵|王|神|職員|記者|軍人|巫女|教師|先生|店員|警官|警備員|兵士|隊員|助祭|隊商|御者|野盗|農夫|老人|少年|少女|女性|男性|女子|男子|女の子|男の子|アナウンサー|ニュースキャスター|評論家|女性評論家|テック系ジャーナリスト)$/.test(clean)) return true;
-      if (/^(?:男|女|男性|女性|職員|記者|軍人|兵士|隊員|助祭|隊商|護衛騎兵|野盗|農夫|客|店員|女子ファン|男子ファン|クラスメイト|女性|男性)[A-ZＡ-Ｚ0-9０-９①-⑳]+$/.test(clean)) return true;
+      if (/^(?:男|女|男性|女性|職員|記者|軍人|兵士|隊員|助祭|隊商|護衛騎兵|野盗|農夫|客|店員|女子ファン|男子ファン|クラスメイト)[A-ZＡ-Ｚ0-9０-９①-⑳]+$/.test(clean)) return true;
       if (/^(?:職員|記者|軍人|兵士|隊員|助祭|隊商|護衛騎兵|野盗|農夫|客|店員|女子ファン|男子ファン|クラスメイト|犬)(?:たち|達|ら|一同|全員)$/.test(clean)) return true;
-      if (/^(?:女子ファンたち|クラスメイト達|犬たち)$/.test(clean)) return true;
       return false;
     }
 
@@ -6734,7 +6732,7 @@
       if (isNonSpeakerDialogHead(clean) || isInvalidDialogHeadShape(clean)) return false;
       if (/https?|www\.|\.html?|[＊*→↑<>#＃]/i.test(clean)) return false;
       if (/^\d{1,4}$|^\d{4}[./年-]/.test(clean)) return false;
-      if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|テロップ|字幕|ナレーション|ページ|話|稿|脚本|原作|監督|文芸|構成)$/i.test(clean)) return false;
+      if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|ナレーション|ページ|話|稿)$/i.test(clean)) return false;
       return /[\u3040-\u30ff\u3400-\u9fffA-Za-zＡ-Ｚａ-ｚ]/.test(clean);
     }
 
