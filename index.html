@@ -2817,18 +2817,12 @@
       ['project', '作品共通'],
       ['document', '文書別']
     ];
+    // 붙일 수 있는 태그. 표시할 말은 tagOptionLabel 이 정한다.
     const TAG_OPTIONS = [
-      ['source:cast-list', '登場人物欄'],
-      ['source:front-matter', '表紙/前付'],
-      ['source:scene', '場所/シーン'],
-      ['source:dialog', 'セリフ'],
-      ['source:inline-mention', '本文言及'],
-      ['source:manual', '手入力'],
-      ['role:main', '主要'],
-      ['role:support', '補助'],
-      ['role:mob', 'モブ'],
-      ['scope:project', '作品共通'],
-      ['scope:document', '文書別']
+      'source:cast-list', 'source:front-matter', 'source:scene', 'source:dialog',
+      'source:inline-mention', 'source:manual',
+      'role:main', 'role:support', 'role:mob',
+      'scope:project', 'scope:document'
     ];
 
     const UI_LANGUAGE_STORAGE_KEY = 'scenarioMaterialControlUiLanguage';
@@ -3882,7 +3876,7 @@
       return t(UI_LABEL_KEYS.type[type] || '') || type || '';
     }
 
-    function tagOptionLabel(value, fallback) {
+    function tagOptionLabel(value) {
       const raw = String(value || '');
       const map = {
         'source:cast-list': '登場人物欄',
@@ -3894,12 +3888,12 @@
         'role:main': '主要',
         'role:support': '補助',
         'role:mob': 'モブ',
-        'scope:project': 'scopeProject',
-        'scope:document': 'scopeDocument'
+        'scope:project': UI_LABEL_KEYS.scope.project,
+        'scope:document': UI_LABEL_KEYS.scope.document
       };
       const mapped = map[raw];
       if (mapped && UI_I18N.ko[mapped]) return t(mapped);
-      return mapped || fallback || raw;
+      return mapped || raw;
     }
 
     function renderStaticI18n() {
@@ -5034,8 +5028,7 @@
     function tagLabel(value) {
       const raw = String(value || '');
       if (/^time:/.test(raw)) return t('tagTimePrefix', { value: raw.replace(/^time:/, '') });
-      const found = TAG_OPTIONS.find(item => item[0] === raw);
-      return found ? tagOptionLabel(found[0], found[1]) : raw;
+      return TAG_OPTIONS.indexOf(raw) >= 0 ? tagOptionLabel(raw) : raw;
     }
 
     function settingClaimsForEntity(entityId) {
