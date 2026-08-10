@@ -14195,7 +14195,15 @@
       // 덮어쓰며 표지 한 장이 중간에 갈렸다. **확정이 하나면 잠금이라는 개념 자체가 필요 없다.**
       // 본문 분류(classifyTextToBlocks)도 같은 자를 쓴다.
       const foundReviewBodyStart = logicalPages.findIndex((page, index) => scenarioBodyStartsAtPage(logicalPages, index, profile));
-      const reviewBodyStartIndex = foundReviewBodyStart < 0 ? 0 : foundReviewBodyStart;
+      // **못 찾았다와 첫 장부터 본문이다는 다른 말이다.** 못 찾으면 0 으로 떨어뜨렸는데, 그러면
+      // 「표지보다 앞」이 되는 장이 하나도 없어 표지가 통째로 본문이 된다. 세로 조판에서 대사가
+      // 두 줄로 쪼개지면 본문 판정이 그 대사를 못 세어 어느 장도 본문으로 인정되지 않는다.
+      // 못 찾았으면 표지가 아닌 첫 장을 경계로 삼는다. 그것마저 없으면 전부 표지다.
+      const frontFallbackStart = logicalPages.findIndex((page, index) =>
+        !looksLikeFrontMatterPage(page.lines || [], page.pageNo || index + 1, profile));
+      const reviewBodyStartIndex = foundReviewBodyStart >= 0
+        ? foundReviewBodyStart
+        : (frontFallbackStart < 0 ? logicalPages.length : frontFallbackStart);
       let reviewBodyEnded = false;
       pages.forEach((page, pageIndex) => {
         const pageText = (page.lines || []).join('\n');
