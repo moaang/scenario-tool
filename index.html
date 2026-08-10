@@ -2941,7 +2941,6 @@
         exclude: '除外',
         sourceReviewTypeText: '一般テキスト',
         sourceReviewTypeCharacter: 'キャラクター',
-        sourceReviewTypeCharacterNote: 'キャラクター説明',
         sourceReviewTypeScene: '場所/シーン見出し',
         sourceReviewTypeDialog: 'セリフ',
         sourceReviewTypeAction: 'アクション/描写',
@@ -3269,7 +3268,6 @@
         exclude: '제외',
         sourceReviewTypeText: '일반 텍스트',
         sourceReviewTypeCharacter: '캐릭터',
-        sourceReviewTypeCharacterNote: '캐릭터 설명',
         sourceReviewTypeScene: '장소/신 헤더',
         sourceReviewTypeDialog: '대사',
         sourceReviewTypeAction: '액션/묘사',
@@ -3596,7 +3594,6 @@
         exclude: 'Exclude',
         sourceReviewTypeText: 'Text',
         sourceReviewTypeCharacter: 'Character',
-        sourceReviewTypeCharacterNote: 'Character Note',
         sourceReviewTypeScene: 'Place/Scene Heading',
         sourceReviewTypeDialog: 'Dialog',
         sourceReviewTypeAction: 'Action/Description',
@@ -3843,7 +3840,6 @@
       reviewType: {
         text: 'sourceReviewTypeText',
         character: 'sourceReviewTypeCharacter',
-        character_note: 'sourceReviewTypeCharacterNote',
         scene: 'sourceReviewTypeScene',
         dialog: 'sourceReviewTypeDialog',
         action: 'sourceReviewTypeAction',
@@ -5267,9 +5263,6 @@
     const SCENARIO_UNIT = Object.freeze({
       TEXT: 'text',
       CHARACTER: 'character',
-      // 등장인물 줄의 점선 뒤. 좌표가 아이템에 붙어 블록으로 복사되므로, 블록만 나누면
-      // 두 박스가 한 사각형을 물려받아 정확히 포개진다 — 나누는 자리는 여기다.
-      CHARACTER_NOTE: 'character_note',
       SCENE: 'scene',
       SCENE_HEADING: 'scene_heading',
       DIALOG: 'dialog',
@@ -5660,8 +5653,6 @@
     // 막아 주고 있어서 그 어긋남이 드러나지 않았을 뿐이다.
     // 표지 타입을 늘릴 자리는 classifyFront 이고, 늘렸으면 여기도 같이 늘린다.
     const CAST_BLOCK_TYPES = Object.freeze(['cast_entry', 'cast_section', 'cast_note']);
-    // 뗀 설명이라는 표시. 다는 쪽과 보는 쪽이 이 한 벌을 쓴다.
-    const CAST_DESCRIPTION_EVIDENCE = 'cast entry description';
     const FRONT_MATTER_BLOCK_TYPES = Object.freeze([
       'front_title', 'front_episode', 'front_draft_status', 'front_writer',
       'front_date', 'front_page_count_note', 'front_summary'
@@ -6548,38 +6539,10 @@
     // 통째로 빠진다. **장소는 이름 쪽에서만 본다.**
     // 「이름 + 점선 + 설명」을 가르는 자리는 하나다. 오래 이름 쪽만 썼는데 설명 쪽도 쓸 곳이 생겼다.
     const CAST_LINE_DESCRIPTION_LEADER = /[…‥]{2,}|\.{3,}/;
-    // 점선을 쓰지 않는 원고는 「이름（나이）설명」으로 붙여 쓴다. 괄호 안이 숫자나 물음표일
-    // 때만 나이로 본다 — 머리 모양이나 연기 지시가 든 괄호는 이름의 일부다.
-    const CAST_LINE_AGE_PAREN = /[（(][0-9０-９？?〜~\-–—]{1,6}[）)]/;
-
-    function castLineSplitParts(raw) {
-      const source = norm(raw);
-      const at = source.search(CAST_LINE_DESCRIPTION_LEADER);
-      if (at >= 0) {
-        return {
-          name: source.slice(0, at).trim() || source,
-          description: source.slice(at).replace(CAST_LINE_DESCRIPTION_LEADER, '').trim(),
-          // 좌표를 잡을 때만 쓴다. 점선은 설명의 내용이 아니지만 **자리는 설명 쪽**이다 —
-          // 빼고 잡으면 이름 칸과 설명 칸 사이가 빈 띠로 남는다.
-          descriptionSpan: source.slice(at)
-        };
-      }
-      // 나이 괄호 **뒤**가 설명이다. 나이 자체는 이름 쪽에 남긴다 — 캐릭터 속성으로 이미
-      // 뽑아 쓰고 있어서, 떼면 그 파싱이 근거를 잃는다.
-      const age = source.match(CAST_LINE_AGE_PAREN);
-      const afterAge = age ? source.slice(age.index + age[0].length).trim() : '';
-      if (afterAge) {
-        return {
-          name: source.slice(0, age.index + age[0].length).trim(),
-          description: afterAge,
-          descriptionSpan: afterAge
-        };
-      }
-      return { name: source, description: '', descriptionSpan: '' };
-    }
-
     function castLineNamePart(raw) {
-      return castLineSplitParts(raw).name;
+      const source = norm(raw);
+      const head = source.split(CAST_LINE_DESCRIPTION_LEADER)[0];
+      return String(head || '').trim() || source;
     }
 
     function castLineHasLocationSignal(raw) {
@@ -6918,9 +6881,6 @@
       (blocks || []).forEach((block, index) => {
         const text = norm(block.text || block.rawText || '');
         if (!text) return;
-        // 뗀 설명은 뗄 때 확정됐다. 여기서 다시 판정하면 표지의 이름 줄 연속에 휩쓸려
-        // 이름으로 되돌아간다 — 화면에서 나뉜 두 칸이 둘 다 CAST 로 나오던 것이 이것이다.
-        if (isSplitCastDescriptionBlock(block)) return;
         if (isCastSectionLine(text)) {
           inCast = true;
           seenCastSection = true;
@@ -7000,8 +6960,6 @@
       };
       (blocks || []).forEach((block, index) => {
         const text = norm(block.text || block.rawText || '');
-        // 뗀 설명은 이름 줄 사이에 낀다. 세지도 끊지도 않고 지나간다.
-        if (isSplitCastDescriptionBlock(block)) return;
         if (!text || Number(block.pageNo || 0) > 3 || block.type === 'scene_heading' || block.type === 'dialog' || block.zone === 'body') {
           flush();
           return;
@@ -12298,12 +12256,7 @@
       const next = (project.sourceBlocks || [])[blockIndex + 1];
       if (!next || next.pageNo !== block.pageNo || next.type === 'cast_entry' || next.zone === 'body') return '';
       const text = norm(next.text || next.rawText || '');
-      if (isSplitCastDescriptionBlock(next)) return text;
       return isFrontCharacterInfoLine(text) ? text : '';
-    }
-
-    function isSplitCastDescriptionBlock(block) {
-      return (block && block.meta && block.meta.evidence || []).includes(CAST_DESCRIPTION_EVIDENCE);
     }
 
     function attachCastNotesToCharacters(project) {
@@ -12320,7 +12273,7 @@
         }
         if (!lastEntity || block.type !== 'cast_note') return;
         const text = norm(block.text || block.rawText || '');
-        if (!isSplitCastDescriptionBlock(block) && !isFrontCharacterInfoLine(text) && !isCastDescriptionLine(text)) return;
+        if (!isFrontCharacterInfoLine(text) && !isCastDescriptionLine(text)) return;
         const claim = addClaim(project, lastEntity, 'confirmed_fact', '確認事項: ' + text, 'soft', [block.id]);
         if (claim) {
           lastEntity.fixedFactIds = uniq((lastEntity.fixedFactIds || []).concat(claim.id));
@@ -13093,7 +13046,6 @@
     const SOURCE_REVIEW_TYPES = [
       [SCENARIO_UNIT.TEXT, 'sourceReviewTypeText'],
       [SCENARIO_UNIT.CHARACTER, 'sourceReviewTypeCharacter'],
-      [SCENARIO_UNIT.CHARACTER_NOTE, 'sourceReviewTypeCharacterNote'],
       [SCENARIO_UNIT.SCENE, 'sourceReviewTypeScene'],
       [SCENARIO_UNIT.DIALOG, 'sourceReviewTypeDialog'],
       [SCENARIO_UNIT.ACTION, 'sourceReviewTypeAction'],
@@ -14139,11 +14091,7 @@
     // 간다 — 점선은 설명의 내용이 아니지만 **자리는 설명 쪽**이라, 빼고 잡으면 이름 칸과
     // 설명 칸 사이가 빈 띠로 남는다. 블록으로 갈 때 떼어낸다.
     function pushFrontCastItem(items, pageNo, text, orderRef) {
-      const parts = castLineSplitParts(text);
-      if (!parts.description) return pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER, pageNo, text, orderRef);
-      const nameItem = pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER, pageNo, parts.name, orderRef);
-      const noteItem = pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER_NOTE, pageNo, parts.descriptionSpan, orderRef);
-      return nameItem || noteItem;
+      return pushFrontSourceReviewItem(items, SCENARIO_UNIT.CHARACTER, pageNo, text, orderRef);
     }
 
     function pushFrontCastLines(items, pageNo, lines, orderRef) {
@@ -14880,9 +14828,8 @@
       const textItems = (pageItems || []).filter(item => item.type === 'text').map(sourceReviewItemText).filter(Boolean);
       const parts = ['###FRONT'];
       if (textItems.length) parts.push('##TEXT', '#TEXT', textItems.join('\n'));
-      (pageItems || []).filter(item => item.type === 'character' || item.type === SCENARIO_UNIT.CHARACTER_NOTE).forEach((item) => {
-        const token = item.type === SCENARIO_UNIT.CHARACTER_NOTE ? '##CASTDESC' : '##CAST';
-        parts.push('', token, token.replace('##', '#'), sourceReviewItemText(item));
+      (pageItems || []).filter(item => item.type === 'character').forEach((item) => {
+        parts.push('', '##CAST', '#CAST', sourceReviewItemText(item));
       });
       return parts.join('\n').trim();
     }
@@ -14989,9 +14936,6 @@
       }
       if (item.type === 'character') {
         return ['##CAST', '#CAST', sourceReviewItemText(item)].join('\n').trim();
-      }
-      if (item.type === SCENARIO_UNIT.CHARACTER_NOTE) {
-        return ['##CASTDESC', '#CASTDESC', sourceReviewItemText(item)].join('\n').trim();
       }
       if (item.type === 'note') {
         return ['##NOTE', '#NOTE', sourceReviewItemText(item)].join('\n').trim();
@@ -15145,8 +15089,6 @@
         item.age = profile.age || '';
         item.profile = Object.assign({}, profile);
         item.tags = ['character'].concat(characterProfileTags(profile));
-      } else if (safeType === SCENARIO_UNIT.CHARACTER_NOTE) {
-        item.tags = [SCENARIO_UNIT.CHARACTER_NOTE];
       } else if (safeType === 'dialog') {
         const dialog = parseDialog(rawText);
         const start = dialog ? null : parseDialogStart(rawText);
@@ -15364,7 +15306,6 @@
       if (raw === 'action') return t('tagAction');
       if (raw === 'scene') return t('tagScene');
       if (raw === 'character') return t('tagCharacter');
-      if (raw === SCENARIO_UNIT.CHARACTER_NOTE) return t('sourceReviewTypeCharacterNote');
       if (raw === 'end') return t('tagEnd');
       if (raw === 'note') return t('tagNote');
       if (raw === 'link') return t('tagLink');
@@ -15705,8 +15646,6 @@
       let fieldHtml = '';
       if (item.type === 'character') {
         fieldHtml = renderReviewCharacterItem(item);
-      } else if (item.type === SCENARIO_UNIT.CHARACTER_NOTE) {
-        fieldHtml = renderReviewField('CASTDESC', item.text || '');
       } else if (item.type === 'dialog') {
         fieldHtml = renderReviewDialogItem(item);
       } else if (item.type === 'scene') {
@@ -15834,7 +15773,6 @@
       if (item.type === 'end') return '##END';
       if (item.type === 'scene') return '##SCENE';
       if (item.type === 'character') return '##CAST';
-      if (item.type === SCENARIO_UNIT.CHARACTER_NOTE) return '##CASTDESC';
       if (item.type === 'note') return '##NOTE';
       if (item.type === 'link') return '##LINK';
       return '##TEXT';
@@ -16075,20 +16013,6 @@
             assignDefault: 'none',
             confidence: 0.86,
             evidence: ['source review pdf note']
-          });
-          return;
-        }
-        if (item.type === SCENARIO_UNIT.CHARACTER_NOTE) {
-          const raw = sourceReviewItemText(item);
-          pushBlock(item, castLineSplitParts(raw).description || raw, {
-            type: 'cast_note',
-            zone: 'cast_list',
-            characterName: '',
-            confidence: 0.88,
-            // 뗀 자리에서 남기는 표시다. 뗀 조각을 **검사로 다시 알아보려 하면 실패한다** —
-            // 문장부호도 신분 낱말도 없는 설명이 실제로 있고, 그런 조각은 검사를 통과하지 못해
-            // 그 인물의 설명이 통째로 사라진다. 붙이는 쪽은 이 표시를 먼저 본다.
-            evidence: (item.section === 'front' ? ['front cast'] : ['source review cast']).concat([CAST_DESCRIPTION_EVIDENCE])
           });
           return;
         }
