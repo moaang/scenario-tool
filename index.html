@@ -6533,10 +6533,21 @@
     // 등장인물 줄은 「이름…………설명」 꼴로 쓴다. 설명 쪽에는 그 인물이 어느 시기·어느 소속인지가
     // 들어가고 거기 장소말이 섞이는 일이 흔하다 — 줄 전체에서 장소를 찾으면 그 줄이 캐스트에서
     // 통째로 빠진다. **장소는 이름 쪽에서만 본다.**
-    function castLineNamePart(raw) {
+    // 「이름 + 점선 + 설명」을 가르는 자리는 하나다. 오래 이름 쪽만 썼는데 설명 쪽도 쓸 곳이 생겼다.
+    const CAST_LINE_DESCRIPTION_LEADER = /[…‥]{2,}|\.{3,}/;
+
+    function castLineSplitParts(raw) {
       const source = norm(raw);
-      const head = source.split(/[…‥]{2,}|\.{3,}/)[0];
-      return String(head || '').trim() || source;
+      const at = source.search(CAST_LINE_DESCRIPTION_LEADER);
+      if (at < 0) return { name: source, description: '' };
+      return {
+        name: source.slice(0, at).trim() || source,
+        description: source.slice(at).replace(CAST_LINE_DESCRIPTION_LEADER, '').trim()
+      };
+    }
+
+    function castLineNamePart(raw) {
+      return castLineSplitParts(raw).name;
     }
 
     function castLineHasLocationSignal(raw) {
@@ -12213,7 +12224,12 @@
       const next = (project.sourceBlocks || [])[blockIndex + 1];
       if (!next || next.pageNo !== block.pageNo || next.type === 'cast_entry' || next.zone === 'body') return '';
       const text = norm(next.text || next.rawText || '');
+      if (isSplitCastDescriptionBlock(next)) return text;
       return isFrontCharacterInfoLine(text) ? text : '';
+    }
+
+    function isSplitCastDescriptionBlock(block) {
+      return (block && block.meta && block.meta.evidence || []).includes('cast entry description');
     }
 
     function attachCastNotesToCharacters(project) {
@@ -12230,7 +12246,7 @@
         }
         if (!lastEntity || block.type !== 'cast_note') return;
         const text = norm(block.text || block.rawText || '');
-        if (!isFrontCharacterInfoLine(text) && !isCastDescriptionLine(text)) return;
+        if (!isSplitCastDescriptionBlock(block) && !isFrontCharacterInfoLine(text) && !isCastDescriptionLine(text)) return;
         const claim = addClaim(project, lastEntity, 'confirmed_fact', '確認事項: ' + text, 'soft', [block.id]);
         if (claim) {
           lastEntity.fixedFactIds = uniq((lastEntity.fixedFactIds || []).concat(claim.id));
@@ -15801,6 +15817,47 @@
       return raw || sourceReviewItemText(item);
     }
 
+    // 한 줄에서 두 블록이 나면 좌표도 나눠야 한다 — 안 나누면 두 박스가 정확히 포개져
+    // 아래 것이 안 보인다. 일본어 조판은 격자가 등폭이라 **글자 수 비율이 곧 길이 비율**이고,
+    // 세로쓰기는 위에서 아래로 읽으므로 앞 조각이 위를 갖는다.
+    function splitOverlayRectByCharRatio(rect, headChars, totalChars) {
+      const total = Number(totalChars) || 0;
+      const head = Number(headChars) || 0;
+      if (!rect || head <= 0 || head >= total) return null;
+      const ratio = head / total;
+      const vertical = rect.vertical != null
+        ? Boolean(rect.vertical)
+        : (Number(rect.height) || 0) > (Number(rect.width) || 0);
+      if (vertical) {
+        const height = Number(rect.height) || 0;
+        return {
+          head: Object.assign({}, rect, { height: height * ratio }),
+          tail: Object.assign({}, rect, { top: (Number(rect.top) || 0) + height * ratio, height: height * (1 - ratio) })
+        };
+      }
+      const width = Number(rect.width) || 0;
+      return {
+        head: Object.assign({}, rect, { width: width * ratio }),
+        tail: Object.assign({}, rect, { left: (Number(rect.left) || 0) + width * ratio, width: width * (1 - ratio) })
+      };
+    }
+
+    function splitCastBlockOverlayRects(nameBlock, noteBlock, headChars, totalChars) {
+      if (!nameBlock || !noteBlock) return;
+      const whole = splitOverlayRectByCharRatio(nameBlock.overlayRect, headChars, totalChars);
+      if (whole) {
+        nameBlock.overlayRect = whole.head;
+        noteBlock.overlayRect = whole.tail;
+      }
+      (nameBlock.pageSpans || []).forEach((span, index) => {
+        const part = splitOverlayRectByCharRatio(span && span.overlayRect, headChars, totalChars);
+        if (!part) return;
+        span.overlayRect = part.head;
+        const noteSpan = (noteBlock.pageSpans || [])[index];
+        if (noteSpan) noteSpan.overlayRect = part.tail;
+      });
+    }
+
     function sourceReviewItemsToBlocks(items, doc) {
       const blocks = [];
       let globalOrder = 0;
@@ -15852,6 +15909,7 @@
         if (item.pageSpans && item.pageSpans.length) block.pageSpans = cloneJson(item.pageSpans);
         block.reviewItemId = item.id || '';
         blocks.push(block);
+        return block;
       };
       (items || []).forEach((item) => {
         if (!item) return;
@@ -15869,18 +15927,32 @@
         }
         if (item.type === 'character') {
           const raw = sourceReviewItemText(item);
+          const parts = castLineSplitParts(raw);
           const profile = parseCharacterProfileFromCastText(raw, item.name);
-          pushBlock(item, raw, {
+          const castEvidence = item.section === 'front' ? ['front cast'] : ['source review cast'];
+          const nameBlock = pushBlock(item, parts.name, {
             type: 'cast_entry',
             zone: 'cast_list',
-            text: raw,
+            text: parts.name,
             characterName: item.name || profile.name || extractCastNames(raw)[0] || '',
             characterGender: item.gender || profile.gender || '',
             characterAge: item.age || profile.age || '',
             characterProfile: Object.assign({}, profile, item.profile || {}),
             confidence: 0.90,
-            evidence: item.section === 'front' ? ['front cast'] : ['source review cast']
+            evidence: castEvidence
           });
+          const noteBlock = parts.description ? pushBlock(item, parts.description, {
+            type: 'cast_note',
+            zone: 'cast_list',
+            text: parts.description,
+            characterName: '',
+            confidence: 0.88,
+            // 뗀 자리에서 남기는 표시다. 뗀 조각을 **검사로 다시 알아보려 하면 실패한다** —
+            // 문장부호도 신분 낱말도 없는 설명이 실제로 있고, 그런 조각은 검사를 통과하지 못해
+            // 그 인물의 설명이 통째로 사라진다. 붙이는 쪽은 이 표시를 먼저 본다.
+            evidence: castEvidence.concat(['cast entry description'])
+          }) : null;
+          if (nameBlock && noteBlock) splitCastBlockOverlayRects(nameBlock, noteBlock, charLen(parts.name), charLen(raw));
           return;
         }
         if (item.type === 'dialog') {
