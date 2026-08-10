@@ -13558,6 +13558,26 @@
       return pdfPageItemsForOverlayMatching({ lines, textItems: source });
     }
 
+    // 정규화는 글자 수를 바꾼다 — NFKC 가 「…」 하나를 점 셋으로 펼친다. 칸을 **정규화된**
+    // 글자 수로 나누면 한 칸이 실제보다 잘게 쪼개져, 이름 세 글자가 절반 크기로 잡힌다
+    // (실측: 점선이 없는 세 글자는 9.5, 점선이 뒤따르는 세 글자는 4.6 이었다).
+    // 그래서 정규화된 글자마다 **원본의 몇 번째에서 왔는지**를 들고 다니고, 칸은 원본 수로 나눈다.
+    function pdfNormalizedCharSourceIndexes(rawText, normalized) {
+      const raw = Array.from(String(rawText || ''));
+      const normalizedLength = Array.from(String(normalized || '')).length;
+      const out = [];
+      raw.forEach((ch, sourceIndex) => {
+        const count = Array.from(normalizePdfCompactTextPreserveMarks(ch)).length;
+        for (let i = 0; i < count; i += 1) out.push(sourceIndex);
+      });
+      if (out.length === normalizedLength) return out;
+      // 글자마다 정규화한 것이 통째로 정규화한 것과 어긋나면(앞머리를 떼는 규칙이 있다)
+      // 매핑을 믿을 수 없다. 그때는 균등하게 환산한다 — 칸 수는 여전히 원본 기준이다.
+      const total = Math.max(1, raw.length);
+      return new Array(normalizedLength).fill(0)
+        .map((value, index) => Math.min(total - 1, Math.floor(index * total / normalizedLength)));
+    }
+
     function createPdfItemTextMatcher(items, usedSet) {
       const sourceItems = stripPdfJsLineGuideNumberItems((items || []).filter(Boolean), items && items[0] && items[0].pageNo);
       const charItems = [];
@@ -13569,11 +13589,12 @@
         // 글자가 **그 아이템 안에서 몇 번째인지**를 같이 든다. 이것이 없으면 세 글자가 맞아도
         // 그 글자를 담은 아이템 전체의 사각형이 나온다 — 세로쓰기에서 한 아이템은 한 칸
         // 통째인 일이 흔해서, 이름만 맞춰도 이름+설명 전체를 감싸게 된다.
-        const own = Array.from(normalized).length;
+        const sources = pdfNormalizedCharSourceIndexes(item && item.text || '', normalized);
+        const own = Math.max(1, Array.from(String(item && item.text || '')).length);
         Array.from(normalized).forEach((ch, index) => {
           chars.push(ch);
           charItems.push(item);
-          charSlots.push({ item, index, total: own });
+          charSlots.push({ item, index: sources[index], total: own });
         });
       });
       return {
