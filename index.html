@@ -1336,6 +1336,10 @@
       box-shadow: inset 0 0 0 2px var(--focus);
     }
     /* Hide the debug tag/tools inside boxes in clean mode — tags are re-drawn cleanly below */
+    /* 같은 칸에 박스가 둘이면 아래 박스의 이름표를 아래로 내린다 — 위로 달면 그 이름표가
+       위 박스를 덮어, 위 박스가 없는 것처럼 보인다. */
+    .pdf-overlay-box.label-below .pdf-overlay-tools { bottom: auto; top: calc(100% + 2px); }
+
     .pdf-page-surface:not(.debug-mode) .pdf-overlay-tools { display: none; }
 
     /* Clean-mode group outline: soft, rounded, subtle tint by kind */
@@ -16965,6 +16969,7 @@
         : `<div class="pdf-text-fallback"><pre>${esc(previewText)}</pre></div>`;
       const debugMode = Boolean(state.pdfOverlayDebugMode);
       const modeClass = debugMode ? ' debug-mode' : '';
+      const labelBelowIds = overlayLabelBelowIds(doc, overlayBlocks);
       return `<div class="body-preview-workspace${modeClass}">
         <div class="script-page">
           <div class="card-head"><div class="card-title">${esc(t('tabScript'))} ・ Page ${esc(pageNo)}</div><div class="chips">${renderPageTags(pageBlocks)}</div></div>
@@ -16976,7 +16981,7 @@
                 <div id="pdfLayoutGuideLayer" class="pdf-layout-guide-layer" data-pdf-layout-guide-layer></div>
                 <div id="pdfOverlayLayer" class="pdf-overlay-layer" data-pdf-overlay-layer>
                   ${renderBodyOverlayGroups(doc, pageNo, overlayBlocks)}
-                  ${overlayBlocks.map((block, index) => renderBodyOverlayBox(doc, block, index, overlayBlocks.length)).join('')}
+                  ${overlayBlocks.map((block, index) => renderBodyOverlayBox(doc, block, index, overlayBlocks.length, labelBelowIds)).join('')}
                   <div id="pdfOverlaySelectionToolbar" class="pdf-overlay-selection-toolbar hidden"></div>
                 </div>
                 <div id="pdfFeedbackLayer" class="pdf-feedback-layer" data-pdf-feedback-layer></div>
@@ -17779,7 +17784,27 @@
       return top >= 88;
     }
 
-    function renderBodyOverlayBox(doc, block, index, total) {
+    // 이름표는 박스 위에 붙는다. 세로쓰기에서 한 칸이 이름과 설명으로 나뉘면 아래 박스의
+    // 이름표가 위 박스를 덮어 **위 박스가 없는 것처럼 보인다**. 위에 다른 박스를 이고 있는
+    // 쪽만 이름표를 아래로 내린다.
+    function overlayLabelBelowIds(doc, blocks) {
+      const source = blocks || [];
+      const rects = source.map(block => overlayRectForBlock(block, doc));
+      const out = new Set();
+      source.forEach((block, index) => {
+        const rect = rects[index];
+        if (!block || !rect) return;
+        const hasBoxAbove = rects.some((other, otherIndex) => {
+          if (otherIndex === index || !other) return false;
+          const sharedWidth = Math.min(other.left + other.width, rect.left + rect.width) - Math.max(other.left, rect.left);
+          return sharedWidth > Math.min(other.width, rect.width) * 0.5 && other.top < rect.top;
+        });
+        if (hasBoxAbove) out.add(block.id);
+      });
+      return out;
+    }
+
+    function renderBodyOverlayBox(doc, block, index, total, labelBelowIds) {
       const isNote = isPdfNoteOverlayBlock(block);
       const isDialog = !isNote && (block.type === 'dialog' || block.speaker);
       const isAppendixText = block.type === 'appendix_text';
@@ -17806,10 +17831,11 @@
       // 보고 고칠 수 있게 두되, 이름이 없어야 「아직 못 정했다」가 화면에 그대로 드러난다.
       const label = block.type === UNCLASSIFIED_BLOCK_TYPE ? '' : (continuedLabel || overlayLabelForBlock(block, { isNote, isDialog, isCast, isBodyText, isFrontText }));
       const continuedClass = continuedLabel && label ? ' continued' : '';
+      const labelBelowClass = labelBelowIds && labelBelowIds.has(block.id) ? ' label-below' : '';
       const tools = label
         ? `<div class="pdf-overlay-tools"><span class="pdf-overlay-tag" title="${esc(label)}">${esc(label)}</span></div>`
         : '';
-      return `<div class="pdf-overlay-box ${esc(typeClass)}${verticalClass}${continuedClass} ${state.selectedBlockId === block.id ? 'selected' : ''}" data-overlay-block="${esc(block.id)}" data-overlay-page-no="${esc(pageNo)}" data-overlay-continued-from="${esc(block.continuedFromPageNo || '')}" style="${style}">
+      return `<div class="pdf-overlay-box ${esc(typeClass)}${verticalClass}${continuedClass}${labelBelowClass} ${state.selectedBlockId === block.id ? 'selected' : ''}" data-overlay-block="${esc(block.id)}" data-overlay-page-no="${esc(pageNo)}" data-overlay-continued-from="${esc(block.continuedFromPageNo || '')}" style="${style}">
         ${tools}
         <span class="pdf-overlay-resize" data-overlay-resize="${esc(block.id)}"></span>
       </div>`;
