@@ -13559,18 +13559,25 @@
     function createPdfItemTextMatcher(items, usedSet) {
       const sourceItems = stripPdfJsLineGuideNumberItems((items || []).filter(Boolean), items && items[0] && items[0].pageNo);
       const charItems = [];
+      const charSlots = [];
       const chars = [];
       sourceItems.forEach((item) => {
         const normalized = normalizePdfCoordinateMatchText(item && item.text || '');
         if (!normalized) return;
-        Array.from(normalized).forEach((ch) => {
+        // 글자가 **그 아이템 안에서 몇 번째인지**를 같이 든다. 이것이 없으면 세 글자가 맞아도
+        // 그 글자를 담은 아이템 전체의 사각형이 나온다 — 세로쓰기에서 한 아이템은 한 칸
+        // 통째인 일이 흔해서, 이름만 맞춰도 이름+설명 전체를 감싸게 된다.
+        const own = Array.from(normalized).length;
+        Array.from(normalized).forEach((ch, index) => {
           chars.push(ch);
           charItems.push(item);
+          charSlots.push({ item, index, total: own });
         });
       });
       return {
         text: chars.join(''),
         charItems,
+        charSlots,
         usedSet: usedSet || new Set()
       };
     }
@@ -13594,7 +13601,8 @@
       ranges.slice(0, 36).forEach((range) => {
         const items = uniquePdfItemsForCharRange(matcher.charItems, range.start, range.end);
         if (!items.length) return;
-        const rect = rectForPdfMatchedItems(items);
+        const boxes = pdfMatchedCharBoxes(matcher.charSlots, range.start, range.end);
+        const rect = rectForPdfMatchedItems(boxes.length ? boxes : items);
         if (!rect || isSuspiciousPdfMatchRect(rect, target, items)) return;
         const usedCount = items.filter(item => matcher.usedSet && matcher.usedSet.has(pdfTextItemKey(item))).length;
         const score = usedCount * 10000 + Math.abs((range.end - range.start) - target.length) * 10 + range.start / 100000;
@@ -13751,6 +13759,22 @@
         if (!item || seen.has(key)) continue;
         seen.add(key);
         out.push(item);
+      }
+      return out;
+    }
+
+    function pdfMatchedCharBoxes(charSlots, start, end) {
+      const source = charSlots || [];
+      const out = [];
+      const seen = new Set();
+      for (let i = Math.max(0, start); i < Math.min(end, source.length); i += 1) {
+        const slot = source[i];
+        if (!slot || !slot.item) continue;
+        const key = pdfTextItemKey(slot.item) + '#' + slot.index;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const box = pdfItemGlyphSlot(slot.item, slot.index, slot.total);
+        out.push(box ? Object.assign({}, slot.item, box) : slot.item);
       }
       return out;
     }
