@@ -6517,35 +6517,75 @@
       if (!source) return false;
       return /換算/.test(source) && /[0-9一二三四五六七八九十百千]+枚/.test(source);
     }
+    // 등장인물 줄은 「이름…………설명」 꼴로 쓴다. 설명 쪽에는 그 인물이 어느 시기·어느 소속인지가
+    // 들어가고 거기 장소말이 섞이는 일이 흔하다 — 줄 전체에서 장소를 찾으면 그 줄이 캐스트에서
+    // 통째로 빠진다. **장소는 이름 쪽에서만 본다.**
+    function castLineNamePart(raw) {
+      const source = norm(raw);
+      const head = source.split(/[…‥]{2,}|\.{3,}/)[0];
+      return String(head || '').trim() || source;
+    }
+
+    function castLineHasLocationSignal(raw) {
+      return hasLocationSignal(castLineNamePart(raw));
+    }
+
     function isLikelyCastEntryLine(raw, profile) {
       const source = norm(raw);
       if (!source || isCastSectionLine(source) || parseDialog(source, profile)) return false;
-      if (hasLocationSignal(source)) return false;
+      if (castLineHasLocationSignal(source)) return false;
       if (/^[○●◯〇◎□■△▲▽▼]\s*[^。！？「」『』]{1,60}[（(]\s*[）)]/.test(source)) return true;
       if (/^[○●◯〇◎□■△▲▽▼]\s*[^。！？「」『』]{1,60}(?:[（(][0-9０-９?？一二三四五六七八九十]{1,4}[）)]|[（(]?[男女][）)]?|男性|女性|男|女|主人公|貴族|軍人|故人|隊長|老人|若者|研究者|旅人|リーダー|セリフあり|セリフなし|二〇代|三〇代|四〇代|五〇代|六〇代|七〇代)/.test(source)) return true;
       if (/^[▼▽◆◇]\s*\S+/.test(source)) return true;
       return false;
     }
+    // 등장인물 한 항목은 「이름 줄 + 설명 몇 줄」이다. 어디서 끊는지를 두 곳이 각자 적고 있어
+    // 조건이 갈렸다 — 여기 한 벌만 둔다. 다음 줄이 **그 자체로 이름 줄이면 붙이지 않는다**.
+    function collectCastEntryLines(lines, startIndex, profile, options) {
+      const opts = options || {};
+      const collected = [lines[startIndex]];
+      let index = startIndex;
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1];
+        if (!next) { index += 1; continue; }
+        if (isBodyReviewStartLine(next, profile) || isCastSectionLine(next) || isCastGroupMarkerLine(next)
+          || isLikelyCastEntryLine(next, profile) || isExplicitCastListNameLine(next, profile)) break;
+        const frontContinuation = Boolean(opts.frontContinuation) && collected.length < 6 && charLen(next) <= 120;
+        if (frontContinuation || isCastDescriptionLine(next, profile)
+          || (!castLineHasLocationSignal(next) && collected.length < 5 && charLen(next) <= 90)) {
+          collected.push(next);
+          index += 1;
+          continue;
+        }
+        break;
+      }
+      return { lines: collected, endIndex: index };
+    }
+
     function isExplicitCastListNameLine(raw, profile) {
       const source = norm(raw);
       if (!source || charLen(source) > 42) return false;
       if (isCastSectionLine(source) || isCastGroupMarkerLine(source) || isRevisionLine(source)) return false;
       if (isBodyReviewStartLine(source, profile) || parseDialog(source, profile)) return false;
-      if (hasLocationSignal(source)) return false;
+      if (castLineHasLocationSignal(source)) return false;
       if (/^(?:ほか|その他|他|その他一同|ほか一同)$/.test(source)) return false;
       if (/^(?:検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成)$/i.test(source)) return false;
       if (/第|話|稿|脚本|原作|監督|文芸|構成|ペラ|換算|枚|ページ/i.test(source)) return false;
       if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(source)) return false;
       if (/^[【\[][^】\]]+[】\]]$/.test(source)) return false;
-      if (/[、，。！？!?「」『』]|──|…/.test(source)) return false;
-      const names = extractCastNames(source);
-      return names.length === 1;
+      // 점선으로 이름과 설명을 잇는 것은 각본에서 가장 흔한 등장인물 표기다. 그 점선을
+      // 말줄임표로 보고 거부하면 그렇게 쓴 줄이 통째로 캐스트에서 빠진다(실측: 열두 명 중 셋).
+      // **점선으로 갈리면 이름 쪽만 보고 판정한다.** 갈리지 않으면 예전처럼 말줄임표로 본다.
+      const namePart = castLineNamePart(source);
+      if (/[、，。！？!?「」『』]|──/.test(namePart)) return false;
+      if (namePart === source && /…/.test(source)) return false;
+      return extractCastNames(namePart).length === 1;
     }
     function isCastDescriptionLine(raw, profile) {
       const source = norm(raw);
       if (!source || charLen(source) > 140) return false;
       if (isCastSectionLine(source) || isLikelyCastEntryLine(source, profile) || isSceneHeading(source, profile) || parseDialog(source, profile)) return false;
-      if (hasLocationSignal(source)) return false;
+      if (castLineHasLocationSignal(source)) return false;
       return /[。！？、，]|主人公|自由市民|貴族|軍人|故人|副官|司教|総主教|隊長|老人|若者|研究者|旅人|リーダー|巫女|暗殺者|間者|世話人|男|女|男性|女性/.test(source);
     }
     function isSceneHeading(raw, profile) {
@@ -14023,20 +14063,9 @@
             }
             if ((inCast || page.pageNo <= 3) && isLikelyCastEntryLine(raw, profile) && !isCastGroupMarkerLine(raw)) {
               flushText();
-              const charLines = [raw];
-              while (index + 1 < lines.length) {
-                const next = lines[index + 1];
-                if (!next) { index += 1; continue; }
-                if (isBodyReviewStartLine(next, profile) || isCastSectionLine(next) || isCastGroupMarkerLine(next) || isLikelyCastEntryLine(next, profile)) break;
-                const frontContinuation = reviewFrontOpen && charLines.length < 6 && charLen(next) <= 120;
-                if (frontContinuation || isCastDescriptionLine(next, profile) || (!hasLocationSignal(next) && charLines.length < 5 && charLen(next) <= 90)) {
-                  charLines.push(next);
-                  index += 1;
-                  continue;
-                }
-                break;
-              }
-              pushFrontCastItem(items, page.pageNo, charLines.join('\n'), orderRef);
+              const collected = collectCastEntryLines(lines, index, profile, { frontContinuation: reviewFrontOpen });
+              index = collected.endIndex;
+              pushFrontCastItem(items, page.pageNo, collected.lines.join('\n'), orderRef);
               continue;
             }
             appendBuffered('text', raw);
@@ -14059,19 +14088,9 @@
           }
           if ((inCast || page.pageNo <= 2) && isLikelyCastEntryLine(raw, profile) && !isCastGroupMarkerLine(raw)) {
             flushText();
-            const charLines = [raw];
-            while (index + 1 < lines.length) {
-              const next = lines[index + 1];
-              if (!next) { index += 1; continue; }
-              if (isCastSectionLine(next) || isCastGroupMarkerLine(next) || isLikelyCastEntryLine(next, profile) || isStrongBodyStart(next, profile) || isSceneHeading(next, profile) || parseDialog(next, profile)) break;
-              if (isCastDescriptionLine(next, profile) || (!hasLocationSignal(next) && charLines.length < 5 && charLen(next) <= 90)) {
-                charLines.push(next);
-                index += 1;
-                continue;
-              }
-              break;
-            }
-            pushSourceReviewItem(items, 'character', page.pageNo, charLines.join('\n'), orderRef);
+            const collected = collectCastEntryLines(lines, index, profile, {});
+            index = collected.endIndex;
+            pushSourceReviewItem(items, 'character', page.pageNo, collected.lines.join('\n'), orderRef);
             continue;
           }
           if (parseDialog(raw, profile)) {
