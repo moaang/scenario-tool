@@ -2737,6 +2737,15 @@
     // 일반해가 아니다(다른 임계 1.18·1.2·1.35·1.8·2.2 가 각자 다른 판정에 쓰인다).
     const OVERLAY_VERTICAL_ASPECT = 1.25;
 
+    // 표지에 적히는 낱말 두 갈래의 정본. 한쪽은 원고가 어느 단계인지를,
+    // 다른 쪽은 누가 만들었는지를 적는다 — 같은 줄에 오지만 분류가 다르다.
+    const DRAFT_STATUS_WORDS = ['検討稿', '決定稿', '初稿', '改稿', '修正稿', '準備稿', '完成稿', 'コメント版', '文芸整理済'];
+    const CREDIT_ROLE_WORDS = ['脚本', '原作', '監督', '文芸', '構成'];
+    const DRAFT_STATUS_ALT = DRAFT_STATUS_WORDS.join('|');
+    const CREDIT_ROLE_ALT = CREDIT_ROLE_WORDS.join('|');
+    // 줄 전체가 이 낱말 하나뿐 — 인물도 화자도 아니고 표지의 항목이다.
+    const FRONT_MATTER_WORD_ONLY_RE = new RegExp('^(?:' + DRAFT_STATUS_ALT + '|' + CREDIT_ROLE_ALT + ')$', 'i');
+
     const APP_VERSION = 'ver075';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -5565,7 +5574,7 @@
       if (/^(?:第)?[0-9一二三四五六七八九十百千]+話$/i.test(compact)) return true;
       if (/^[#＃][0-9一二三四五六七八九十百千]+$/i.test(compact)) return true;
       if (/^(?:EP|EPI|EPISODE|エピソード|話数|サブタイトル|タイトル)[0-9一二三四五六七八九十百千]*$/i.test(compact)) return true;
-      if (/^(?:検討稿|決定稿|初稿|改稿|修正稿|準備稿|完成稿|脚本|原作|監督|文芸|構成)$/i.test(compact)) return true;
+      if (FRONT_MATTER_WORD_ONLY_RE.test(compact)) return true;
       // 접속사·부사는 인물이 아니다. 지문이 이런 말로 시작하고 뒤에 인용부호가 오면
       // 그 말이 화자로 등록된다(실측에서 「また」 가 등장인물 목록에 올라 있었다).
       if (/^(?:また|そして|しかし|だが|でも|やがて|すると|つまり|なお|ただし|一方|同時に|直後|直前|やはり|さらに|ところが|そこで|それから|その後|以下|以上)$/.test(compact)) return true;
@@ -5765,7 +5774,9 @@
       if (scenarioPageLooksLikeBody(source, profile)) return false;
       if (head.some(isCastSectionLine)) return true;
       const actionSignals = source.filter(line => isLikelyActionNarrativeLine(line, profile)).length;
-      const explicitFront = head.some(line => /検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成|登場人物|キャラクター|CAST|第\s*[0-9０-９一二三四五六七八九十]+\s*話/.test(line));
+      const frontWordRe = new RegExp(DRAFT_STATUS_ALT + '|' + CREDIT_ROLE_ALT + '|登場人物|キャラクター|CAST');
+      const explicitFront = head.some(line => frontWordRe.test(line)
+        || /第\s*[0-9０-９一二三四五六七八九十]+\s*話/.test(line));
       if (actionSignals >= 2 && !explicitFront) return false;
       const frontSignals = head.filter((line, index) => frontScore(line, pageNo || 1, index, profile) >= 6).length;
       return frontSignals >= 2;
@@ -6378,8 +6389,8 @@
       if (isCastSectionLine(raw)) return castSectionClassification();
       let type = 'front_title';
       if (/第\s*[0-9０-９一二三四五六七八九十]+\s*話|#\s*[0-9０-９]+/.test(raw)) type = 'front_episode';
-      else if (/検討稿|決定稿|初稿|改稿|修正稿|コメント版|文芸整理済|稿/.test(raw)) type = 'front_draft_status';
-      else if (/脚本|文芸|構成|Writer|監督|原作/.test(raw)) type = 'front_writer';
+      else if (new RegExp(DRAFT_STATUS_ALT + '|稿').test(raw)) type = 'front_draft_status';
+      else if (new RegExp(CREDIT_ROLE_ALT + '|Writer').test(raw)) type = 'front_writer';
       else if (/\d{4}[./年]\d{1,2}|\d{6}/.test(raw)) type = 'front_date';
       else if (/ペラ|二百字換算|八百字換算|枚/.test(raw)) type = 'front_page_count_note';
       else if (/※|＊|テーマ|メモ/.test(raw)) type = 'front_summary';
@@ -6418,8 +6429,8 @@
     function frontScore(raw, pageNo, lineIndex, profile) {
       let score = 0;
       if (pageNo <= 2) score += 5;
-      if (/検討稿|決定稿|初稿|2稿|２稿|改稿|修正稿|コメント版|文芸整理済/.test(raw)) score += 4;
-      if (/脚本|文芸|構成|Writer|監督|原作/.test(raw)) score += 4;
+      if (new RegExp(DRAFT_STATUS_ALT + '|[2２]稿').test(raw)) score += 4;
+      if (new RegExp(CREDIT_ROLE_ALT + '|Writer').test(raw)) score += 4;
       if (/第\s*[0-9０-９一二三四五六七八九十]+\s*話|#\s*[0-9０-９]+|「.+」/.test(raw) && lineIndex < 8) score += 3;
       if (/\d{4}[./年]\d{1,2}|\d{6}/.test(raw)) score += 3;
       if (/ペラ|二百字換算|八百字換算|枚/.test(raw)) score += 3;
@@ -6580,7 +6591,7 @@
       if (isBodyReviewStartLine(source, profile) || parseDialog(source, profile)) return false;
       if (castLineHasLocationSignal(source)) return false;
       if (/^(?:ほか|その他|他|その他一同|ほか一同)$/.test(source)) return false;
-      if (/^(?:検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成)$/i.test(source)) return false;
+      if (FRONT_MATTER_WORD_ONLY_RE.test(source)) return false;
       if (/第|話|稿|脚本|原作|監督|文芸|構成|ペラ|換算|枚|ページ/i.test(source)) return false;
       if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(source)) return false;
       if (/^[【\[][^】\]]+[】\]]$/.test(source)) return false;
@@ -6973,7 +6984,7 @@
       if (!isFrontCastLine(raw, index, pageNo)) return false;
       if (isCastSectionLine(raw) || isSectionMarkerLine(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
       if (/^[○●◯〇◎□■△▲▽▼]\s*\S+/.test(raw)) return false;
-      if (/^(?:検討稿|決定稿|初稿|改稿|修正稿|脚本|原作|監督|文芸|構成)$/i.test(raw)) return false;
+      if (FRONT_MATTER_WORD_ONLY_RE.test(raw)) return false;
       if (/[、，。！？!?「」『』]|──|…/.test(raw)) return false;
       if (/[がをにではもとへ]$/.test(raw)) return false;
       const names = extractCastNames(raw);
@@ -11062,8 +11073,8 @@
       const patterns = [
         /登場人物|登場キャラ|キャラクター|CAST|モブキャラクター/g,
         /第\s*[0-9０-９一二三四五六七八九十]+\s*話|[0-9０-９]+\s*話/g,
-        /決定稿|検討稿|初稿|改稿|修正稿|コンテ/g,
-        /脚本|原作|監督|文芸|構成/g,
+        new RegExp(DRAFT_STATUS_ALT + '|コンテ', 'g'),
+        new RegExp(CREDIT_ROLE_ALT, 'g'),
         /[○●◯〇◎□■△▲▽▼]\s*[\u3040-\u30ff\u3400-\u9fffァ-ヴ]/g,
         /「[^」]{2,}」|『[^』]{2,}』/g
       ];
@@ -15420,7 +15431,7 @@
         if (charLen(raw) < 2 || charLen(raw) > 28) return;
         if (/^[0-9０-９]+$/.test(raw)) return;
         if (/^(?:SCENE|ACTION|DIALOG|TEXT|CAST|END|NOTE|LINK|FRONT)$/i.test(raw)) return;
-        if (/^(?:検討稿|決定稿|脚本|原作|監督|文芸|構成|ページ|換算|つづく)$/.test(raw)) return;
+        if (FRONT_MATTER_WORD_ONLY_RE.test(raw) || /^(?:ページ|換算|つづく)$/.test(raw)) return;
         found.push(raw);
       };
       (draft && draft.items || []).forEach((item) => {
