@@ -19038,7 +19038,7 @@
       // colour-independent (NOT filtered by isPdfJsOverlayLineColorNote).
       const bodyRegionItems = all.filter(inBody);
       const groups = pdfLayoutGuideLineGroupsForPage(doc, bodyRegionItems, pageNo, range);
-      const split = splitPdfGuideLinesForOverlayMatching(groups.regionLines || groups.bodyLines || []);
+      const split = splitPdfGuideLinesForOverlayMatching(groups.regionLines);
       let noteLines = split.noteLines;
       // Out-of-body glyphs (top margin above the top-line, or below the cut-line) →
       // one orientation-aware synthesiser (handles both vertical and horizontal notes).
@@ -21767,8 +21767,8 @@
       const conteType = conteExportBlockType(block);
       if (!conteType) return false;
       if (['page_metadata', 'front_matter', 'cast_list', 'body_end'].includes(block.zone)) return false;
-      if (FRONT_AND_CAST_BLOCK_TYPES.includes(block.type)) return false;
-      if (['pdf_note', 'pdf_link', 'end_marker'].includes(block.type)) return false;
+      // 무엇을 내보내는가는 conteExportBlockType 의 허용 목록 하나가 정한다 — 표지·등장인물·
+      // 주석·링크·끝표시는 그 목록에 없어 위에서 이미 빈 타입으로 떨어진다(전 타입 실행 확인).
       const text = String(block.text || block.normalizedText || block.rawText || '').trim();
       if (!text) return false;
       return block.zone === 'body' || Boolean(block.assignableToCut);
