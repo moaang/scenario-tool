@@ -7228,6 +7228,10 @@
       });
       const actionBlock = Object.assign({}, block, {
         id: block.id + '-action-tail',
+        // 리뷰 아이템은 씬 머리와 이 지문을 **한 줄로** 담고 있다. 그 id 를 물려받으면 두
+        // 블록이 같은 아이템을 찾아 같은 사각형을 받고, 좌표를 되돌려 쓸 때도 서로 덮는다.
+        // 떼어 낸 쪽은 아이템을 대표하지 않으므로 id 를 비우고 자기 텍스트로 자리를 찾는다.
+        reviewItemId: '',
         rawText: split.actionText,
         text: split.actionText,
         normalizedText: norm(split.actionText),
