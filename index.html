@@ -13622,12 +13622,12 @@
       if (!ranges.length) return null;
       let best = null;
       ranges.slice(0, 36).forEach((range) => {
-        const items = uniquePdfItemsForCharRange(matcher.charItems, range.start, range.end);
+        const parts = pdfMatchSpanParts(matcher, range.start, range.end);
+        const items = parts.items;
         if (!items.length) return;
-        const boxes = pdfMatchedCharBoxes(matcher.charSlots, range.start, range.end);
-        const rect = rectForPdfMatchedItems(boxes.length ? boxes : items);
+        const rect = rectForPdfMatchedItems(parts.boxes.length ? parts.boxes : items);
         if (!rect || isSuspiciousPdfMatchRect(rect, target, items)) return;
-        const slotKeys = pdfMatchSlotKeys(matcher.charSlots, range.start, range.end);
+        const slotKeys = parts.slotKeys;
         // 쓴 자리는 **글자 단위**로 센다. 아이템 단위로 세면 이름 세 글자가 칸 전체를
         // 잡아먹어, 같은 칸의 설명이 남은 글자를 못 쓰고 엉뚱한 칸으로 밀린다.
         const usedCount = slotKeys.length
@@ -13778,30 +13778,45 @@
       }
     }
 
-    function uniquePdfItemsForCharRange(charItems, start, end) {
-      const out = [];
-      const seen = new Set();
-      for (let i = Math.max(0, start); i < Math.min(end, charItems.length); i += 1) {
-        const item = charItems[i];
-        const key = pdfTextItemKey(item);
-        if (!item || seen.has(key)) continue;
-        seen.add(key);
-        out.push(item);
-      }
-      return out;
-    }
-
     function pdfMatchSlotKey(slot) {
       return pdfTextItemKey(slot && slot.item) + '#' + (slot && slot.index);
     }
 
-    function pdfMatchSlotKeys(charSlots, start, end) {
-      const source = charSlots || [];
-      const out = [];
-      for (let i = Math.max(0, start); i < Math.min(end, source.length); i += 1) {
-        if (source[i] && source[i].item) out.push(pdfMatchSlotKey(source[i]));
+    // 맞은 구간 하나에서 필요한 것은 셋이다 — 의심 판정에 쓸 아이템, 사각형을 만들 글자 칸,
+    // 쓴 자리를 표시할 칸 키. 셋을 각자 모으면 같은 구간을 세 번 돈다.
+    function pdfMatchSpanParts(matcher, start, end) {
+      const charItems = matcher && matcher.charItems || [];
+      const charSlots = matcher && matcher.charSlots || [];
+      const items = [];
+      const boxes = [];
+      const slotKeys = [];
+      const seenItem = new Set();
+      const seenSlot = new Set();
+      const to = Math.min(end, Math.max(charItems.length, charSlots.length));
+      for (let i = Math.max(0, start); i < to; i += 1) {
+        const item = charItems[i];
+        if (item && !seenItem.has(pdfTextItemKey(item))) {
+          seenItem.add(pdfTextItemKey(item));
+          items.push(item);
+        }
+        const slot = charSlots[i];
+        if (!slot || !slot.item) continue;
+        const slotKey = pdfMatchSlotKey(slot);
+        slotKeys.push(slotKey);
+        if (seenSlot.has(slotKey)) continue;
+        seenSlot.add(slotKey);
+        const box = pdfItemGlyphSlot(slot.item, slot.index, slot.total);
+        if (!box) {
+          boxes.push(slot.item);
+          continue;
+        }
+        const shaped = Object.assign({}, slot.item, box);
+        if (shaped.pdfGuideLineRect) {
+          shaped.pdfGuideLineRect = pdfGuideLineRectForCharSlot(shaped.pdfGuideLineRect, slot.index, slot.total);
+        }
+        boxes.push(shaped);
       }
-      return out;
+      return { items, boxes, slotKeys };
     }
 
     // 세로 칸의 괘선 사각형도 글자 단위로 자른다. **이것을 안 자르면 글자로 좁힌 것이
@@ -13814,30 +13829,6 @@
         top: (Number(rect.top) || 0) + slot.start,
         height: slot.length
       });
-    }
-
-    function pdfMatchedCharBoxes(charSlots, start, end) {
-      const source = charSlots || [];
-      const out = [];
-      const seen = new Set();
-      for (let i = Math.max(0, start); i < Math.min(end, source.length); i += 1) {
-        const slot = source[i];
-        if (!slot || !slot.item) continue;
-        const key = pdfMatchSlotKey(slot);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const box = pdfItemGlyphSlot(slot.item, slot.index, slot.total);
-        if (!box) {
-          out.push(slot.item);
-          continue;
-        }
-        const shaped = Object.assign({}, slot.item, box);
-        if (shaped.pdfGuideLineRect) {
-          shaped.pdfGuideLineRect = pdfGuideLineRectForCharSlot(shaped.pdfGuideLineRect, slot.index, slot.total);
-        }
-        out.push(shaped);
-      }
-      return out;
     }
 
     function rectForPdfMatchedItems(items) {
