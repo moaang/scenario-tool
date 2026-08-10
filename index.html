@@ -9164,7 +9164,7 @@
         text: normalizePdfJapaneseInlineSpacing(clean.map(item => item.text).join('').replace(/\s+/g, ' ').trim()),
         items: clean,
         pageNo: clean[0] && clean[0].pageNo || 0,
-        visualGroupKey: pdfJsTextItemVisualGroupKey(clean[0]),
+        visualGroupKey: pdfOverlayLineVisualGroupKey(clean),
         compactOverlayRect: compactRect,
         overlayRect: compactRect
       };
@@ -9441,7 +9441,7 @@
         text: normalizePdfJapaneseInlineSpacing(textItems.map(item => item.text).join('').replace(/\s+/g, ' ').trim()),
         items: textItems,
         pageNo: clean[0] && clean[0].pageNo || 0,
-        visualGroupKey: pdfJsTextItemVisualGroupKey(clean[0]),
+        visualGroupKey: pdfOverlayLineVisualGroupKey(clean),
         compactOverlayRect: compactRect,
         // compactPdfItemUnionRect 가 null 을 주는 건 clean 이 빌 때뿐이고,
         // 그때는 어떤 폴백도 빈 배열을 받아 null 이 된다.
@@ -9504,6 +9504,27 @@
 
     function pdfScenarioSyntaxScore(lines) {
       return (lines || []).reduce((sum, line) => sum + pdfVerticalLineDirectionScore(line), 0);
+    }
+
+    // 한 줄의 색은 **글자 수가 가장 많은 색**이다. 문장 앞 몇 글자만 칠해 둔 자리가 있어서
+    // (실측: 세 글자가 파랑, 이어지는 열여섯 글자가 검정), 첫 아이템만 보면 그 세 글자가
+    // 줄 전체를 주석으로 끌고 간다 — 화면에는 검은 지문인데 앱은 주석이라 부르게 된다.
+    // 중립색은 빈 키라서, 본문이 다수인 줄은 그대로 본문으로 남는다.
+    function pdfOverlayLineVisualGroupKey(items) {
+      const clean = (items || []).filter(Boolean);
+      if (!clean.length) return '';
+      const weights = new Map();
+      clean.forEach((item) => {
+        const key = pdfJsTextItemVisualGroupKey(item);
+        const count = Math.max(1, Array.from(String(item.text || '')).length);
+        weights.set(key, (weights.get(key) || 0) + count);
+      });
+      let best = '';
+      let bestCount = -1;
+      weights.forEach((count, key) => {
+        if (count > bestCount) { best = key; bestCount = count; }
+      });
+      return best;
     }
 
     function pdfJsTextItemVisualGroupKey(item) {
