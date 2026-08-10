@@ -646,7 +646,7 @@
     .chip.type-organization { color: #123f5a; background: #e8f3fb; border-color: #bbd7e8; }
     .chip.type-place { color: #4c3810; background: #fbf1db; border-color: #e5cf9e; }
     .chip.type-technology { color: #3d4f19; background: #f2f6d9; border-color: #d3df95; }
-    .chip.hard, .chip.hidden-hard { color: #721f18; background: #f9e7e4; border-color: #e9b8b0; }
+    .chip.hard { color: #721f18; background: #f9e7e4; border-color: #e9b8b0; }
     .chip.soft { color: #684311; background: #fbf0d9; border-color: #e3c58b; }
     .chip.inferred { color: #31596c; background: #e8f3f7; border-color: #b8d3df; }
     .chip.ok { color: #285a36; background: #e7f5e9; border-color: #b7d9be; }
@@ -2748,10 +2748,6 @@
     // editableAuthorityValue() folds 'draft' into 'soft' on the way to the picker so the UI
     // never has to show a third state — the raw value stays in the data untouched.
     const AUTHORITY = ['hard', 'soft'];
-    const AUTHORITY_LABEL = {
-      hard: '確定',
-      soft: '仮'
-    };
     // 작품 고유명사 사전. **소스에는 비워 둔다.**
     // 특정 작품의 인물·조직·용어를 코드에 박으면 그 작품 전용 도구가 되고, 저장소가
     // 공개된 이상 클라이언트 자료가 그대로 실린다. 작품별 값은 작업 중인 설정 데이터
@@ -2778,22 +2774,12 @@
 
     const ENTITY_TYPES = ['character', 'organization', 'place', 'technology'];
     const EDIT_ENTITY_TYPES = ['character', 'organization', 'place', 'technology', 'unclassified'];
-    const TYPE_LABEL = {
-      character: 'キャラクター',
-      organization: '組織',
-      place: '場所',
-      technology: '技術/用語',
-      unclassified: '未分類(素材DB対象外)'
-    };
     // 설정 블록으로 취급할 claimType. 새로 만들어지는 것은 canonical_setting 하나뿐이고
     // (설정창에서 종류 선택을 없앴다) summary·intent 는 그 이전 데이터에만 있다.
     const SETTING_BLOCK_TYPES = ['summary', 'canonical_setting', 'intent'];
     const DOCUMENT_KINDS = [
       ['episode_script', '本文'],
       ['other', 'その他']
-    ];
-    const INTERNAL_DOCUMENT_KINDS = [
-      ['project_common', '作品共通']
     ];
     const ENTITY_SCOPE_OPTIONS = [
       ['project', '作品共通'],
@@ -2814,7 +2800,6 @@
     ];
 
     const UI_LANGUAGE_STORAGE_KEY = 'scenarioMaterialControlUiLanguage';
-    const UI_LANGUAGE_OPTIONS = ['ja', 'ko', 'en'];
     const UI_I18N = {
       ja: {
         qualityWarningTitle: '認識の注意:',
@@ -2969,11 +2954,9 @@
         claimDirection: '方向性',
         claimMemo: 'メモ',
         authorityHard: '確定',
-        authorityHiddenHard: '非表示確定',
         authoritySoft: '仮',
         authorityDraft: '仮',
         authorityInferred: '推定',
-        authorityException: '例外',
         noteDirectRewrite: '直接修正',
         noteQuestion: '確認必要',
         noteFact: 'メモ',
@@ -3296,11 +3279,9 @@
         claimDirection: '방향성',
         claimMemo: '메모',
         authorityHard: '확정',
-        authorityHiddenHard: '비표시 확정',
         authoritySoft: '임시',
         authorityDraft: '임시',
         authorityInferred: '추정',
-        authorityException: '예외',
         noteDirectRewrite: '직접수정',
         noteQuestion: '확인필요',
         noteFact: '메모',
@@ -3622,11 +3603,9 @@
         claimDirection: 'Direction',
         claimMemo: 'Memo',
         authorityHard: 'Fixed',
-        authorityHiddenHard: 'Hidden Fixed',
         authoritySoft: 'Tentative',
         authorityDraft: 'Draft',
         authorityInferred: 'Inferred',
-        authorityException: 'Exception',
         noteDirectRewrite: 'Direct Rewrite',
         noteQuestion: 'Needs Check',
         noteFact: 'Memo',
@@ -3825,11 +3804,9 @@
       },
       authority: {
         hard: 'authorityHard',
-        'hidden-hard': 'authorityHiddenHard',
         soft: 'authoritySoft',
         draft: 'authorityDraft',
-        inferred: 'authorityInferred',
-        exception: 'authorityException'
+        inferred: 'authorityInferred'
       },
       note: {
         direct_rewrite: 'noteDirectRewrite',
@@ -5007,7 +4984,7 @@
 
     function authorityLabel(value) {
       const visible = editableAuthorityValue(value);
-      return t(UI_LABEL_KEYS.authority[visible] || '') || AUTHORITY_LABEL[visible] || visible || t('authoritySoft');
+      return t(UI_LABEL_KEYS.authority[visible] || '');
     }
 
     function editableAuthorityValue(value) {
@@ -11812,7 +11789,7 @@
     }
 
     function authorityRank(authority) {
-      return ({ inferred: 0, draft: 1, exception: 1, soft: 2, hard: 3, 'hidden-hard': 4 })[authority] || 0;
+      return ({ inferred: 0, draft: 1, soft: 2, hard: 3 })[authority] || 0;
     }
 
     function promoteEntity(entity, status, authority, tags) {
