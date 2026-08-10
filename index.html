@@ -6031,16 +6031,18 @@
       const closeChars = quotePairs.map(pair => pair.close).map(escapeRegExp).join('');
       const quoteRegex = quoteChars ? new RegExp('[' + quoteChars + ']') : /[「『」』]/;
       const closeRegex = closeChars ? new RegExp('[' + closeChars + ']') : /[」』]/;
-      const quoteStarts = lines.filter(l => quoteRegex.test(l)).length;
-      const quoteEnds = lines.filter(l => closeRegex.test(l)).length;
-      const quotePairRecoveryRate = quoteStarts ? Math.min(quoteStarts, quoteEnds) / quoteStarts : 1;
-      const verticalPdfSuspected = total > 30 && (single / total > 0.38 || (avg < 6 && quotePairRecoveryRate < 0.55));
+      const quotedLines = lines.filter(l => quoteRegex.test(l)).length;
+      const closingLines = lines.filter(l => closeRegex.test(l)).length;
+      // 인용부호가 든 줄 가운데 닫는 부호까지 든 줄의 비율. 세로로 짠 원고를 가로로 읽으면
+      // 대사가 여러 줄로 쪼개져 이 값이 내려간다.
+      const closingQuoteLineRatio = quotedLines ? Math.min(quotedLines, closingLines) / quotedLines : 1;
+      const verticalPdfSuspected = total > 30 && (single / total > 0.38 || (avg < 6 && closingQuoteLineRatio < 0.55));
       const warnings = [];
       if (verticalPdfSuspected) warnings.push(t('qualityVerticalSuspect'));
       return {
         singleCharLineRatio: single / total,
         averageLineLength: avg,
-        quotePairRecoveryRate,
+        closingQuoteLineRatio,
         verticalPdfSuspected,
         warnings
       };
@@ -10259,13 +10261,21 @@
       return values.length >= 4 ? values.slice(0, 4) : null;
     }
 
+    // 판형을 안 적은 PDF 의 기본값. 이 프로그램이 읽는 원고는 A4 세로다.
+    const PDF_DEFAULT_PAGE_WIDTH = 595;
+    const PDF_DEFAULT_PAGE_HEIGHT = 842;
+
     function pdfPageSizeFromMediaBox(mediaBox) {
       const values = Array.isArray(mediaBox) ? mediaBox : [];
       const width = values.length >= 4 ? Math.abs(Number(values[2]) - Number(values[0])) : 0;
       const height = values.length >= 4 ? Math.abs(Number(values[3]) - Number(values[1])) : 0;
+      const hasWidth = Number.isFinite(width) && width > 0;
+      const hasHeight = Number.isFinite(height) && height > 0;
+      // 판형을 잘못 잡으면 그 페이지의 좌표가 통째로 어긋난다. 짐작했다는 사실을 남긴다.
+      if (!hasWidth || !hasHeight) notePdfOverlayDrop('pageSizeGuessed', (hasWidth ? '' : 'w') + (hasHeight ? '' : 'h'));
       return {
-        width: Number.isFinite(width) && width > 0 ? width : 612,
-        height: Number.isFinite(height) && height > 0 ? height : 792
+        width: hasWidth ? width : PDF_DEFAULT_PAGE_WIDTH,
+        height: hasHeight ? height : PDF_DEFAULT_PAGE_HEIGHT
       };
     }
 
@@ -12285,8 +12295,7 @@
       const raw = norm(text);
       if (!raw || charLen(raw) < 3 || charLen(raw) > 120) return false;
       if (isCastSectionLine(raw) || isSceneHeading(raw) || isSectionMarkerLine(raw) || parseDialog(raw) || isRevisionLine(raw)) return false;
-      if (CREDIT_ROLE_RE.test(raw)) return false;
-      if (/第|話|稿|年|月|日|ペラ|換算|枚|ページ/i.test(raw)) return false;
+      if (isFrontMatterMetaLine(raw)) return false;
       return /[。！？、，]|主人公|貴族|軍人|故人|隊長|老人|若者|研究者|旅人|リーダー|巫女|護衛|男性|女性/.test(raw);
     }
 
