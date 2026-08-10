@@ -9096,7 +9096,21 @@
       return out;
     }
 
+    // 칸을 묶는 허용 오차. 페이지 % 절대값만 쓰면 조판 크기에 따라 너무 좁거나 넓어진다 —
+    // 세로쓰기 칸 안에 **누운 알파벳**(모놀로그의 M · MONO)이 칸 중심에서 0.5 벗어나 있어서
+    // 0.35 로는 그것만 다른 칸으로 떨어졌다(실측: 셋 다 정확히 0.5). 떨어져 나간 글자는 빈
+    // 칸을 하나 만들고, 그 칸을 이웃 지문의 사각형이 먹는다(실측: 지문 union 의 left 가 그
+    // 알파벳의 left 와 정확히 같았다). 클러스터에 들어가는 것은 이미 **글자 단위 조각**이므로
+    // 글자 크기에 비례시키면 조판이 달라도 같은 판정이 선다.
     const PDF_GLYPH_CLUSTER_TOLERANCE_PCT = 0.35;
+    // 글자 크기의 이 비율까지는 같은 칸으로 본다. 격자 간격은 글자 크기보다 넓으므로
+    // (일본어 조판은 글자 폭 ≈ 간격), 0.5 미만이면 이웃 칸이 합쳐지지 않는다.
+    const PDF_GLYPH_CLUSTER_SIZE_RATIO = 0.4;
+
+    function pdfGlyphClusterTolerance(item, key) {
+      const size = Number(item && (key === 'x' ? item.widthPct : item.heightPct)) || 0;
+      return Math.max(PDF_GLYPH_CLUSTER_TOLERANCE_PCT, size * PDF_GLYPH_CLUSTER_SIZE_RATIO);
+    }
     const PDF_GLYPH_RUN_BREAK_STEPS = 2.2;
     // 아이템 런이 어느 축으로 늘어섰는가. OVERLAY_VERTICAL_ASPECT(1.25)와 식은 같지만 재는
     // 대상이 다르다 — 저것은 완성된 오버레이 **박스**가 세로인가이고, 이것은 여러 글자를 담은
@@ -9117,7 +9131,7 @@
       items.slice().sort((a, b) => (Number(a[self]) || 0) - (Number(b[self]) || 0)).forEach((item) => {
         const v = Number(item[self]) || 0;
         const last = clusters[clusters.length - 1];
-        if (last && Math.abs(last.p - v) < PDF_GLYPH_CLUSTER_TOLERANCE_PCT) {
+        if (last && Math.abs(last.p - v) < pdfGlyphClusterTolerance(item, key)) {
           last.items.push(item);
           last.p = (last.p * (last.items.length - 1) + v) / last.items.length;
         } else clusters.push({ p: v, items: [item] });
