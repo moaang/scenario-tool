@@ -11454,7 +11454,11 @@
         return /^[0-9]{1,3}$/.test(text) && (Number(item.y) || 0) <= footerLimit;
       }).map(item => ({ pageNo: Number(String(item.text).normalize('NFKC')), y: Number(item.y) || 0, x: Number(item.x) || 0 }));
       if (!candidates.length) return null;
-      candidates.sort((a, b) => Math.abs(a.x - 420) - Math.abs(b.x - 420));
+      // 가운데는 판형마다 다르다 — 세로 위치를 이미 항목 범위로 재고 있으므로 가로도 같은 자로 잰다.
+      const minX = items.reduce((min, item) => Math.min(min, Number(item.x) || 0), Infinity);
+      const maxX = items.reduce((max, item) => Math.max(max, Number(item.x) || 0), -Infinity);
+      const centerX = (minX + maxX) / 2;
+      candidates.sort((a, b) => Math.abs(a.x - centerX) - Math.abs(b.x - centerX));
       return candidates[0].pageNo;
     }
 
