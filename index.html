@@ -17100,17 +17100,34 @@
         });
     }
 
+    function debugRectOverlapArea(a, b) {
+      if (!a || !b) return 0;
+      const wide = Math.min(Number(a.left) + Number(a.width), Number(b.left) + Number(b.width))
+        - Math.max(Number(a.left), Number(b.left));
+      const tall = Math.min(Number(a.top) + Number(a.height), Number(b.top) + Number(b.height))
+        - Math.max(Number(a.top), Number(b.top));
+      return wide > 0 && tall > 0 ? wide * tall : 0;
+    }
+
     function pageDebugBlockDetailLines(doc, pageNo) {
-      return sortedDocumentBlocks(doc)
+      const blocks = sortedDocumentBlocks(doc)
         .filter(block => blockHasOverlayPage(block, pageNo) || Number(block.pageNo || 0) === Number(pageNo))
-        .filter(isScriptPreviewBlock)
-        .map((b) => {
-          const evidence = b.meta && b.meta.evidence || [];
-          return ['  ' + (b.type || '?') + ' / ' + (b.zone || '?') + ' [' + overlayLabelForBlock(b, {}) + '] "' + debugShortText(b.text || b.rawText) + '"',
-            '        ' + debugRectText(overlayRectForBlockPage(b, pageNo)) + '  item=' + (b.reviewItemId || '(없음)'),
-            evidence.length ? '        evidence ' + evidence.join(', ') : ''
-          ].filter(Boolean).join('\n');
-        });
+        .filter(isScriptPreviewBlock);
+      const rects = blocks.map(block => overlayRectForBlockPage(block, pageNo));
+      return blocks.map((b, index) => {
+        const evidence = b.meta && b.meta.evidence || [];
+        // 겹친 박스는 화면에서 하나가 가려진다 — 가려진 쪽은 없는 것처럼 보인다.
+        const overlaps = blocks.map((other, otherIndex) => {
+          if (otherIndex === index) return '';
+          const area = debugRectOverlapArea(rects[index], rects[otherIndex]);
+          return area > 0 ? '"' + debugShortText(other.text || other.rawText) + '" ' + area.toFixed(2) : '';
+        }).filter(Boolean);
+        return ['  ' + (b.type || '?') + ' / ' + (b.zone || '?') + ' [' + overlayLabelForBlock(b, {}) + '] "' + debugShortText(b.text || b.rawText) + '"',
+          '        ' + debugRectText(rects[index]) + '  item=' + (b.reviewItemId || '(없음)'),
+          evidence.length ? '        evidence ' + evidence.join(', ') : '',
+          overlaps.length ? '        겹침 ' + overlaps.join(' / ') : ''
+        ].filter(Boolean).join('\n');
+      });
     }
 
     function pageDebugDropLines() {
