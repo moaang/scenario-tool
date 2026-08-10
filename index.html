@@ -6305,7 +6305,7 @@
       if (context.bodyEnded) return classification('appendix_text', 'appendix', false, 'none', 0.66, ['after end marker']);
       if (!context.bodyStarted && isCastSectionLine(raw)) {
         context.zone = 'cast_list';
-        return classification('cast_section', 'cast_list', false, 'none', 0.94, ['cast section marker']);
+        return castSectionClassification();
       }
       if (!context.bodyStarted && context.zone === 'cast_list') {
         if (isLikelyCastEntryLine(raw, profile)) {
@@ -6358,7 +6358,14 @@
       return { type, zone, assignableToCut, assignDefault, confidence, evidence: evidence || [], warnings: warnings || (confidence < 0.6 ? ['manual review recommended'] : []) };
     }
 
+    function castSectionClassification() {
+      return classification('cast_section', 'cast_list', false, 'none', 0.94, ['cast section marker'], []);
+    }
+
     function classifyFront(raw, score) {
+      // 등장인물 머리글은 표지 제목이 아니라 **캐스트 목록의 머리**다. 텍스트 임포트는 이 함수에
+      // 닿기 전에 그것을 갈랐지만 PDF 는 여기로 바로 들어와서, 그 줄이 제목으로 떨어지고 있었다.
+      if (isCastSectionLine(raw)) return castSectionClassification();
       let type = 'front_title';
       if (/第\s*[0-9０-９一二三四五六七八九十]+\s*話|#\s*[0-9０-９]+/.test(raw)) type = 'front_episode';
       else if (/検討稿|決定稿|初稿|改稿|修正稿|コメント版|文芸整理済|稿/.test(raw)) type = 'front_draft_status';
@@ -13989,7 +13996,11 @@
             continue;
           }
           const candidateRun = candidateStarts.get(index);
-          if (reviewFrontOpen && isBodyReviewStartLine(raw, profile)) {
+          // **표지는 페이지 단위다.** 페이지가 표지로 잠겼으면(frontPageLocked) 줄 하나가 그것을
+          // 풀지 못한다. 잠금 판정은 페이지를 통째로 보고 이미 끝났는데, 여기서 줄 하나에
+          // 뒤집히고 있었다 — 원고 차수 「２稿」가 번호 씬(２ + 稿)으로 읽혀 표지 넷째 줄부터
+          // 페이지 끝까지가 본문이 됐다.
+          if (reviewFrontOpen && !frontPageLocked && isBodyReviewStartLine(raw, profile)) {
             flushText();
             reviewFrontOpen = false;
             bodyStarted = true;
