@@ -2809,14 +2809,9 @@
     // 설정 블록으로 취급할 claimType. 새로 만들어지는 것은 canonical_setting 하나뿐이고
     // (설정창에서 종류 선택을 없앴다) summary·intent 는 그 이전 데이터에만 있다.
     const SETTING_BLOCK_TYPES = ['summary', 'canonical_setting', 'intent'];
-    const DOCUMENT_KINDS = [
-      ['episode_script', '本文'],
-      ['other', 'その他']
-    ];
-    const ENTITY_SCOPE_OPTIONS = [
-      ['project', '作品共通'],
-      ['document', '文書別']
-    ];
+    // 값만 담는다. 표시할 말은 documentKindLabel / entityScopeLabel 이 사전에서 가져온다.
+    const DOCUMENT_KINDS = ['episode_script', 'other'];
+    const ENTITY_SCOPE_OPTIONS = ['project', 'document'];
     // 붙일 수 있는 태그. 표시할 말은 tagOptionLabel 이 정한다.
     const TAG_OPTIONS = [
       'source:cast-list', 'source:front-matter', 'source:scene', 'source:dialog',
@@ -2908,6 +2903,9 @@
         workDocuments: '作品文書',
         addDocument: '+ 文書を追加',
         deleteDocument: '文書を削除',
+        confirmDeleteWork: '作品「{title}」を削除しますか？文書・ブロック・素材・注釈がすべて削除されます。',
+        confirmDeleteDocument: '"{title}" を削除しますか？この文書のブロックと文書別素材も削除されます。',
+        confirmDeleteFolder: '"{title}" フォルダと中の文書を削除しますか？',
         documentTitle: '文書タイトル',
         documentKind: '文書区分',
         documentEmptyNote: '文書を追加して本文/PDF/DOCX/TXTを読み込みます。作品共通は自動集計用なのでここでは選択しません。',
@@ -3233,6 +3231,9 @@
         workDocuments: '작품 문서',
         addDocument: '+ 문서 추가',
         deleteDocument: '문서 삭제',
+        confirmDeleteWork: '작품 "{title}"을(를) 삭제할까요? 문서·블록·소재·주석이 모두 영구 삭제됩니다.',
+        confirmDeleteDocument: '"{title}" 문서를 삭제할까요? 블록과 문서별 소재도 함께 삭제됩니다.',
+        confirmDeleteFolder: '"{title}" 폴더와 포함된 문서를 삭제할까요?',
         documentTitle: '문서 타이틀',
         documentKind: '문서 구분',
         documentEmptyNote: '문서를 추가해서 본문/PDF/DOCX/TXT를 불러온다. 작품 공용은 자동 집계용이라 여기서 선택하지 않음.',
@@ -3557,6 +3558,9 @@
         workDocuments: 'Work Documents',
         addDocument: '+ Add Document',
         deleteDocument: 'Delete Document',
+        confirmDeleteWork: 'Delete the work "{title}"? All its documents, blocks, materials and notes will be permanently removed.',
+        confirmDeleteDocument: '"{title}" delete this document? Blocks and document-scoped materials will also be deleted.',
+        confirmDeleteFolder: '"{title}" delete this folder and contained documents?',
         documentTitle: 'Document Title',
         documentKind: 'Document Type',
         documentEmptyNote: 'Add a document and load body text/PDF/DOCX/TXT. Work-common is for automatic aggregation and is not selected here.',
@@ -12718,12 +12722,7 @@
     function deleteActiveWork() {
       if (!workspaceReady()) return;
       const title = workspaceTitle(state.project) || t('workRoot');
-      const msg = activeUiLanguage === 'en'
-        ? `Delete the work "${title}"? All its documents, blocks, materials and notes will be permanently removed.`
-        : activeUiLanguage === 'ja'
-        ? `作品「${title}」を削除しますか？文書・ブロック・素材・注釈がすべて削除されます。`
-        : `작품 "${title}"을(를) 삭제할까요? 문서·블록·소재·주석이 모두 영구 삭제됩니다.`;
-      if (!confirm(msg)) return;
+      if (!confirm(t('confirmDeleteWork', { title }))) return;
       syncActiveWorkToSettings();
       const workId = state.project && state.project.workspace && state.project.workspace.workId;
       state.settings.works = (state.settings.works || []).filter(w => !(w.workspace && w.workspace.workId === workId));
@@ -12856,7 +12855,8 @@
       const doc = documentById(documentId);
       const docs = state.project.documents || [];
       if (!doc || doc.id === 'project-common' || docs.length <= 1) return;
-      if (!(options && options.skipConfirm) && !confirm(`"${doc.title || doc.id}"` + (activeUiLanguage === 'en' ? ' delete this document? Blocks and document-scoped materials will also be deleted.' : activeUiLanguage === 'ja' ? ' を削除しますか？この文書のブロックと文書別素材も削除されます。' : ' 문서를 삭제할까요? 블록과 문서별 소재도 함께 삭제됩니다.'))) return;
+      if (!(options && options.skipConfirm)
+        && !confirm(t('confirmDeleteDocument', { title: doc.title || doc.id }))) return;
       const removedBlockIds = new Set((state.project.sourceBlocks || []).filter(b => b.sourceDocumentId === doc.id).map(b => b.id));
       const removedEntityIds = new Set((state.project.entities || []).filter(e => e.scope !== 'project' && e.sourceDocumentId === doc.id).map(e => e.id));
       state.project.sourceBlocks = (state.project.sourceBlocks || []).filter(b => b.sourceDocumentId !== doc.id);
@@ -12923,7 +12923,7 @@
       if (!folder) return;
       const folderIds = [folderId].concat(childFolderIds(folderId));
       const docIds = editableDocuments(state.project).filter(doc => folderIds.includes(doc.parentId || 'root')).map(doc => doc.id);
-      if (!confirm(`"${folder.title || folder.id}"` + (activeUiLanguage === 'en' ? ' delete this folder and contained documents?' : activeUiLanguage === 'ja' ? ' フォルダと中の文書を削除しますか？' : ' 폴더와 포함된 문서를 삭제할까요?'))) return;
+      if (!confirm(t('confirmDeleteFolder', { title: folder.title || folder.id }))) return;
       docIds.forEach(id => deleteDocumentById(id, { skipConfirm: true, deferRender: true }));
       state.project.documentFolders = (state.project.documentFolders || []).filter(item => !folderIds.includes(item.id));
       const nextDoc = editableDocuments(state.project)[0] || commonDocument(state.project);
@@ -12958,7 +12958,7 @@
       $('modalBody').innerHTML = `
         <div class="grid-2">
           <div><label>${esc(t('documentTitle'))}</label><input id="documentPropertyTitle" value="${esc(doc.title || '')}" /></div>
-          <div><label>${esc(t('documentKind'))}</label><select id="documentPropertyKind">${DOCUMENT_KINDS.map(([value]) => `<option value="${value}" ${value === normalizeDocumentKind(doc.documentKind) ? 'selected' : ''}>${esc(documentKindLabel(value))}</option>`).join('')}</select></div>
+          <div><label>${esc(t('documentKind'))}</label><select id="documentPropertyKind">${DOCUMENT_KINDS.map((value) => `<option value="${value}" ${value === normalizeDocumentKind(doc.documentKind) ? 'selected' : ''}>${esc(documentKindLabel(value))}</option>`).join('')}</select></div>
         </div>
         <div id="documentEpisodeField"><label>${esc(t('episodeNumber'))}</label><input id="documentPropertyEpisode" type="number" min="0" step="1" value="${esc(String(doc.episode || '').replace(/[^0-9]/g, ''))}" /></div>
         ${versionsHtml}
@@ -20800,7 +20800,7 @@
             <span class="material-card-name" title="${esc((e.aliases || []).join(', '))}">${esc(e.name)}</span>
             ${renderCharacterProfileChips(e)}
             <span class="material-card-spacer"></span>
-            <select class="pill-select" data-entity-field="scope" data-entity-id="${esc(e.id)}" title="${esc(t('scopeLabelTitle'))}">${ENTITY_SCOPE_OPTIONS.map(([value]) => `<option value="${value}" ${value === (e.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select>
+            <select class="pill-select" data-entity-field="scope" data-entity-id="${esc(e.id)}" title="${esc(t('scopeLabelTitle'))}">${ENTITY_SCOPE_OPTIONS.map((value) => `<option value="${value}" ${value === (e.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select>
             <select class="pill-select authority-${esc(authValue)}" data-entity-field="authority" data-entity-id="${esc(e.id)}" title="${esc(t('authorityTitle'))}">${AUTHORITY.map(a => `<option value="${a}" ${a === authValue ? 'selected' : ''}>${authorityLabel(a)}</option>`).join('')}</select>
           </div>
           <div class="material-card-summary${e.summary ? '' : ' is-empty'}" data-edit-summary="${esc(e.id)}" title="${esc(t('editSummaryHint'))}">${e.summary ? esc(e.summary) : `<span class="material-summary-add">${esc(t('addSummary'))}</span>`}</div>
@@ -22414,7 +22414,7 @@
           <div><label>${esc(t('nameLabel'))}</label><input id="modalEntityName" value="${esc(entity.name)}" /></div>
           <div><label>${esc(t('typeLabelTitle'))}</label><select id="modalEntityType">${EDIT_ENTITY_TYPES.map(type => `<option value="${type}" ${type === entity.type ? 'selected' : ''}>${esc(typeLabel(type))}</option>`).join('')}</select></div>
         </div>
-        <div><label>${esc(t('scopeLabelTitle'))}</label><select id="modalEntityScope">${ENTITY_SCOPE_OPTIONS.map(([value]) => `<option value="${value}" ${value === (entity.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select></div>
+        <div><label>${esc(t('scopeLabelTitle'))}</label><select id="modalEntityScope">${ENTITY_SCOPE_OPTIONS.map((value) => `<option value="${value}" ${value === (entity.scope || 'document') ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select></div>
         <div><label>${esc(t('aliasesLabel'))}</label><input id="modalEntityAliases" value="${esc((entity.aliases || []).join(', '))}" /></div>
         ${(entity.tags || []).filter(tag => !/^scope:/.test(tag)).length ? `<div class="chips">${renderTagChips(entity)}</div>` : ''}
         ${entity.summary ? `<div class="note">${esc(entity.summary)}</div>` : ''}
@@ -22592,7 +22592,7 @@
       const defaultScope = state.activeMiddleTab === 'commonMaterials' ? 'project' : (activeDocument().id === 'project-common' ? 'project' : 'document');
       $('modalBody').innerHTML = `
         <div class="grid-2"><div><label>${esc(t('nameLabel'))}</label><input id="newEntityName" /></div><div><label>${esc(t('typeLabelTitle'))}</label><select id="newEntityType">${ENTITY_TYPES.map(type => `<option value="${type}">${esc(typeLabel(type))}</option>`).join('')}</select></div></div>
-        <div><label>${esc(t('scopeLabelTitle'))}</label><select id="newEntityScope">${ENTITY_SCOPE_OPTIONS.map(([value]) => `<option value="${value}" ${value === defaultScope ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select></div>
+        <div><label>${esc(t('scopeLabelTitle'))}</label><select id="newEntityScope">${ENTITY_SCOPE_OPTIONS.map((value) => `<option value="${value}" ${value === defaultScope ? 'selected' : ''}>${esc(entityScopeLabel(value))}</option>`).join('')}</select></div>
         <button id="saveNewEntityBtn" class="primary">${esc(t('addButton'))}</button>
       `;
       $('saveNewEntityBtn').addEventListener('click', () => {
