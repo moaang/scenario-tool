@@ -4653,13 +4653,14 @@
       if (!block || isPageArtifactBlock(block)) return false;
       if (block.zone === 'page_metadata' || block.type === 'pdf_note' || block.type === 'pdf_link') return false;
       return ['body', 'body_end', 'front_matter', 'cast_list', 'manual_text', 'appendix'].includes(block.zone)
-        || ['cast_entry', 'cast_section', 'cast_note', 'front_summary', 'front_title', 'front_episode_title', 'front_draft_status', 'body_text', 'appendix_text'].includes(block.type);
+        || FRONT_AND_CAST_BLOCK_TYPES.includes(block.type)
+        || block.type === 'body_text' || block.type === 'appendix_text';
     }
 
     function isFrontPreviewBlock(block) {
       if (!block) return false;
       return block.zone === 'front_matter' || block.zone === 'cast_list'
-        || ['cast_entry', 'cast_section', 'cast_note', 'front_summary', 'front_title', 'front_episode_title', 'front_draft_status'].includes(block.type);
+        || FRONT_AND_CAST_BLOCK_TYPES.includes(block.type);
     }
 
     function isBodyPreviewBlock(block) {
@@ -5641,6 +5642,18 @@
     // 표시다. 오버레이에서는 박스만 그리고 이름표를 붙이지 않는다 — 이름이 붙으면 무언가로
     // 분류된 것처럼 보인다.
     const UNCLASSIFIED_BLOCK_TYPE = 'unclassified';
+
+    // 표지·등장인물 블록 타입의 정본. 네 곳이 이 목록을 각자 적고 있었고, 그래서 갈라졌다 —
+    // 나중에 생긴 front_writer · front_date · front_page_count_note 가 어디에도 안 들어갔고,
+    // 화수는 **만들어진 적 없는 이름**으로 적혀 있어 어느 판정에도 안 걸렸다. zone 이 앞에서
+    // 막아 주고 있어서 그 어긋남이 드러나지 않았을 뿐이다.
+    // 표지 타입을 늘릴 자리는 classifyFront 이고, 늘렸으면 여기도 같이 늘린다.
+    const CAST_BLOCK_TYPES = Object.freeze(['cast_entry', 'cast_section', 'cast_note']);
+    const FRONT_MATTER_BLOCK_TYPES = Object.freeze([
+      'front_title', 'front_episode', 'front_draft_status', 'front_writer',
+      'front_date', 'front_page_count_note', 'front_summary'
+    ]);
+    const FRONT_AND_CAST_BLOCK_TYPES = Object.freeze(CAST_BLOCK_TYPES.concat(FRONT_MATTER_BLOCK_TYPES));
 
     const CAST_LIST_HARD_CAP = 120;
     // Past this many entries, a still-open cast list is unusual enough that entries are scored
@@ -16439,7 +16452,7 @@
       if (block.type === 'scene_heading') return 'scene';
       if (block.type === 'dialog' || block.speaker) return 'dialog';
       if (block.zone === 'cast_list' || block.zone === 'front_matter'
-        || ['cast_entry', 'cast_section', 'cast_note', 'front_summary', 'front_title', 'front_episode_title', 'front_draft_status'].includes(block.type)) return 'cast';
+        || FRONT_AND_CAST_BLOCK_TYPES.includes(block.type)) return 'cast';
       return 'action';
     }
 
@@ -17473,7 +17486,7 @@
       const isDialog = !isNote && (block.type === 'dialog' || block.speaker);
       const isAppendixText = block.type === 'appendix_text';
       const isBodyText = block.type === 'body_text' || block.type === 'text_insert' || isAppendixText;
-      const isCast = block.type === 'cast_entry' || block.type === 'cast_section' || block.type === 'cast_note' || block.zone === 'cast_list';
+      const isCast = CAST_BLOCK_TYPES.includes(block.type) || block.zone === 'cast_list';
       const isFrontText = isFrontPreviewBlock(block) && !isCast;
       const speaker = isDialog ? (block.speaker || block.characterName || '') : '';
       const pageNo = overlayPageNoForBlock(block);
@@ -21457,7 +21470,8 @@
       const conteType = conteExportBlockType(block);
       if (!conteType) return false;
       if (['page_metadata', 'front_matter', 'cast_list', 'body_end'].includes(block.zone)) return false;
-      if (['pdf_note', 'pdf_link', 'front_summary', 'front_title', 'front_episode_title', 'front_draft_status', 'cast_entry', 'end_marker'].includes(block.type)) return false;
+      if (FRONT_AND_CAST_BLOCK_TYPES.includes(block.type)) return false;
+      if (['pdf_note', 'pdf_link', 'end_marker'].includes(block.type)) return false;
       const text = String(block.text || block.normalizedText || block.rawText || '').trim();
       if (!text) return false;
       return block.zone === 'body' || Boolean(block.assignableToCut);
