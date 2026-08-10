@@ -6884,6 +6884,9 @@
       (blocks || []).forEach((block, index) => {
         const text = norm(block.text || block.rawText || '');
         if (!text) return;
+        // 뗀 설명은 뗄 때 확정됐다. 여기서 다시 판정하면 표지의 이름 줄 연속에 휩쓸려
+        // 이름으로 되돌아간다 — 화면에서 나뉜 두 칸이 둘 다 CAST 로 나오던 것이 이것이다.
+        if (isSplitCastDescriptionBlock(block)) return;
         if (isCastSectionLine(text)) {
           inCast = true;
           seenCastSection = true;
@@ -6963,6 +6966,8 @@
       };
       (blocks || []).forEach((block, index) => {
         const text = norm(block.text || block.rawText || '');
+        // 뗀 설명은 이름 줄 사이에 낀다. 세지도 끊지도 않고 지나간다.
+        if (isSplitCastDescriptionBlock(block)) return;
         if (!text || Number(block.pageNo || 0) > 3 || block.type === 'scene_heading' || block.type === 'dialog' || block.zone === 'body') {
           flush();
           return;
@@ -22621,6 +22626,9 @@
       // 측정이 화면과 다른 경로를 본다(실제로 그렇게 정반대 결과를 낸 적이 있다).
       buildSourceReviewItems,
       sourceReviewItemsToBlocks,
+      // 블록을 만든 **뒤에** 도는 후처리다. 이것을 빼고 재면 앞 단계에서 갈라 놓은 것이
+      // 되돌려지는 것을 못 본다 — 화면에서 두 칸이 둘 다 CAST 로 나오던 것을 이렇게 놓쳤다.
+      reinforceCastBlocks,
       pdfJsPageOperatorSignals,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
