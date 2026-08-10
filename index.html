@@ -15550,7 +15550,7 @@
         const page = (doc.draftPages || []).find(entry => Number(entry && (entry.pageNo || entry.sourcePageIndex) || 1) === pageNo);
         if (!page) return;
         sourceReviewPdfLinesForSpan(page, span && span.text || sourceReviewItemText(item)).forEach((line) => {
-          const key = pdfJsTextItemVisualGroupKey(line) || line.visualGroupKey || line.colorKey || '';
+          const key = pdfJsTextItemVisualGroupKey(line);
           if (key) keys.push(key);
           (line.items || []).forEach((pdfItem) => {
             const itemKey = pdfJsTextItemVisualGroupKey(pdfItem);
