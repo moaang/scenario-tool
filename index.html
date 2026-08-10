@@ -17130,6 +17130,23 @@
       });
     }
 
+    function pageDebugSourceLineLines(doc, pageNo) {
+      const page = pdfLogicalPageForDocument(doc, pageNo);
+      const withRects = []
+        .concat(page && page.pdfJsMergedBodyLines || [])
+        .concat(page && page.bodyBaseLines || [])
+        .filter(line => line && (line.overlayRect || line.compactOverlayRect));
+      const seen = new Set();
+      const out = [];
+      withRects.forEach((line) => {
+        const key = pdfOverlayLineIdentity(line);
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push('  "' + debugShortText(line.text) + '" ' + debugRectText(line.overlayRect || line.compactOverlayRect));
+      });
+      return out;
+    }
+
     function pageDebugDropLines() {
       const out = [];
       pdfOverlayDrops.forEach((info, kind) => {
@@ -17156,8 +17173,8 @@
         '## 지나온 길',
         PDF_IMPORT_PIPELINE_STEPS.join('\n'),
         '',
-        '## 원문 줄',
-        page && page.text || '(없음)',
+        '## 원문 줄 — 이 줄 하나가 칸 하나다. 블록 사각형은 자기 칸들의 합이어야 한다',
+        pageDebugSourceLineLines(doc, pageNo).join('\n') || (page && page.text || '  (없음)'),
         '',
         '## 리뷰 아이템 — 좌표가 여기 붙고 블록이 그것을 물려받는다',
         itemLines.join('\n') || '  (없음)',
