@@ -11957,14 +11957,13 @@
         if (b.type === 'cast_entry') {
           const castMetas = extractCastMetas(b.text || '');
           const fromFront = b.meta && (b.meta.evidence || []).includes('front cast');
-          const fromCastList = b.zone === 'cast_list' || b.type === 'cast_entry';
           castMetas.forEach((meta, index) => {
             const matchedSpeaker = fromFront ? matchedDialogSpeakerForCandidate(meta.name, dialogSpeakers) : '';
             const confidence = matchedSpeaker ? 0.98 : (index === 0 ? 0.92 : 0.78);
-            const entity = upsertEntity(project, meta.name, 'character', b.id, confidence, fromCastList ? 'confirmed' : 'observed');
+            const entity = upsertEntity(project, meta.name, 'character', b.id, confidence, 'confirmed');
             applyCharacterProfileToEntity(entity, meta.profile || meta);
             if (entity && b.characterGender && !entity.gender) applyCharacterProfileToEntity(entity, { gender: b.characterGender, age: b.characterAge });
-            promoteEntity(entity, matchedSpeaker ? 'confirmed' : (fromCastList ? 'confirmed' : 'observed'), matchedSpeaker ? 'soft' : (fromFront ? 'draft' : 'soft'), [matchedSpeaker ? 'source:front-dialog-match' : (fromFront ? 'source:front-matter' : 'source:cast-list')]);
+            promoteEntity(entity, 'confirmed', matchedSpeaker ? 'soft' : (fromFront ? 'draft' : 'soft'), [matchedSpeaker ? 'source:front-dialog-match' : (fromFront ? 'source:front-matter' : 'source:cast-list')]);
             if (matchedSpeaker && entity && matchedSpeaker !== entity.name) entity.aliases = uniq((entity.aliases || []).concat(matchedSpeaker));
             addCharacterAliasesFromCastLine(entity, b.text || '');
             const description = meta.description || (index === 0 ? frontCharacterDescription(project, b, blockIndex) : '');
@@ -12982,7 +12981,9 @@
       const characters = uniq((blocks || []).flatMap(b => dialogSpeakerNamesForBlock(b).length ? dialogSpeakerNamesForBlock(b) : [b.speaker, b.characterName]).map(norm).filter(Boolean)).slice(0, 8);
       const places = uniq((blocks || []).map(b => b.locationName).map(norm).filter(Boolean)).slice(0, 8);
       const dialog = (blocks || []).filter(b => b.type === 'dialog' || b.speaker).length;
-      const cast = (blocks || []).filter(b => b.type === 'cast_entry' || b.zone === 'cast_list').length;
+      // 문구가 「등장인물 N」이므로 세는 것은 **사람 수**다. zone 으로 세면 목록 머리글과
+      // 설명까지 사람으로 들어간다.
+      const cast = (blocks || []).filter(b => b.type === 'cast_entry').length;
       const chips = [];
       if (characters.length) chips.push(`<span class="chip type-character">${esc(t('characterCount', { count: characters.length }))}</span>`);
       characters.forEach(name => chips.push(`<span class="chip type-character">${esc(name)}</span>`));
@@ -16011,8 +16012,14 @@
         // 있다** — 여기서 다시 세우면 두 경로가 표지를 다르게 읽어 화면과 데이터가 갈린다.
         // (실제로 갈려 있었다: 텍스트 임포트는 다섯 종류로 나누는데 PDF 는 전부 front_summary 였다.)
         const frontClass = classifyFront(reviewText, frontScore(reviewText, Number(item.pageNo || 1), Number(item.order || 0), false, conversionProfile));
+        // classifyFront 가 「이건 등장인물 목록의 머리다」라고 판정하면 그 zone 을 쓴다.
+        // 예전에는 여기서 무조건 덮어써서 **타입만 살고 zone 은 조용히 탈락했다** —
+        // 코드는 cast_list 라고 적혀 있는데 실제 블록은 front_matter 로 나왔다.
+        const frontZone = frontClass.zone === 'cast_list'
+          ? 'cast_list'
+          : (Number(item.pageNo || 0) <= 2 ? 'front_matter' : 'manual_text');
         pushBlock(item, reviewText, Object.assign({}, frontClass, {
-          zone: Number(item.pageNo || 0) <= 2 ? 'front_matter' : 'manual_text',
+          zone: frontZone,
           assignableToCut: false,
           assignDefault: 'none',
           evidence: [textIsFront ? 'source review front text' : 'source review text']
