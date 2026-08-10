@@ -9111,12 +9111,15 @@
       return Number(item && (key === 'x' ? item.widthPct : item.heightPct)) || 0;
     }
 
-    // **자기 크기로만 재면 안 된다** — 누운 글자는 원래 좁다(실측: 본문 1.3 에 누운 숫자 0.8).
-    // 어긋남은 본문 격자를 기준으로 생기므로, 재는 자도 격자 쪽이어야 한다. 그래서 자기와
-    // 붙으려는 칸 중 **큰 쪽**으로 잰다.
-    function pdfGlyphClusterTolerance(item, key, clusterSize) {
-      const size = Math.max(pdfGlyphSize(item, key), Number(clusterSize) || 0);
-      return Math.max(PDF_GLYPH_CLUSTER_TOLERANCE_PCT, size * PDF_GLYPH_CLUSTER_SIZE_RATIO);
+    // 어긋남은 **격자**에서 생기므로 자도 격자여야 한다 — 한 글자씩 재면 안 된다.
+    // 누운 글자는 좁고(실측: 본문 1.3 에 누운 숫자 0.8) 가로로 누운 두 자리 숫자는 되레
+    // 넓다(4.7). 자기 크기로 재면 좁은 쪽을 놓치고, 큰 쪽으로 재면 넓은 쪽이 옆 칸까지
+    // 삼킨다(실측: 등장인물 하나가 앞 설명과 한 칸이 됐다). 페이지 글자 크기의 중앙값이
+    // 격자를 가장 잘 대표한다 — 예외적으로 좁거나 넓은 글자가 자를 흔들지 못한다.
+    function pdfGlyphClusterTolerance(items, key) {
+      const sizes = (items || []).map(item => pdfGlyphSize(item, key)).filter(size => size > 0);
+      const median = sizes.length ? pdfMedian(sizes) : 0;
+      return Math.max(PDF_GLYPH_CLUSTER_TOLERANCE_PCT, median * PDF_GLYPH_CLUSTER_SIZE_RATIO);
     }
     const PDF_GLYPH_RUN_BREAK_STEPS = 2.2;
     // 아이템 런이 어느 축으로 늘어섰는가. OVERLAY_VERTICAL_ASPECT(1.25)와 식은 같지만 재는
@@ -9134,15 +9137,15 @@
     function pdfGlyphClusterAxis(items, key) {
       const self = key === 'x' ? 'centerXPct' : 'centerYPct';
       const other = key === 'x' ? 'centerYPct' : 'centerXPct';
+      const tolerance = pdfGlyphClusterTolerance(items, key);
       const clusters = [];
       items.slice().sort((a, b) => (Number(a[self]) || 0) - (Number(b[self]) || 0)).forEach((item) => {
         const v = Number(item[self]) || 0;
         const last = clusters[clusters.length - 1];
-        if (last && Math.abs(last.p - v) < pdfGlyphClusterTolerance(item, key, last.size)) {
+        if (last && Math.abs(last.p - v) < tolerance) {
           last.items.push(item);
           last.p = (last.p * (last.items.length - 1) + v) / last.items.length;
-          last.size = Math.max(last.size, pdfGlyphSize(item, key));
-        } else clusters.push({ p: v, size: pdfGlyphSize(item, key), items: [item] });
+        } else clusters.push({ p: v, items: [item] });
       });
       clusters.forEach(c => c.items.sort((a, b) => (Number(a[other]) || 0) - (Number(b[other]) || 0)));
       return { self, other, clusters };
