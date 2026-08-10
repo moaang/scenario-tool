@@ -7721,12 +7721,11 @@
         const viewport = page.getViewport({ scale: 1 });
         const [textContent, operatorSignals] = await Promise.all([
           page.getTextContent({ includeMarkedContent: true }),
-          pdfJsPageOperatorSignals(page, pdfjsLib, viewport).catch(() => ({ colorKeys: [], horizontalDividers: [] }))
+          pdfJsPageOperatorSignals(page, pdfjsLib, viewport).catch(() => ({ horizontalDividers: [] }))
         ]);
-        const colorKeys = operatorSignals && operatorSignals.colorKeys || [];
         const layoutDividers = operatorSignals && operatorSignals.horizontalDividers || [];
         const logicalPage = logicalPageByNo.get(pageNo) || null;
-        let textItems = await pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo, colorKeys);
+        let textItems = await pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo);
         const usingLogicalFallbackItems = shouldUsePdfLogicalFallbackTextItems(textItems, logicalPage);
         if (usingLogicalFallbackItems) {
           textItems = pdfLogicalFallbackTextItems(logicalPage, pageNo);
@@ -8723,7 +8722,7 @@
     // 페이지를 100x100 으로 가정한 값이 나오고, 그런 값을 쓸 곳은 없다.
     async function pdfJsPageOperatorSignals(page, pdfjsLib, viewport) {
       const OPS = pdfjsLib && pdfjsLib.OPS;
-      if (!page || !OPS || typeof page.getOperatorList !== 'function') return { colorKeys: [], horizontalDividers: [] };
+      if (!page || !OPS || typeof page.getOperatorList !== 'function') return { horizontalDividers: [] };
       const list = await page.getOperatorList();
       const fnArray = list && list.fnArray || [];
       const argsArray = list && list.argsArray || [];
@@ -8772,20 +8771,8 @@
         } else if (pdfJsOperatorConsumesPathWithoutStroke(fn, OPS)) {
           pathSegments = [];
         }
-        if (showOps.includes(fn)) {
-          const repeat = pdfJsTextShowApproxItemCount(argsArray[index]);
-          for (let i = 0; i < repeat; i += 1) keys.push(fillKey);
-        }
       });
-      return {
-        colorKeys: keys,
-        horizontalDividers
-      };
-    }
-
-    async function pdfJsTextItemColorKeysForPage(page, pdfjsLib) {
-      const signals = await pdfJsPageOperatorSignals(page, pdfjsLib, null);
-      return signals.colorKeys || [];
+      return { horizontalDividers };
     }
 
     function pdfJsOperatorStrokesPath(fn, OPS) {
@@ -8973,27 +8960,6 @@
       };
       visit(values);
       return out;
-    }
-
-    function pdfJsTextShowApproxItemCount(args) {
-      const source = Array.isArray(args) ? args : [];
-      const first = source[0];
-      if (!Array.isArray(first)) return 1;
-      const chunks = first.filter(part => {
-        if (typeof part === 'string') return part.trim();
-        if (part && typeof part === 'object') return String(part.unicode || part.str || '').trim();
-        return false;
-      }).length;
-      return Math.max(1, Math.min(12, chunks || 1));
-    }
-
-    function pdfJsColorKeyForTextItem(colorKeys, index) {
-      const keys = Array.isArray(colorKeys) ? colorKeys.filter(Boolean) : [];
-      if (!keys.length) return '';
-      // Color keys follow visible show-text order; scaling by raw PDF.js item count smears annotation colors into body text.
-      const keyIndex = Math.floor(Number(index));
-      if (!Number.isFinite(keyIndex) || keyIndex < 0) return '';
-      return keys[keyIndex] || '';
     }
 
     function groupPdfJsTextItemsToOverlayLines(items, pageNo) {
@@ -17638,12 +17604,11 @@
       const key = doc.id + '#' + pageNo;
       let items = state.pdfPageTextItems[key];
       if (!items) {
-        const [textContent, colorKeys] = await Promise.all([
+        const [textContent] = await Promise.all([
           page.getTextContent({ includeMarkedContent: true }),
-          pdfJsTextItemColorKeysForPage(page, pdfjsLib).catch(() => [])
         ]);
         const logicalPage = pdfLogicalPageForDocument(doc, pageNo);
-        items = await pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo, colorKeys);
+        items = await pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo);
         if (shouldUsePdfLogicalFallbackTextItems(items, logicalPage)) {
           items = pdfLogicalFallbackTextItems(logicalPage, pageNo);
         }
@@ -18187,16 +18152,29 @@
     // 글자마다 행렬을 새로 세우거나 TJ 조정값으로 미는데 그것을 다 풀어서 준다). 직접 전진을
     // 계산해 보니 폰트가 vertical 을 안 밝히는 문서에서 글자가 가로로 밀렸다 — 그 계산은 버렸다.
     // 여기서는 **무엇이 빠졌는지만** 묻고, 자리는 그 글자를 잃은 아이템에서 이어 붙인다.
-    async function pdfDrawnGlyphTextForPage(page, pdfjsLib) {
+    // 그려진 글자와 **그 글자의 색**을 한 번에 낸다. 예전에는 둘을 따로 훑었고, 색은 아이템 수를
+    // **추정**해서 붙였다(pdfJsTextShowApproxItemCount). 추정이 한 칸이라도 어긋나면 그 뒤가 통째로
+    // 밀린다 — 실측에서 파란 글자 스물일곱 개를 정확히 찾아내고도 다섯 칸 밀려, 각본가 이름이
+    // 주석이 되고 진짜 주석이 본문으로 나왔다. 이제 색은 **그 글자를 그린 명령에서** 온다.
+    async function pdfDrawnGlyphsForPage(page, pdfjsLib) {
       const OPS = pdfjsLib && pdfjsLib.OPS;
-      if (!OPS || !page || typeof page.getOperatorList !== 'function') return '';
+      if (!OPS || !page || typeof page.getOperatorList !== 'function') return [];
       let ops = null;
       try { ops = await page.getOperatorList(); }
-      catch (error) { console.warn('operator list unavailable', error); return ''; }
+      catch (error) { console.warn('operator list unavailable', error); return []; }
       const fnArray = (ops && ops.fnArray) || [];
       const argsArray = (ops && ops.argsArray) || [];
-      let out = '';
+      const out = [];
+      let fillKey = 'color:gray:0';
+      const fillStack = [];
       for (let i = 0; i < fnArray.length; i += 1) {
+        const nextFill = pdfJsOperatorColorKey(fnArray[i], argsArray[i], OPS, 'fill');
+        if (nextFill) fillKey = nextFill;
+        if (fnArray[i] === OPS.save) fillStack.push(fillKey);
+        else if (fnArray[i] === OPS.restore) {
+          const restored = fillStack.pop();
+          if (restored) fillKey = restored;
+        }
         if (fnArray[i] !== OPS.showText) continue;
         const run = (argsArray[i] || [])[0];
         if (!Array.isArray(run)) continue;
@@ -18204,7 +18182,7 @@
           const glyph = run[k];
           if (!glyph || typeof glyph === 'number' || glyph.isSpace) continue;
           const unicode = String(glyph.unicode || '');
-          if (unicode.trim()) out += unicode;
+          if (unicode.trim()) out.push({ text: unicode, colorKey: fillKey });
         }
       }
       return out;
@@ -18239,54 +18217,61 @@
 
     // 되찾은 글자는 그것을 잃은 아이템의 **뒤에** 한 글자씩 이어 붙인다.
     // 앞 아이템이 이미 옳은 자리에 있으므로 그 연장이면 족하다.
-    function pdfAppendRecoveredGlyphs(out, item, chars) {
+    function pdfAppendRecoveredGlyphs(out, item, glyphs) {
       const own = Math.max(1, charLen(pdfItemGlyphText(item)));
-      Array.from(chars).forEach((ch, n) => {
+      (glyphs || []).forEach((glyph, n) => {
         const slot = pdfItemGlyphSlot(item, own + n, own);
         if (!slot) return;
+        const colorKey = glyph && glyph.colorKey || '';
         out.push(Object.assign({}, item, {
-          text: ch,
+          text: glyph && glyph.text || '',
           recoveredGlyph: true,
-          verticalGlyphCount: 1
+          verticalGlyphCount: 1,
+          colorKey,
+          visualGroupKey: colorKey
         }, slot));
       });
     }
 
-    function pdfItemsWithMissingGlyphs(items, drawnText) {
+    // 아이템을 **그려진 글자열 위에서 찾아** 색을 주고, 사이에 빠진 글자가 있으면 이어 붙인다.
+    // 찾는 일이 한 번이므로 색과 복구가 어긋날 수 없다.
+    function pdfItemsFromDrawnGlyphs(items, drawn) {
       const source = Array.isArray(items) ? items : [];
-      const drawn = String(drawnText || '');
-      if (!drawn || !source.length) return source;
-      const extractedLength = source.reduce((n, item) => n + pdfItemGlyphText(item).length, 0);
-      if (drawn.length <= extractedLength) return source;
+      const glyphs = Array.isArray(drawn) ? drawn : [];
+      if (!glyphs.length || !source.length) return source;
+      const drawnText = glyphs.map(glyph => glyph.text).join('');
       const out = [];
       let at = 0;
       source.forEach((item, index) => {
-        out.push(item);
         const own = pdfItemGlyphText(item);
-        if (!own) return;
-        const found = drawn.indexOf(own, at);
-        if (found < 0) return;
+        const found = own ? drawnText.indexOf(own, at) : -1;
+        if (found < 0) {
+          out.push(item);
+          return;
+        }
+        const colorKey = glyphs[found] && glyphs[found].colorKey || '';
+        out.push(Object.assign({}, item, { colorKey, visualGroupKey: colorKey }));
         at = found + own.length;
         const next = source[index + 1];
         const nextOwn = next ? pdfItemGlyphText(next) : '';
-        const nextAt = nextOwn ? drawn.indexOf(nextOwn, at) : drawn.length;
+        const nextAt = nextOwn ? drawnText.indexOf(nextOwn, at) : drawnText.length;
         const gapEnd = nextAt < 0 ? at : nextAt;
         if (gapEnd <= at) return;
-        pdfAppendRecoveredGlyphs(out, item, drawn.slice(at, gapEnd));
+        pdfAppendRecoveredGlyphs(out, item, glyphs.slice(at, gapEnd));
         at = gapEnd;
       });
       return out;
     }
 
-    async function pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo, colorKeys) {
-      const items = pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys);
-      const drawn = await pdfDrawnGlyphTextForPage(page, pdfjsLib);
-      const filled = pdfItemsWithMissingGlyphs(items, drawn);
+    async function pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo) {
+      const items = pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo);
+      const drawn = await pdfDrawnGlyphsForPage(page, pdfjsLib);
+      const filled = pdfItemsFromDrawnGlyphs(items, drawn);
       if (filled.length > items.length) notePdfOverlayDrop('glyphsRecovered', 'p' + pageNo + '×' + (filled.length - items.length));
       return filled;
     }
 
-    function pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo, colorKeys) {
+    function pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo) {
       const out = [];
       const rawItems = textContent && textContent.items || [];
       // pdf.js 는 폰트마다 { vertical, ascent, descent } 를 함께 준다. 세로쓰기 여부는
@@ -18343,8 +18328,9 @@
           pagePortrait: Number(viewport.width || 0) < Number(viewport.height || 0),
           pageAspect: Number(viewport.height) > 0 ? Number(viewport.width) / Number(viewport.height) : 1
         };
-        rect.colorKey = pdfJsColorKeyForTextItem(colorKeys, colorIndex);
-        rect.visualGroupKey = rect.colorKey || '';
+        // 색은 여기서 정하지 않는다 — 그려진 글자와 맞춰 pdfItemsFromDrawnGlyphs 가 준다.
+        rect.colorKey = '';
+        rect.visualGroupKey = '';
         rect.leftPct = rect.left / viewport.width * 100;
         rect.topPct = rect.top / viewport.height * 100;
         rect.widthPct = rect.width / viewport.width * 100;
@@ -22521,7 +22507,6 @@
       // 측정이 화면과 다른 경로를 본다(실제로 그렇게 정반대 결과를 낸 적이 있다).
       buildSourceReviewItems,
       sourceReviewItemsToBlocks,
-      // 색 주석 판정은 이것이 내는 colorKeys 에서 시작한다. 색 없이 재면 주석이 하나도 안 잡힌다.
       pdfJsPageOperatorSignals,
       pdfJsStableBodyCutLineFromCandidates,
       pdfJsStableBodyTopLineFromCandidates,
