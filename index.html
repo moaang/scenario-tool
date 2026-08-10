@@ -4623,8 +4623,15 @@
 
     // 「본문」 탭이 무엇을 담는가. 칩과 목록이 각자 적으면 화면의 수치와 내용이 갈린다 —
     // 실제로 칩만 manual_material 을 빼고 세고 있었다.
+    // 블록을 만들 때 zone 을 안 주면 이 값이 붙는다. 지금은 그런 호출이 하나도 없어 **도달
+    // 불가**지만, 그 상태에서 어느 화면도 이 zone 을 모르는 것이 문제였다 — 언젠가 zone 을
+    // 빠뜨린 호출이 생기면 그 블록은 목록에도 미리보기에도 안 나오고 조용히 사라진다.
+    // 검토가 필요하다는 표시이므로, 나오면 **보이는 쪽**이 맞다.
+    const MANUAL_REVIEW_ZONE = 'manual_review';
+
     function isBodyTabBlock(block) {
-      return Boolean(block) && (block.zone === 'body' || block.zone === 'manual_material');
+      return Boolean(block) && (block.zone === 'body' || block.zone === 'manual_material'
+        || block.zone === MANUAL_REVIEW_ZONE);
     }
 
     function activeDocumentBlocks(project) {
@@ -4636,7 +4643,7 @@
     function isScriptPreviewBlock(block) {
       if (!block || isPageArtifactBlock(block)) return false;
       if (block.zone === 'page_metadata' || block.type === 'pdf_note' || block.type === 'pdf_link') return false;
-      return ['body', 'body_end', 'front_matter', 'cast_list', 'manual_text', 'appendix'].includes(block.zone)
+      return ['body', 'body_end', 'front_matter', 'cast_list', 'manual_text', 'appendix', MANUAL_REVIEW_ZONE].includes(block.zone)
         || FRONT_AND_CAST_BLOCK_TYPES.includes(block.type)
         || block.type === 'body_text' || block.type === 'appendix_text';
     }
@@ -4649,7 +4656,8 @@
 
     function isBodyPreviewBlock(block) {
       if (!block || isFrontPreviewBlock(block)) return false;
-      return block.zone === 'body' || block.zone === 'body_end' || block.zone === 'manual_text' || block.type === 'body_text';
+      return block.zone === 'body' || block.zone === 'body_end' || block.zone === 'manual_text'
+        || block.zone === MANUAL_REVIEW_ZONE || block.type === 'body_text';
     }
 
     function cloneJson(value) {
@@ -15974,7 +15982,7 @@
         globalOrder += 1;
         const c = Object.assign({
           type: 'unknown',
-          zone: 'manual_review',
+          zone: MANUAL_REVIEW_ZONE,
           text: raw,
           assignableToCut: false,
           assignDefault: 'none',
