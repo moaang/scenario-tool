@@ -13930,34 +13930,37 @@
         return items;
       }
       const logicalPages = buildScenarioLogicalPageLines(pages, profile);
+      // 표지와 본문의 경계는 **문서 전체를 보고 한 번** 정한다 — 그 장과 뒤 세 장이 모두 본문답게
+      // 이어지는 자리다. 예전에는 페이지마다 다시 묻고(잠금) 줄마다 또 뒤집어서, 셋이 서로를
+      // 덮어쓰며 표지 한 장이 중간에 갈렸다. **확정이 하나면 잠금이라는 개념 자체가 필요 없다.**
+      // 본문 분류(classifyTextToBlocks)도 같은 자를 쓴다.
+      const foundReviewBodyStart = logicalPages.findIndex((page, index) => scenarioBodyStartsAtPage(logicalPages, index, profile));
+      const reviewBodyStartIndex = foundReviewBodyStart < 0 ? 0 : foundReviewBodyStart;
       let reviewBodyEnded = false;
-      let reviewFrontOpen = true;
       pages.forEach((page, pageIndex) => {
         const pageText = (page.lines || []).join('\n');
         const markdownItems = buildMarkdownSourceReviewItems(pageText, page.pageNo, orderRef, profile);
         if (markdownItems.length) {
           items.push(...markdownItems);
-          if (markdownItems.some(isBodyReviewItem)) reviewFrontOpen = false;
           if (markdownItems.some(item => item.type === 'end')) reviewBodyEnded = true;
           return;
         }
         const taggedItems = buildTaggedSourceReviewItems(pageText, page.pageNo, orderRef, profile);
         if (taggedItems.length) {
           items.push(...taggedItems);
-          if (taggedItems.some(isBodyReviewItem)) reviewFrontOpen = false;
           if (taggedItems.some(item => item.type === 'end')) reviewBodyEnded = true;
           return;
         }
+        const reviewFrontOpen = pageIndex < reviewBodyStartIndex;
         const logicalLines = (logicalPages[pageIndex] && logicalPages[pageIndex].lines) || [];
         const lines = sourceReviewLinesForPage(page, logicalLines, reviewFrontOpen, profile);
         let buffer = [];
         let bufferType = 'text';
         let bufferSection = '';
         let inCast = false;
-        const frontPageLocked = reviewFrontOpen && isSourceReviewFrontMatterPage(page, profile);
+        // 버퍼의 기본 종류를 정할 때만 쓴다 — 경계 판정과는 무관하다.
         const pageBodyLikely = Number(page.pageNo || 0) > 2 || pageHasBodySignal(lines, profile);
-        if (reviewFrontOpen && pageBodyLikely && !frontPageLocked) reviewFrontOpen = false;
-        let bodyStarted = !reviewFrontOpen && pageBodyLikely;
+        let bodyStarted = !reviewFrontOpen;
         let bodyTextInsertOpen = false;
         const candidateRuns = detectFrontCharacterLineRuns(lines, page.pageNo);
         const candidateStarts = new Map(candidateRuns.map(run => [run.start, run]));
@@ -13996,16 +13999,6 @@
             continue;
           }
           const candidateRun = candidateStarts.get(index);
-          // **표지는 페이지 단위다.** 페이지가 표지로 잠겼으면(frontPageLocked) 줄 하나가 그것을
-          // 풀지 못한다. 잠금 판정은 페이지를 통째로 보고 이미 끝났는데, 여기서 줄 하나에
-          // 뒤집히고 있었다 — 원고 차수 「２稿」가 번호 씬(２ + 稿)으로 읽혀 표지 넷째 줄부터
-          // 페이지 끝까지가 본문이 됐다.
-          if (reviewFrontOpen && !frontPageLocked && isBodyReviewStartLine(raw, profile)) {
-            flushText();
-            reviewFrontOpen = false;
-            bodyStarted = true;
-            inCast = false;
-          }
           if (reviewFrontOpen && candidateRun) {
             flushText();
             pushFrontCastLines(items, page.pageNo, candidateRun.lines, orderRef);
@@ -14035,7 +14028,7 @@
                 const next = lines[index + 1];
                 if (!next) { index += 1; continue; }
                 if (isBodyReviewStartLine(next, profile) || isCastSectionLine(next) || isCastGroupMarkerLine(next) || isLikelyCastEntryLine(next, profile)) break;
-                const frontContinuation = frontPageLocked && charLines.length < 6 && charLen(next) <= 120;
+                const frontContinuation = reviewFrontOpen && charLines.length < 6 && charLen(next) <= 120;
                 if (frontContinuation || isCastDescriptionLine(next, profile) || (!hasLocationSignal(next) && charLines.length < 5 && charLen(next) <= 90)) {
                   charLines.push(next);
                   index += 1;
