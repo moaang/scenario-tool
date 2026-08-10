@@ -19562,12 +19562,7 @@
     function currentOverlayRectForBlock(blockId) {
       const box = findOverlayBoxForBlockId(blockId);
       if (box) {
-        const rect = {
-          left: parseFloat(box.style.left) || 0,
-          top: parseFloat(box.style.top) || 0,
-          width: parseFloat(box.style.width) || 0,
-          height: parseFloat(box.style.height) || 0
-        };
+        const rect = overlayRectFromBoxElement(box);
         rect.vertical = box.classList.contains('vertical') || rect.height > rect.width * OVERLAY_VERTICAL_ASPECT;
         return rect;
       }
@@ -19718,15 +19713,19 @@
     }
 
     // ---- Clean-mode feedback surface: note chips + inline composer over the PDF ----
-    function pdfFeedbackBlockRect(blockId) {
-      const box = findOverlayBoxForBlockId(blockId);
-      if (!box) return null;
+    // 그려진 상자에서 자리를 읽는다. 단위는 퍼센트다.
+    function overlayRectFromBoxElement(box) {
       return {
         left: parseFloat(box.style.left) || 0,
         top: parseFloat(box.style.top) || 0,
         width: parseFloat(box.style.width) || 0,
         height: parseFloat(box.style.height) || 0
       };
+    }
+
+    function pdfFeedbackBlockRect(blockId) {
+      const box = findOverlayBoxForBlockId(blockId);
+      return box ? overlayRectFromBoxElement(box) : null;
     }
 
     // Find a non-overlapping spot for a note/composer rect near its anchor column.
@@ -19985,9 +19984,7 @@
         const notes = notesFor('block', blockId);
         box.classList.toggle('has-feedback', notes.length > 0);
         if (!notes.length) return;
-        const rect = pdfFeedbackBlockRect(blockId);
-        if (!rect) return;
-        entries.push({ blockId, rect, notes });
+        entries.push({ blockId, rect: overlayRectFromBoxElement(box), notes });
       });
       layer.innerHTML = '';
       const layerH = layer.clientHeight || 1;
