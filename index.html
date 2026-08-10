@@ -5444,7 +5444,11 @@
     function dialogQuotePairs(profile) {
       const pairs = profile && profile.quotePairs && profile.quotePairs.length ? profile.quotePairs : DEFAULT_DIALOG_QUOTE_PAIRS;
       const observedPairs = pairs.filter(pair => Number(pair.observed || 0) > 0);
-      if (!observedPairs.length) return pairs.slice(0, 1);
+      // 관측이 없다 = **이 문서가 어떤 부호를 쓰는지 모른다**. 그때 한 쌍으로 좁히면
+      // 그 한 쌍이 아닌 부호로 쓴 문서의 대사가 통째로 안 잡힌다 — 기본 쌍 목록에는
+      // observed 필드가 아예 없으므로, profile 을 못 받은 호출은 전부 여기로 온다.
+      // 모를 때는 좁히지 않는다. 문서를 아는 호출(profile 있음)은 아래에서 그대로 좁힌다.
+      if (!observedPairs.length) return pairs;
       const topObserved = Math.max(...observedPairs.map(pair => Number(pair.observed || 0)));
       return observedPairs
         .filter(pair => Number(pair.observed || 0) === topObserved)
