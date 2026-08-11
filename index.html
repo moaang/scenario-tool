@@ -7658,6 +7658,7 @@
     const PDF_MAX_PAGES_TO_PARSE = 180;
 
     async function readPdfDocumentWithPdfJs(file) {
+      notePdfOverlayDrop('trace', 'pdfjsEnter');
       const data = await file.arrayBuffer();
       const logicalPages = await readPdfLogicalPagesFromBuffer(data);
       const logicalPageByNo = new Map((logicalPages || []).map(page => [Number(page.pageNo || page.sourcePageIndex || 0), page]));
@@ -7667,10 +7668,16 @@
         pdfjsLib = await loadPdfJsLibrary();
         pdf = await pdfjsLib.getDocument(pdfJsDocumentParams(data.slice(0))).promise;
       } catch (error) {
-        if (logicalPages && logicalPages.length) return pdfDocumentResultFromLogicalPages(logicalPages, error);
+        if (logicalPages && logicalPages.length) {
+          // pdf.js 가 못 서면 자체 파서 결과로 나간다. 이 갈래로 나가면 아래 페이지 루프는
+          // 통째로 돌지 않는다 — 그 사실이 어디에도 안 남아 있었다.
+          notePdfOverlayDrop('trace', 'pdfjsFellBackToSelfParser');
+          return pdfDocumentResultFromLogicalPages(logicalPages, error);
+        }
         throw error;
       }
       try {
+      notePdfOverlayDrop('trace', 'pdfjsLoopStart');
       const pages = [];
       const maxPages = Math.min(pdf.numPages || 0, PDF_MAX_PAGES_TO_PARSE);
       for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
