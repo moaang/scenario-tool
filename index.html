@@ -17270,12 +17270,20 @@
       const doc = activeDocument();
       const lines = [`# ${allDump.document ? (allDump.document.title || allDump.document.id) : ''} — all pages`, '',
         '## 지나온 길', PDF_IMPORT_PIPELINE_STEPS.join('\n'), ''];
+      const allBlocks = sortedDocumentBlocks(doc);
+      const allItems = (doc && doc.reviewItems) || [];
+      lines.push('## 이 문서가 지금 들고 있는 것',
+        `  블록 ${allBlocks.length}개 · 리뷰 아이템 ${allItems.length}개 · 장 ${(allDump.pages || []).length}개`,
+        allBlocks.length ? '' : '  블록이 0개다 — 원문 확정을 아직 안 했거나 블록이 다른 문서에 붙어 있다.',
+        allItems.length ? '' : '  리뷰 아이템이 0개다 — 다시 읽어들이면 저장 경계에서 벗겨진다.',
+        '');
       (allDump.pages || []).forEach((p) => {
         lines.push(`## p.${p.pageNo}`);
         if (p.text) lines.push(p.text);
+        const itemLines = pageDebugReviewItemLines(doc, p.pageNo);
         const blockLines = pageDebugBlockDetailLines(doc, p.pageNo);
-        if (blockLines.length) lines.push('', '### 블록', blockLines.join('\n'));
-        lines.push('');
+        lines.push('', '### 리뷰 아이템', itemLines.join('\n') || '  (없음)',
+          '', '### 블록', blockLines.join('\n') || '  (없음)', '');
       });
       lines.push('## 좌표를 못 잡아 버린 것', pageDebugDropLines().join('\n') || '  (없음)');
       return lines.join('\n');
