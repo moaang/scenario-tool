@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v152';
+    const APP_VERSION = 'v153';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -10627,6 +10627,7 @@
       let currentFontSize = 12;
       let ctm = [1, 0, 0, 1, 0, 0];
       let textMatrix = [1, 0, 0, 1, 0, 0];
+      let leading = 0;
       let fillColor = { space: 'gray', values: [0] };
       let strokeColor = { space: 'gray', values: [0] };
       let fillColorSpace = 'gray';
@@ -10642,6 +10643,8 @@
         '|(?:' + number + '\\s+){5}' + number + '\\s+cm' +
         '|\\/[A-Za-z0-9._-]+\\s+' + number + '\\s+Tf' +
         '|' + number + '\\s+' + number + '\\s+T[dD]' +
+        '|' + number + '\\s+TL' +
+        '|\\bT\\*' +
         '|' + number + '\\s+' + number + '\\s+' + number + '\\s+(?:rg|RG)' +
         '|' + number + '\\s+(?:g|G)' +
         '|' + number + '\\s+' + number + '\\s+' + number + '\\s+' + number + '\\s+(?:k|K)' +
@@ -10681,8 +10684,20 @@
           currentFontName = font ? font[1] : currentFontName;
           const nums = pdfOperatorNumbers(op);
           if (Number(nums[0]) > 0) currentFontSize = Number(nums[0]);
+        } else if (/\s+TL$/.test(op)) {
+          leading = Number(pdfOperatorNumbers(op)[0]) || 0;
+        } else if (op === 'T*') {
+          // 줄바꿈. 읽지 않으면 다음 글자가 앞 글자 위에 그대로 놓여
+          // 두 글자가 한 자리를 차지하고 줄 묶기에서 한 자가 사라진다 —
+          // 세로 조판의 한 칸에 누운 두 자리 숫자가 그렇게 앞자리를 잃었다.
+          textMatrix = multiplyPdfMatrix(textMatrix, [1, 0, 0, 1, 0, -leading]);
+          x = Number(textMatrix[4]) || 0;
+          y = Number(textMatrix[5]) || 0;
         } else if (/\s+T[dD]$/.test(op)) {
           const nums = pdfOperatorNumbers(op);
+          // TD 는 이동과 함께 줄 간격을 정한다. TL 을 따로 적지 않는 문서에서는
+          // 이 값이 T* 가 쓰는 유일한 줄 간격이다.
+          if (/\s+TD$/.test(op)) leading = -(Number(nums[1]) || 0);
           // Td/TD 의 이동량은 텍스트 공간 단위라 현재 행렬을 거쳐야 지면 좌표가 된다.
           // 그대로 더하면 Tm 스케일이 1 이 아닌 문서에서 그 배수만큼 어긋나고,
           // 회전된 행렬에서는 축까지 바뀜다 — 스케일 0.05 로 짜인 원고에서 한 줄이
