@@ -11080,7 +11080,17 @@
         if (x < xMin || x > xMax || y < yMin || y > yMax) return;
         removed.add(item);
       });
+      notePdfLineGuideNumberRemoval(Array.from(removed), 0, 'self');
       return source.filter(item => !removed.has(item));
+    }
+
+    // 지운 글자를 그대로 적는다 — 「몇 개 지웠다」만으로는 행번호를 지웠는지 표지의 날짜를
+    // 지웠는지 구별할 수 없다.
+    function notePdfLineGuideNumberRemoval(removed, pageNo, kind) {
+      if (!removed || !removed.length) return;
+      const text = removed.slice(0, 12).map(item => String(item && item.text || '').trim()).join('');
+      notePdfOverlayDrop('lineNumbersRemoved',
+        'p' + Number(pageNo || 0) + '×' + removed.length + ' ' + kind + ' "' + text + '"');
     }
 
     function stripPdfJsLineGuideNumberItems(items, pageNo) {
@@ -11089,9 +11099,9 @@
       const candidates = source.filter(item => isPdfJsLineGuideNumberCandidate(item, source, pageNo));
       if (!hasPdfJsLineGuideNumberGrid(candidates)) return source;
       const band = pdfJsLineGuideNumberBand(candidates);
-      const removeSet = new Set(source
-        .filter(item => isPdfJsLineGuideNumberInDetectedBand(item, band, pageNo))
-        .map(pdfTextItemKey));
+      const removed = source.filter(item => isPdfJsLineGuideNumberInDetectedBand(item, band, pageNo));
+      notePdfLineGuideNumberRemoval(removed, pageNo, 'pdfjs');
+      const removeSet = new Set(removed.map(pdfTextItemKey));
       return source.filter(item => !removeSet.has(pdfTextItemKey(item)));
     }
 
