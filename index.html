@@ -2771,7 +2771,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v138';
+    const APP_VERSION = 'v139';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -7701,6 +7701,25 @@
     // parse time against a pathological or mis-identified PDF (e.g. a whole novel dropped by mistake).
     const PDF_MAX_PAGES_TO_PARSE = 180;
 
+    // pdf.js 가 준 글자 중 페이지 텍스트에 한 번도 안 나오는 것. 버려진 것이 아니라
+    // 읽히지 않은 것을 찾는다 — 두 계통이 갈리는 자리를 이름으로 짚기 위해서다.
+    function notePdfComparedCharsMissingFromText(textItems, pageText, pageNo) {
+      const seen = new Set(Array.from(String(pageText || '').replace(/\s/g, '')));
+      const missing = [];
+      const already = new Set();
+      (textItems || []).forEach((item) => {
+        Array.from(String(item && item.text || '').replace(/\s/g, '')).forEach((ch) => {
+          if (seen.has(ch) || already.has(ch)) return;
+          already.add(ch);
+          missing.push(ch);
+        });
+      });
+      if (!missing.length) return;
+      notePdfOverlayDrop('charsNeverRead',
+        'p' + Number(pageNo || 0) + ' items=' + (textItems || []).length
+        + ' \u00d7' + missing.length + ' "' + missing.join('').slice(0, 30) + '"');
+    }
+
     async function readPdfDocumentWithPdfJs(file) {
       notePdfOverlayDrop('trace', 'pdfjsEnter');
       const data = await file.arrayBuffer();
@@ -7766,6 +7785,10 @@
         // 「오버레이 인덱스 == 인쇄 행번호 − 1」이라는 가정은 위의 아티팩트 필터가 이미 깨뜨린다.
         // 중간 변수는 남기지 않는다 — 소비자가 하나뿐이었다(같은 값에 두 이름을 두지 않는다).
         const logicalText = removePdfRubyLinesFromLogicalText(rawLogicalText, rubyLines);
+        // 두 계통을 나란히 잰다. 여섯 군데 필터가 전부 「안 버렸다」고 하는데 글자는 없어서,
+        // 「어디서 버리는가」가 아니라 「애초에 읽히는가」를 물어야 했다. pdf.js 아이템에는
+        // 있는데 페이지 텍스트에 한 번도 안 나오는 글자를 그대로 적는다 — 그것이 미판독의 목록이다.
+        notePdfComparedCharsMissingFromText(textItems, logicalText, pageNo);
         // 읽는 사람이 보는 페이지 텍스트는 여기서 두 번 더 깎인다(파란 주석 줄, 루비 줄).
         // 어느 단계에서 몇 줄이 사라지는지 남긴다 — 줄이 통째로 없어져도 화면에는 그저
         // 글자가 없을 뿐이라 어디서 잃었는지 알 수가 없다.
