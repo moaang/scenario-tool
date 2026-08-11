@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v147';
+    const APP_VERSION = 'v148';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -4055,6 +4055,8 @@
     // 렌더는 페이지를 넘길 때마다이므로 같은 그릇에 담으면 늘 렌더가 이긴다.
     let lastImportDropLines = [];
 
+    let pdfOverlayDropChipQueued = false;
+
     function notePdfOverlayDrop(kind, detail) {
       const prev = pdfOverlayDrops.get(kind) || { count: 0, last: '' };
       pdfOverlayDrops.set(kind, {
@@ -4062,7 +4064,14 @@
         last: detail || prev.last,
         phase: pdfOverlayDropPhase
       });
-      renderPdfOverlayDropChip();
+      // 기록마다 화면을 다시 그리면 파싱 한 번에 DOM 을 수만 번 만진다. 같은 틱의 기록을
+      // 모아 한 번만 반영한다 — 상태가 바뀌면 표시가 따라간다는 성질은 그대로다.
+      if (pdfOverlayDropChipQueued) return;
+      pdfOverlayDropChipQueued = true;
+      Promise.resolve().then(() => {
+        pdfOverlayDropChipQueued = false;
+        renderPdfOverlayDropChip();
+      });
     }
 
     // 렌더가 부른다 — 렌더가 남긴 것만 지운다. 임포트 기록은 다음 임포트까지 남는다.
@@ -10809,9 +10818,14 @@
 
     function pdfPositionedTextItemFromMatrix(options) {
       const source = options || {};
-      const pageSize = pdfPageSizeFromMediaBox(source.pageSize && source.pageSize.mediaBox);
-      pageSize.width = Number(source.pageSize && source.pageSize.width) || pageSize.width;
-      pageSize.height = Number(source.pageSize && source.pageSize.height) || pageSize.height;
+      // 넘어오는 pageSize 는 페이지를 열 때 이미 정해진 값이다. 예전에는 여기서 mediaBox 로
+      // 판형을 다시 짐작하고 바로 다음 줄에서 그 실제 값으로 덮었다 — 짐작값은 한 번도 쓰이지
+      // 않으면서 글자 수만큼(한 문서에 만 번 넘게) 「짐작했다」를 기록했고, 그 기록이 매번
+      // 화면을 건드려 읽기 자체를 무겁게 했다. 값이 없을 때만 짐작한다.
+      const given = source.pageSize || {};
+      const pageSize = Number(given.width) > 0 && Number(given.height) > 0
+        ? { width: Number(given.width), height: Number(given.height) }
+        : pdfPageSizeFromMediaBox(given.mediaBox);
       const transform = source.transform || [1, 0, 0, 1, Number(source.fallbackX) || 0, Number(source.fallbackY) || 0];
       const text = String(source.text || '');
       const charCount = Math.max(1, charLen(text));
