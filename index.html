@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v156';
+    const APP_VERSION = 'v157';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -9006,9 +9006,23 @@
       return groupPdfJsBodyItemsToOverlayLines(pdfJsItemsForLayoutGuide(items, pageNo));
     }
 
+    // 같은 배열로 여러 번 불린다 — 줄 묶기와 가로 메타 줄이 각각 부른다.
+    // 한 문서 임포트 시간의 상당부분이 그 재계산이었다.
+    const pdfJsLayoutGuideCache = new WeakMap();
+
     function pdfJsItemsForLayoutGuide(items, pageNo) {
-      const source = (items || []).filter(item => item && item.text && !item.pdfRuby && !isPdfTextItemArtifact(item, pageNo));
-      return stripPdfJsLineGuideNumberItems(source, pageNo);
+      if (!Array.isArray(items)) return stripPdfJsLineGuideNumberItems([], pageNo);
+      let byPage = pdfJsLayoutGuideCache.get(items);
+      if (!byPage) {
+        byPage = new Map();
+        pdfJsLayoutGuideCache.set(items, byPage);
+      }
+      const key = Number(pageNo) || 0;
+      if (byPage.has(key)) return byPage.get(key);
+      const source = items.filter(item => item && item.text && !item.pdfRuby && !isPdfTextItemArtifact(item, pageNo));
+      const result = stripPdfJsLineGuideNumberItems(source, pageNo);
+      byPage.set(key, result);
+      return result;
     }
 
     // ── 줄은 좌표에서 복원한다 ────────────────────────────────────────────────
@@ -11188,16 +11202,30 @@
     // 값으로 두 자리를 복원하는 것은 배치가 흔들려 취약하다. 대신 **이미 행번호로 확정된
     // 글리프들이 만드는 격자**를 재서 그 위에 있는 `0` 만 회수한다 — 확정 집합이 비면
     // 아무것도 추가하지 않으므로, 행번호가 없는 문서에는 손대지 않는다.
+    const pdfLineGuideStripCache = new WeakMap();
+
     function stripPdfLineGuideNumberItems(items) {
       const source = Array.isArray(items) ? items : [];
+      const remembered = pdfLineGuideStripCache.get(source);
+      if (remembered) {
+        // 기록은 다시 남긴다 — 계산만 건너뛰고 진단은 부르는 쪽마다 그대로 둘다.
+        notePdfLineGuideNumberRemoval(remembered.removed, 0, 'self');
+        return remembered.kept;
+      }
       const guides = source.filter(item => isPdfLineGuideNumberItem(item, source));
-      if (!guides.length) return source;
+      if (!guides.length) {
+        pdfLineGuideStripCache.set(source, { kept: source, removed: [] });
+        return source;
+      }
       // 행번호는 지면의 한 띄에 나란히 선다. 이웃 글자만으로 가리면 연속된 숫자가
       // 서로를 이웃으로 인정하지 않아 두 자리 수가 통째로 걸린다 — 본문 안의
       // 연호나 날짜가 그렇게 사라졌다. 띄 밖의 숫자는 본문이다.
       const band = pdfLineGuideNumberBand(guides);
       const banded = guides.filter(item => isPdfLineGuideNumberInDetectedBand(item, band));
-      if (!banded.length) return source;
+      if (!banded.length) {
+        pdfLineGuideStripCache.set(source, { kept: source, removed: [] });
+        return source;
+      }
       const removed = new Set(banded);
       const xs = banded.map(item => Number(item && item.x) || 0);
       const ys = banded.map(item => Number(item && item.y) || 0);
@@ -11213,8 +11241,11 @@
         if (x < xMin || x > xMax || y < yMin || y > yMax) return;
         removed.add(item);
       });
-      notePdfLineGuideNumberRemoval(Array.from(removed), 0, 'self');
-      return source.filter(item => !removed.has(item));
+      const removedList = Array.from(removed);
+      notePdfLineGuideNumberRemoval(removedList, 0, 'self');
+      const kept = source.filter(item => !removed.has(item));
+      pdfLineGuideStripCache.set(source, { kept, removed: removedList });
+      return kept;
     }
 
     // 지운 글자를 그대로 적는다 — 「몇 개 지웠다」만으로는 행번호를 지웠는지 표지의 날짜를
