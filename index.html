@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v149';
+    const APP_VERSION = 'v150';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -18996,10 +18996,21 @@
       return isPdfPageArtifactTextItem(item, pageNo) || isPdfCoordinateArtifactItem(item, pageNo);
     }
 
+    // 쪽번호·머리말이 설 자리인가. **판정은 여기 한 곳이다** — 예전에는 두 함수가 각자
+    // 구역을 적었고, 한쪽만 고치면 나머지가 같은 글자를 계속 먹었다.
+    // 가로쓰기 판면을 전제하면 세로쓰기 본문을 먹는다: 세로쪽은 본문 열이 판면 아래까지
+    // 흐르므로 「가운데 아래」에 본문 숫자가 온다. 이 코퍼스의 실제 쪽번호는 스무 쪽 모두
+    // 아래끝 98% 로 일정했고, 그 위 구역에서 사라진 것은 전부 본문이었다(아래끝 69~90%).
+    function isPdfPageNumberZone(top, bottom, centerX) {
+      const edgeBand = Number(centerX) <= 14 || Number(centerX) >= 86;
+      return Number(top) < 5.5 || Number(bottom) > 92
+        || edgeBand && Number(top) > 82 && Number(bottom) > 86;
+    }
+
     function isPdfPageArtifactTextItem(item, pageNo) {
       if (!item || !isPdfPageArtifactText(item.text, pageNo)) return false;
-      const bottomPct = Number(item.topPct || 0) + Number(item.heightPct || 0);
-      return Number(item.topPct || 0) > 88 || bottomPct > 92 || Number(item.topPct || 0) < 4;
+      const top = Number(item.topPct || 0);
+      return isPdfPageNumberZone(top, top + Number(item.heightPct || 0), Number(item.centerXPct || 0));
     }
 
     function isPdfCoordinateArtifactItem(item, pageNo) {
@@ -19011,12 +19022,12 @@
       const bottom = top + Number(item.heightPct || 0);
       const centerX = Number(item.centerXPct || 0);
       const compact = text.replace(/\s+/g, '');
-      const pageNumberBand = centerX >= 34 && centerX <= 66;
-      const pageNumberEdgeBand = centerX <= 14 || centerX >= 86;
-      const pageNumberZone = top < 5.5 || top > 88 || bottom > 92 || pageNumberBand && top > 68 || pageNumberEdgeBand && top > 82 && bottom > 86;
+      const pageNumberZone = isPdfPageNumberZone(top, bottom, centerX);
+      // 「Ｐ12」처럼 쪽번호라고 스스로 밝히는 표기는 오검출 위험이 낮아 판면 가운데까지 본다.
+      const labelledPageNumberBand = centerX >= 34 && centerX <= 66;
       if (isPdfPageArtifactText(text, itemPageNo) && pageNumberZone) return true;
       if (/^[\-‐ー―–—]*[0-9０-９]{1,4}[\-‐ー―–—]*$/.test(compact) && pageNumberZone) return true;
-      if (/^(?:p|P|page|PAGE|頁|Ｐ)\.?[0-9０-９]{1,4}$/i.test(compact) && (top < 8 || top > 86 || bottom > 90 || pageNumberBand && top > 64)) return true;
+      if (/^(?:p|P|page|PAGE|頁|Ｐ)\.?[0-9０-９]{1,4}$/i.test(compact) && (top < 8 || top > 86 || bottom > 90 || labelledPageNumberBand && top > 64)) return true;
       return false;
     }
 
