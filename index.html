@@ -10886,6 +10886,17 @@
       return false;
     }
 
+    // 뽑아낸 줄을 남길지. 한 글자 줄과 숫자만인 줄을 버려 왔는데, **세로 조판에서는 한 칸짜리
+    // 줄이 정상이다** — 숫자가 세로로 한 칸씩 놓이면 그 칸이 통째로 사라진다. 쪽번호와 행번호는
+    // 전용 판정이 따로 있으므로 이 자리는 그 둘을 위한 것이 아니다. 지금은 버리되 무엇을 버렸는지
+    // 남긴다 — 조용히 사라지면 어느 단계에서 없어졌는지 알 수가 없다.
+    function keepPdfExtractedLine(line, where) {
+      const text = String(line || '');
+      if (text.length > 1 && !/^[0-9０-９]+$/.test(text)) return true;
+      if (text) notePdfOverlayDrop('shortLineDropped', where + ' "' + text.slice(0, 8) + '"');
+      return false;
+    }
+
     function tryGroupPdfHorizontalRows(items) {
       const rows = [];
       items.forEach((item) => {
@@ -10901,7 +10912,7 @@
       return rows
         .sort((a, b) => sortAscending ? a.y - b.y : b.y - a.y)
         .map(row => row.items.slice().sort((a, b) => a.x - b.x).map(item => item.text).join('').replace(/\s+/g, ' ').trim())
-        .filter(line => line.length > 1 && !/^[0-9０-９]+$/.test(line) && !isLikelyPdfGarbledLine(line));
+        .filter(line => keepPdfExtractedLine(line, 'rows') && !isLikelyPdfGarbledLine(line));
     }
 
     function shouldSortPdfRowsAscending(rows) {
@@ -10938,7 +10949,7 @@
       });
       const finalLine = cleanPdfContentOrderLine(buffer);
       if (finalLine) lines.push(finalLine);
-      return lines.filter(line => line.length > 1 && !/^[0-9０-９]+$/.test(line));
+      return lines.filter(line => keepPdfExtractedLine(line, 'order'));
     }
 
     function shouldBreakPdfContentOrderLine(previous, current, buffer) {
@@ -11040,7 +11051,7 @@
         bodyLines: sorted
           .filter(segment => !segment.detachedNote)
           .map(segment => segment.text)
-          .filter(line => line.length > 1 && !/^[0-9０-９]+$/.test(line) && !isLikelyPdfGarbledLine(line)),
+          .filter(line => keepPdfExtractedLine(line, 'columns') && !isLikelyPdfGarbledLine(line)),
         annotations: sorted
           .filter(segment => segment.detachedNote)
           .map((segment, index) => ({
