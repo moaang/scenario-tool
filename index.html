@@ -4041,15 +4041,39 @@
     // 페이지를 넘기는 경로는 그것을 부르지 않아 칩이 영영 갱신되지 않았다. 옮길 만한 동기
     // 지점도 없다 — 마지막 기록자인 가이드 레이어가 pdf.js 렌더 뒤 비동기로 돌기 때문에
     // 어디에 놓아도 이르거나 늦는다(둘 다 실측했다). 그래서 상태가 바뀔 때 표시가 따라간다.
+    // 기록이 어느 단계에서 났는지 함께 적는다. 임포트는 한 번뿐이고 렌더는 페이지를 넘길
+    // 때마다 다시 도는데, 리셋이 둘을 구별하지 않아 임포트가 남긴 것을 첫 렌더가 통째로
+    // 지웠다 — 임포트 단계의 진단은 화면에 뜬 적이 없다.
+    let pdfOverlayDropPhase = 'render';
+
     function notePdfOverlayDrop(kind, detail) {
       const prev = pdfOverlayDrops.get(kind) || { count: 0, last: '' };
-      pdfOverlayDrops.set(kind, { count: prev.count + 1, last: detail || prev.last });
+      pdfOverlayDrops.set(kind, {
+        count: prev.count + 1,
+        last: detail || prev.last,
+        phase: pdfOverlayDropPhase
+      });
       renderPdfOverlayDropChip();
     }
 
+    // 렌더가 부른다 — 렌더가 남긴 것만 지운다. 임포트 기록은 다음 임포트까지 남는다.
     function resetPdfOverlayDrops() {
-      pdfOverlayDrops.clear();
+      Array.from(pdfOverlayDrops.keys()).forEach(kind => {
+        const entry = pdfOverlayDrops.get(kind);
+        if (!entry || entry.phase !== 'import') pdfOverlayDrops.delete(kind);
+      });
       renderPdfOverlayDropChip();
+    }
+
+    // 파일을 새로 읽을 때 임포트 기록을 갈아 끼운다.
+    function beginPdfOverlayDropImport() {
+      pdfOverlayDrops.clear();
+      pdfOverlayDropPhase = 'import';
+      renderPdfOverlayDropChip();
+    }
+
+    function endPdfOverlayDropImport() {
+      pdfOverlayDropPhase = 'render';
     }
 
     function pdfBodyRangeForPage(doc, pageNo) {
@@ -7625,6 +7649,15 @@
     }
 
     async function readDocumentFileSelfContained(file) {
+      beginPdfOverlayDropImport();
+      try {
+        return await readDocumentFileSelfContainedInner(file);
+      } finally {
+        endPdfOverlayDropImport();
+      }
+    }
+
+    async function readDocumentFileSelfContainedInner(file) {
       const name = String(file && file.name || '').toLowerCase();
       if (name.endsWith('.md') || name.endsWith('.markdown')) {
         const markdownSource = await file.text();
