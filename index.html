@@ -2735,6 +2735,10 @@
     // 일반해가 아니다(다른 임계 1.18·1.2·1.35·1.8·2.2 가 각자 다른 판정에 쓰인다).
     const OVERLAY_VERTICAL_ASPECT = 1.25;
 
+    // 세로 런으로 인정하는 최소 종횡비. 길이와 무관하게 하나다 — 한 칸이든 열 칸이든
+    // 세로로 흐르는 글자의 높이 대 폭은 같은 양을 잰다.
+    const PDF_VERTICAL_RUN_MIN_ASPECT = 1.35;
+
     // 씬 머리에 서는 기호의 정본 — 원·사각·삼각 세 모양. 어느 것을 쓸지는 작품마다 다르다.
     // 기호는 세 모양으로 갈린다. 어느 모양을 씬 머리로 쓰는지는 문서마다 다르고 프로필이 기억한다.
     const SCENE_MARKER_SHAPES = { circle: '○●◯〇◎', square: '□■', triangle: '△▲▽▼' };
@@ -2771,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v146';
+    const APP_VERSION = 'v147';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -9366,17 +9370,11 @@
       const width = Number(item.widthPct) || 0;
       const height = Number(item.heightPct) || 0;
       if (!width || !height) return false;
-      const len = charLen(item.text);
-      const ratio = len <= 2 ? 2.2 : 1.35;
-      const vertical = height > width * ratio;
-      // 세로 조판에서 한 칸은 정사각형에 가깝다 — 짧은 런은 종횡비로 세로인지 가릴 수가 없다.
-      // 여기서 떨어지는 것의 실제 치수를 남긴다(임계를 근거 없이 옮기지 않기 위해서다).
-      if (!vertical && len <= 2) {
-        notePdfOverlayDrop('shortRunNotVertical',
-          '"' + String(item.text).slice(0, 4) + '" w=' + width.toFixed(2)
-          + ' h=' + height.toFixed(2) + ' h/w=' + (height / width).toFixed(2));
-      }
-      return vertical;
+      // 세로인지는 한 자로 잰다. 예전에는 한두 글자 런에만 훨씬 가파른 비를 요구했는데,
+      // 세로 조판에서 한 칸의 높이는 행 피치이고 폭은 글자 폭이라 그 비는 긴 런의 것과 같은
+      // 양이다 — 이 코퍼스에서 탈락한 짧은 런의 실측 비는 1.41 로, 긴 런 임계를 넘고도
+      // 남았다(155건). 값을 두 벌 두었더니 한쪽만 통과하는 글자가 생겼다.
+      return height > width * PDF_VERTICAL_RUN_MIN_ASPECT;
     }
 
 
