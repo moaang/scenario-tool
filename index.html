@@ -4045,6 +4045,9 @@
     // 때마다 다시 도는데, 리셋이 둘을 구별하지 않아 임포트가 남긴 것을 첫 렌더가 통째로
     // 지웠다 — 임포트 단계의 진단은 화면에 뜬 적이 없다.
     let pdfOverlayDropPhase = 'render';
+    // 마지막 임포트가 무엇을 버렸는지. 렌더 리셋과 완전히 분리해 둔다 — 임포트는 한 번,
+    // 렌더는 페이지를 넘길 때마다이므로 같은 그릇에 담으면 늘 렌더가 이긴다.
+    let lastImportDropLines = [];
 
     function notePdfOverlayDrop(kind, detail) {
       const prev = pdfOverlayDrops.get(kind) || { count: 0, last: '' };
@@ -4073,6 +4076,12 @@
     }
 
     function endPdfOverlayDropImport() {
+      const parts = [];
+      pdfOverlayDrops.forEach((entry, kind) => {
+        if (!entry || entry.phase !== 'import') return;
+        parts.push(kind + ' \u00d7' + entry.count + (entry.last ? ' (' + entry.last + ')' : ''));
+      });
+      lastImportDropLines = parts;
       pdfOverlayDropPhase = 'render';
     }
 
@@ -17181,6 +17190,11 @@
       return out;
     }
 
+    // 읽어들일 때 버린 것 — 페이지를 넘겨도 바뀌지 않는다(마지막 임포트의 결과다).
+    function importDebugDropLines() {
+      return (lastImportDropLines || []).map(line => '  ' + line);
+    }
+
     function pageDebugDropLines() {
       const out = [];
       pdfOverlayDrops.forEach((info, kind) => {
@@ -17216,6 +17230,8 @@
         '## 블록 — 화면 박스 하나가 여기 한 항목이다',
         blockLines.join('\n') || '  (없음)',
         '',
+        '## 읽어들일 때 버린 것',
+        importDebugDropLines().join('\n') || '  (없음)',
         '## 좌표를 못 잡아 버린 것',
         dropLines.join('\n') || '  (없음)'
       ].join('\n');
@@ -17241,6 +17257,7 @@
           '', '### 블록', blockLines.join('\n') || '  (없음)', '');
       });
       lines.push('## 좌표를 못 잡아 버린 것', pageDebugDropLines().join('\n') || '  (없음)');
+      lines.push('## 읽어들일 때 버린 것', importDebugDropLines().join('\n') || '  (없음)');
       return lines.join('\n');
     }
 
