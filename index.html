@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v153';
+    const APP_VERSION = 'v154';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -11173,9 +11173,15 @@
       const source = Array.isArray(items) ? items : [];
       const guides = source.filter(item => isPdfLineGuideNumberItem(item, source));
       if (!guides.length) return source;
-      const removed = new Set(guides);
-      const xs = guides.map(item => Number(item && item.x) || 0);
-      const ys = guides.map(item => Number(item && item.y) || 0);
+      // 행번호는 지면의 한 띄에 나란히 선다. 이웃 글자만으로 가리면 연속된 숫자가
+      // 서로를 이웃으로 인정하지 않아 두 자리 수가 통째로 걸린다 — 본문 안의
+      // 연호나 날짜가 그렇게 사라졌다. 띄 밖의 숫자는 본문이다.
+      const band = pdfLineGuideNumberBand(guides);
+      const banded = guides.filter(item => isPdfLineGuideNumberInDetectedBand(item, band));
+      if (!banded.length) return source;
+      const removed = new Set(banded);
+      const xs = banded.map(item => Number(item && item.x) || 0);
+      const ys = banded.map(item => Number(item && item.y) || 0);
       const xMin = Math.min.apply(null, xs);
       const xMax = Math.max.apply(null, xs);
       const yMin = Math.min.apply(null, ys);
@@ -11206,8 +11212,8 @@
       if (!source.length) return [];
       const candidates = source.filter(item => isPdfJsLineGuideNumberCandidate(item, source, pageNo));
       if (!hasPdfJsLineGuideNumberGrid(candidates)) return source;
-      const band = pdfJsLineGuideNumberBand(candidates);
-      const removed = source.filter(item => isPdfJsLineGuideNumberInDetectedBand(item, band, pageNo));
+      const band = pdfLineGuideNumberBand(candidates);
+      const removed = source.filter(item => isPdfLineGuideNumberInDetectedBand(item, band, pageNo));
       notePdfLineGuideNumberRemoval(removed, pageNo, 'pdfjs');
       const removeSet = new Set(removed.map(pdfTextItemKey));
       return source.filter(item => !removeSet.has(pdfTextItemKey(item)));
@@ -11252,7 +11258,7 @@
       return hasPdfLineGuideNumberValueGrid(pdfLineGuideNumberValues(candidates, 999), 8, 8, 6);
     }
 
-    function pdfJsLineGuideNumberBand(candidates) {
+    function pdfLineGuideNumberBand(candidates) {
       const source = (candidates || []).filter(item => Number.isFinite(Number(item && item.centerYPct)));
       const values = source
         .map(pdfJsLineGuideNumberValue)
@@ -11280,7 +11286,7 @@
       };
     }
 
-    function isPdfJsLineGuideNumberInDetectedBand(item, band, pageNo) {
+    function isPdfLineGuideNumberInDetectedBand(item, band, pageNo) {
       const value = pdfJsLineGuideNumberValue(item);
       if (!Number.isFinite(value)) return false;
       if (pageNo && isPdfTextItemArtifact(item, pageNo)) return false;
