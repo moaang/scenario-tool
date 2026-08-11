@@ -2771,7 +2771,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v141';
+    const APP_VERSION = 'v142';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -22674,9 +22674,10 @@
         addSubDocument('root');
       }
       try {
-        const result = /\.pdf$/i.test(file.name)
-          ? await readPdfDocumentWithPdfJs(file)
-          : await readDocumentFileSelfContained(file);
+        // 확장자 분기는 readDocumentFileSelfContained 안에 이미 있다. 여기 사본을 두었더니
+        // PDF 만 그 함수를 우회했고, 거기 걸어 둔 임포트 단계 표시를 못 받아 파싱 중의 진단이
+        // 전부 렌더 리셋에 지워졌다 — 조용히 사라진 것이 아니라 기록이 없어진 것이었다.
+        const result = await readDocumentFileSelfContained(file);
         const doc = activeDocument();
         if (versionMode === 'new' && (doc.sourceConfirmed || (doc.versions || []).length)) {
           saveActiveDocumentVersionSnapshot(doc, { silent: true });
