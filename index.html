@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v155';
+    const APP_VERSION = 'v156';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -8804,16 +8804,27 @@
       return { horizontalDividers };
     }
 
-    function pdfJsOperatorStrokesPath(fn, OPS) {
-      if (!OPS) return false;
-      return [
+    // 오퍼레이터 목록은 한 문서 안에서 변하지 않는다. 예전에는 오퍼레이터를 하나 볼 때마다
+    // 배열을 새로 만들고 filter 까지 돌렸다 — 한 쪽에 수만 번이다.
+    const pdfJsStrokeOpsCache = new WeakMap();
+
+    function pdfJsStrokeOpsSet(OPS) {
+      if (pdfJsStrokeOpsCache.has(OPS)) return pdfJsStrokeOpsCache.get(OPS);
+      const set = new Set([
         OPS.stroke,
         OPS.closeStroke,
         OPS.fillStroke,
         OPS.eoFillStroke,
         OPS.closeFillStroke,
         OPS.closeEOFillStroke
-      ].filter(value => Number.isFinite(Number(value))).includes(fn);
+      ].filter(value => Number.isFinite(Number(value))));
+      pdfJsStrokeOpsCache.set(OPS, set);
+      return set;
+    }
+
+    function pdfJsOperatorStrokesPath(fn, OPS) {
+      if (!OPS) return false;
+      return pdfJsStrokeOpsSet(OPS).has(fn);
     }
 
     function pdfJsOperatorConsumesPathWithoutStroke(fn, OPS) {
@@ -11227,6 +11238,27 @@
       return source.filter(item => !removeSet.has(pdfTextItemKey(item)));
     }
 
+    // 행번호의 앞동서가 되는 글자만 모아 둔다. 숫자와 구두점은 기준이 못 된다 —
+    // 그 자체가 행번호일 수 있거나 줄 끝에 따라붙는 장식이라 본문임을 보증하지 않는다.
+    // 판정 자체는 예전 두 계통이 가지고 있던 것과 글자까지 같다. 숨은 비용은 도는 횟수였다 —
+    // 숫자 글자마다 전 아이템을 다시 훑으며 NFKC 정규화와 정규식을 매번 돌렸고,
+    // 한 문서 임포트 시간의 30% 가 그 반복이었다. 배열당 한 번만 재 둔다.
+    const pdfLineGuideAnchorCache = new WeakMap();
+
+    function isPdfLineGuideAnchorTextItem(item) {
+      const text = String(item && item.text || '').normalize('NFKC').trim();
+      if (!text || /^[0-9]{1,3}$/.test(text)) return false;
+      return !/^[.…‥ー―─－\-「」『』（）()×]+$/.test(text);
+    }
+
+    function pdfLineGuideAnchorItems(items) {
+      if (!Array.isArray(items)) return [];
+      if (pdfLineGuideAnchorCache.has(items)) return pdfLineGuideAnchorCache.get(items);
+      const anchors = items.filter(item => item && isPdfLineGuideAnchorTextItem(item));
+      pdfLineGuideAnchorCache.set(items, anchors);
+      return anchors;
+    }
+
     function isPdfJsLineGuideNumberCandidate(item, items, pageNo) {
       const value = pdfJsLineGuideNumberValue(item);
       if (!Number.isFinite(value)) return false;
@@ -11244,11 +11276,8 @@
       const x = Number(item && item.centerXPct);
       const y = Number(item && item.centerYPct);
       if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-      return (items || []).some((other) => {
-        if (!other || other === item) return false;
-        const otherText = String(other.text || '').normalize('NFKC').trim();
-        if (!otherText || /^[0-9]{1,3}$/.test(otherText)) return false;
-        if (/^[.…‥ー―─－\-「」『』（）()×]+$/.test(otherText)) return false;
+      return pdfLineGuideAnchorItems(items).some((other) => {
+        if (other === item) return false;
         const ox = Number(other.centerXPct);
         const oy = Number(other.centerYPct);
         if (!Number.isFinite(ox) || !Number.isFinite(oy)) return false;
@@ -11327,11 +11356,8 @@
     function isPdfLineGuideNumberAttachedToText(item, items) {
       const x = Number(item && item.x) || 0;
       const y = Number(item && item.y) || 0;
-      return (items || []).some((other) => {
-        if (!other || other === item) return false;
-        const otherText = String(other.text || '').normalize('NFKC').trim();
-        if (!otherText || /^[0-9]{1,3}$/.test(otherText)) return false;
-        if (/^[.…‥ー―─－\-「」『』（）()×]+$/.test(otherText)) return false;
+      return pdfLineGuideAnchorItems(items).some((other) => {
+        if (other === item) return false;
         const dx = Math.abs((Number(other.x) || 0) - x);
         const dy = Math.abs((Number(other.y) || 0) - y);
         return dx <= 2.8 && dy <= 18;
