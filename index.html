@@ -2771,7 +2771,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v140';
+    const APP_VERSION = 'v141';
     const APP_BUILD_DATE = '2026-08-11';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -10564,6 +10564,16 @@
       return descendant ? pdfFontObjectFallback(objectMap, descendant[1], seen) : '';
     }
 
+    // 자체 파서가 그 페이지에서 숫자를 몇 개 뽑았는가. 렌더가 아니라 읽기 단계의 사실이라
+    // 임포트 기록에 남는다 — 다른 계통(PDF 를 직접 연 것)의 개수와 나란히 놓고 본다.
+    function notePdfSelfParserDigitItems(items, pageNo) {
+      if (Number(pageNo) !== 1) return;
+      const digits = (items || []).filter(item => /[0-9０-９]/.test(String(item && item.text || '')));
+      notePdfOverlayDrop('p1SelfParserItems',
+        'items=' + (items || []).length + ' digits=' + digits.length
+        + ' "' + digits.map(item => String(item.text || '')).join('').slice(0, 30) + '"');
+    }
+
     async function extractPdfPositionedPages(streams, cmap) {
       const pages = [];
       let itemBudget = 26000;
@@ -10577,6 +10587,9 @@
         if (pageStream.width) pageSize.width = Number(pageStream.width) || pageSize.width;
         if (pageStream.height) pageSize.height = Number(pageStream.height) || pageSize.height;
         const items = extractPdfTextItems(stream, cmap, itemBudget, pageSize);
+        // 자체 파서가 뽑은 글자를 센다. 필터 여섯이 전부 「안 버렸다」는데 글자가 없으면
+        // 남는 명제는 하나다 — 애초에 안 뽑혔다. 표지에서 숫자를 몇 개 뽑는지 그대로 적는다.
+        notePdfSelfParserDigitItems(items, Number(pageStream.pageNo) || streamIndex + 1);
         itemBudget -= items.length;
         const grouped = splitPdfItemsIntoBodyAndAnnotations(items);
         const text = (grouped.bodyLines || []).join('\n').trim();
