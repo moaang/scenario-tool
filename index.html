@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v160';
+    const APP_VERSION = 'v161';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -5388,13 +5388,24 @@
       return `${pair.open}/${pair.close}`;
     }
 
+    // 좁힌 결과는 그 목록에만 달렸다. 목록이 같으면 답도 같으므로 한 번만 셈한다 —
+    // 이 함수는 줄마다 여러 번(대사·장면·머리) 불려서 배열을 만들고 버리는 값이 컸다.
+    const dialogQuotePairsCache = new WeakMap();
+
     function dialogQuotePairs(profile) {
       const pairs = profile && profile.quotePairs && profile.quotePairs.length ? profile.quotePairs : DEFAULT_DIALOG_QUOTE_PAIRS;
+      // 기본 목록에는 observed 가 없다(freeze 라 붙지도 않는다) — 좁힐 것이 없으니 그대로다.
+      if (pairs === DEFAULT_DIALOG_QUOTE_PAIRS) return pairs;
+      if (dialogQuotePairsCache.has(pairs)) return dialogQuotePairsCache.get(pairs);
+      const narrowed = narrowDialogQuotePairs(pairs);
+      dialogQuotePairsCache.set(pairs, narrowed);
+      return narrowed;
+    }
+
+    function narrowDialogQuotePairs(pairs) {
       const observedPairs = pairs.filter(pair => Number(pair.observed || 0) > 0);
       // 관측이 없다 = **이 문서가 어떤 부호를 쓰는지 모른다**. 그때 한 쌍으로 좁히면
-      // 그 한 쌍이 아닌 부호로 쓴 문서의 대사가 통째로 안 잡힌다 — 기본 쌍 목록에는
-      // observed 필드가 아예 없으므로, profile 을 못 받은 호출은 전부 여기로 온다.
-      // 모를 때는 좁히지 않는다. 문서를 아는 호출(profile 있음)은 아래에서 그대로 좁힌다.
+      // 그 한 쌍이 아닌 부호로 쓴 문서의 대사가 통째로 안 잡힌다. 모를 때는 좁히지 않는다.
       if (!observedPairs.length) return pairs;
       const topObserved = Math.max(...observedPairs.map(pair => Number(pair.observed || 0)));
       return observedPairs
@@ -8732,9 +8743,16 @@
       }];
     }
 
+    // 색 키는 문자열 하나로 답이 정해진다 — 뜯어서 색을 만드는 일까지 통째로 아낀다.
+    const pdfJsBlueColorKeyCache = new Map();
+
     function isPdfJsBlueColorKey(key) {
-      const color = pdfJsColorKeyToPdfColor(key);
-      return color ? isPdfBlueColor(color) : false;
+      const raw = String(key || '');
+      if (pdfJsBlueColorKeyCache.has(raw)) return pdfJsBlueColorKeyCache.get(raw);
+      const color = pdfJsColorKeyToPdfColor(raw);
+      const result = color ? isPdfBlueColor(color) : false;
+      pdfJsBlueColorKeyCache.set(raw, result);
+      return result;
     }
 
     function pdfJsColorKeyToPdfColor(key) {
@@ -8844,10 +8862,34 @@
       fill: { rgb: ['setFillRGBColor'], gray: ['setFillGray'], cmyk: ['setFillCMYKColor'], unknown: ['setFillColor', 'setFillColorN'] }
     };
 
+    // 획/칠 표도 문서 안에서 변하지 않는다. 오퍼레이터 번호로 바로 찾도록 미리 접어 둔다 —
+    // 예전에는 오퍼레이터를 하나 볼 때마다 Object.keys 로 배열을 만들고 find·some 을 돌렸다.
+    // 그 호출이 획·칠 두 번씩이라 한 쪽에 수만 번이었다(pdfJsStrokeOpsSet 과 같은 결함이다).
+    const pdfJsColorOpsCache = new WeakMap();
+
+    function pdfJsColorOpsMap(OPS, which) {
+      let byWhich = pdfJsColorOpsCache.get(OPS);
+      if (!byWhich) {
+        byWhich = {};
+        pdfJsColorOpsCache.set(OPS, byWhich);
+      }
+      if (byWhich[which]) return byWhich[which];
+      const map = new Map();
+      const table = PDF_JS_COLOR_OP_NAMES[which] || {};
+      // 먼저 적힌 색공간이 이긴다 — 예전 find 가 첫 매치를 골랐으므로 그대로 맞춘다.
+      Object.keys(table).forEach((space) => {
+        table[space].forEach((op) => {
+          const fn = OPS[op];
+          if (Number.isFinite(Number(fn)) && !map.has(fn)) map.set(fn, space);
+        });
+      });
+      byWhich[which] = map;
+      return map;
+    }
+
     function pdfJsOperatorColorKey(fn, args, OPS, which) {
-      const table = OPS && PDF_JS_COLOR_OP_NAMES[which];
-      if (!table) return '';
-      const space = Object.keys(table).find(name => table[name].some(op => fn === OPS[op]));
+      if (!OPS || !PDF_JS_COLOR_OP_NAMES[which]) return '';
+      const space = pdfJsColorOpsMap(OPS, which).get(fn);
       return space ? pdfJsColorKey(space, pdfJsOperatorArgsToArray(args)) : '';
     }
 
@@ -11613,7 +11655,21 @@
       return { r: gray, g: gray, b: gray };
     }
 
+    // 색 하나를 여러 층이 각자 다시 묻는다(오버레이 줄·시각 묶음·루비·본문 — 여덟 갈래).
+    // 색은 같은 값이면 같은 답이고 문서 안에서 종류가 한 줌이라, 판정을 적어 두고 다시 쓴다.
+    const pdfBlueColorCache = new Map();
+
     function isPdfBlueColor(color) {
+      const key = color && color.space && Array.isArray(color.values)
+        ? color.space + ':' + color.values.join(',')
+        : '';
+      if (key && pdfBlueColorCache.has(key)) return pdfBlueColorCache.get(key);
+      const result = computeIsPdfBlueColor(color);
+      if (key) pdfBlueColorCache.set(key, result);
+      return result;
+    }
+
+    function computeIsPdfBlueColor(color) {
       const rgb = pdfColorToRgb(color);
       const strongestNonBlue = Math.max(rgb.r, rgb.g);
       if (rgb.b >= 0.35 && rgb.b - strongestNonBlue >= 0.12 && rgb.b >= rgb.r * 1.25 && rgb.b >= rgb.g * 1.08) return true;
