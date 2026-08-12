@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v162';
+    const APP_VERSION = 'v163';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -9303,8 +9303,15 @@
       const options = ['x', 'y'].map((key) => {
         const main = pdfGlyphAxisScore(source, key);
         const built = pdfGlyphRunsForAxis(source, main);
-        return { main, runs: built.runs, cross: built.cross, syntax: pdfGlyphAxisSyntaxScore(built.runs, main.axis.other) };
+        return { main, runs: built.runs, cross: built.cross, syntax: null };
       });
+      // 문법 채점은 아래 사다리의 **마지막 갈림길에서만** 쓰인다. 그런데 미리 재 두면 앞의
+      // 판정(모양·밴드)이 답한 페이지에서도 두 축 × 정·역 네 벌을 늘 치렀다 — 바로 아래
+      // 주석이 「앞의 것이 답하면 뒤는 묻지 않는다」인데 코드가 미리 다 묻고 있었다.
+      const syntaxOf = (option) => {
+        if (option.syntax === null) option.syntax = pdfGlyphAxisSyntaxScore(option.runs, option.main.axis.other);
+        return option.syntax;
+      };
       // 판정 넷을 순서로 둔다. 앞의 것이 답하면 뒤는 묻지 않는다.
       //   1. 아이템 모양 — pdf.js 가 실제 배치에서 낸 값이라 가장 세다.
       //   2. 본문 밴드 — **앱이 이미 본문을 알아보는 자**(pdfOverlayDetectedScriptBodyVerticalBand)를
@@ -9318,8 +9325,8 @@
       const chosen = shapeVertical === true ? options[0]
         : shapeVertical === false ? options[1]
         : pdfOverlayDetectedScriptBodyVerticalBand(verticalLines) ? options[0]
-        : options[0].syntax !== options[1].syntax
-        ? (options[0].syntax > options[1].syntax ? options[0] : options[1])
+        : syntaxOf(options[0]) !== syntaxOf(options[1])
+        ? (syntaxOf(options[0]) > syntaxOf(options[1]) ? options[0] : options[1])
         : (options[0].main.score >= options[1].main.score ? options[0] : options[1]);
       const vertical = chosen.main.key === 'x';
       const lines = chosen === options[0] && verticalLines ? verticalLines : pdfGlyphOverlayLinesForAxis(chosen);
