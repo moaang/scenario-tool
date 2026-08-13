@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v164';
+    const APP_VERSION = 'v165';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -11309,13 +11309,61 @@
     function stripPdfJsLineGuideNumberItems(items, pageNo) {
       const source = Array.isArray(items) ? items.filter(Boolean) : [];
       if (!source.length) return [];
-      const candidates = source.filter(item => isPdfJsLineGuideNumberCandidate(item, source, pageNo));
+      const candidates = extendPdfLineGuideNumberCandidatesAlongBand(
+        source.filter(item => isPdfJsLineGuideNumberCandidate(item, source, pageNo)), source);
       if (!hasPdfJsLineGuideNumberGrid(candidates)) return source;
       const band = pdfLineGuideNumberBand(candidates);
       const removed = source.filter(item => isPdfLineGuideNumberInDetectedBand(item, band, pageNo));
       notePdfLineGuideNumberRemoval(removed, pageNo, 'pdfjs');
       const removeSet = new Set(removed.map(pdfTextItemKey));
       return source.filter(item => !removeSet.has(pdfTextItemKey(item)));
+    }
+
+    // 후보는 **아래에 본문이 있는** 컬럼의 숫자만 잡는다(hasPdfJsLineGuideNumberColumnAnchor).
+    // 그래서 본문이 적은 쪽에서는 빈 컬럼의 행번호가 빠지고, 격자가 서지 않아 그 쪽의 행번호가
+    // **하나도 안 지워진다**(실측: 90쪽 문서의 마지막 쪽에서 1~11 이 통째로 본문에 섞였다).
+    // 행번호는 같은 띠에 균등 간격으로 늘어선 무리이므로, 이미 잡힌 후보와 같은 띠·같은 간격에
+    // 놓인 숫자는 앵커가 없어도 같은 무리다. 격자 문턱을 낮추는 것으로는 안 된다 —
+    // 등장인물 나이 목록(（16）（23）…)이 통째로 지워졌다(실측). 그쪽은 줄마다 y 가 달라 띠가 안 선다.
+    function extendPdfLineGuideNumberCandidatesAlongBand(candidates, items) {
+      if (!Array.isArray(candidates) || candidates.length < 2) return candidates || [];
+      const bandY = pdfMedian(candidates.map(item => Number(item.centerYPct)).filter(Number.isFinite));
+      if (!Number.isFinite(bandY)) return candidates;
+      // 격자는 **띠 안의 후보로만** 잰다. 본문에도 숫자가 있고(전각 포함) 그것이 앵커를 통과해
+      // 후보에 섞이는데, 그 x 를 기준점으로 삼으면 격자가 통째로 어긋난다 — 실측: 본문 숫자
+      // 하나가 기준점을 0.61% 밀어 행번호 여섯이 전부 격자에서 탈락했다.
+      const inBand = candidates.filter(item => Math.abs(Number(item.centerYPct) - bandY) <= 1.2);
+      if (inBand.length < 2) return candidates;
+      const xs = inBand.map(item => Number(item.centerXPct)).filter(Number.isFinite).sort((a, b) => a - b);
+      const gaps = [];
+      for (let i = 1; i < xs.length; i += 1) {
+        const gap = xs[i] - xs[i - 1];
+        if (gap > 0.2) gaps.push(gap);
+      }
+      const pitch = pdfMedian(gaps);
+      if (!xs.length || !Number.isFinite(bandY) || !Number.isFinite(pitch) || pitch <= 0) return candidates;
+      const known = new Set(candidates.map(pdfTextItemKey));
+      const extra = (items || []).filter((item) => {
+        if (!item || known.has(pdfTextItemKey(item))) return false;
+        if (!Number.isFinite(pdfJsLineGuideNumberValue(item))) return false;
+        const x = Number(item.centerXPct);
+        const y = Number(item.centerYPct);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+        if (Math.abs(y - bandY) > 1.2) return false;
+        const steps = (x - xs[0]) / pitch;
+        return Math.abs(steps - Math.round(steps)) <= 0.2;
+      });
+      if (!extra.length) return candidates;
+      // 배치만으로는 못 가른다 — 표지의 등장인물 나이도 세로 목록이라 같은 띠·같은 간격에
+      // 놓인다(실측: 그것만 보고 늘렸더니 나이가 통째로 지워졌다). 가르는 것은 **값의 조밀함**이다.
+      // 행번호는 1 부터 빈틈없이 이어지고(1~11 → 고유 11, 폭 10), 나이는 띄엄띄엄하다(고유 7, 폭 29).
+      const merged = candidates.concat(extra);
+      const unique = Array.from(new Set(merged.map(pdfJsLineGuideNumberValue)
+        .filter(Number.isFinite))).sort((a, b) => a - b);
+      if (unique.length < 2) return candidates;
+      const span = unique[unique.length - 1] - unique[0];
+      const dense = unique[0] <= 3 && unique.length >= (span + 1) * 0.7;
+      return dense ? merged : candidates;
     }
 
     // 행번호의 앞동서가 되는 글자만 모아 둔다. 숫자와 구두점은 기준이 못 된다 —
