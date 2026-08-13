@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v176';
+    const APP_VERSION = 'v177';
     const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -4152,6 +4152,10 @@
       return centerY >= range.top && centerY <= range.bottom;
     }
 
+    // ────────────────────────────── 2층 클리핑: 줄 → 본문 범위 안의 줄 ──────────────────────────────
+    // 범위 밖으로 나간 글자를 떼고, 범위 밖으로 떨어진 씨 번호는 되살린다
+    // (sceneNumberPrefix — 윈여백에 씨 번호를 찍는 조판이 있다).
+    // **1층에서 아이템을 빼면 이 복구가 무력해진다** — 예전에 그렇게 씨 번호를 36줄 잃었다.
     function pdfLineClippedToBodyRange(line, range) {
       if (!line || !pdfLineInsideBodyRange(line, range)) return null;
       const items = line.items || [];
@@ -7735,6 +7739,17 @@
     // parse time against a pathological or mis-identified PDF (e.g. a whole novel dropped by mistake).
     const PDF_MAX_PAGES_TO_PARSE = 180;
 
+    // ══════════════════════════════ PDF 읽기 ─ 진입점 ══════════════════════════════
+    // PDF 한 문서를 읽어 쪽 목록을 만든다. 아래 네 층을 순서대로 지난다:
+    //
+    //   1층 묶기    글자 → 줄   groupPdfJsTextItemsToOverlayLines
+    //   2층 클리핑  줄 → 본문 범위 안의 줄   pdfLineClippedToBodyRange
+    //   3층 매칭    줄 → 리뷰 아이템의 사각형   attachPdfOverlayRectsToReviewItems
+    //   4층 렌더    사각형 → 화면 가이드   renderPdfLayoutGuideLayer
+    //
+    // 본문 범위는 **이 함수의 패스 1 에서 한 번 정해진다**(pdfJsPageBodyTopLinePct).
+    // 아래 층은 그 값을 받아 쓸 뿐 다시 정하지 않는다 — 두 값으로 갈라 있던 것을 합쳤다.
+    // ══════════════════════════════════════════════════════════════════════════════
     async function readPdfDocumentWithPdfJs(file) {
       const data = await file.arrayBuffer();
       const logicalPages = await readPdfLogicalPagesFromBuffer(data);
@@ -9125,6 +9140,9 @@
       return out;
     }
 
+    // ────────────────────────────── 1층 묶기: 글자 → 줄 ──────────────────────────────
+    // 좌표만 보고 줄을 복원한다. PDF 는 줄을 알려 주지 않는다.
+    // 이 층이 낸 줄은 2층이 본문 범위로 자른다.
     function groupPdfJsTextItemsToOverlayLines(items, pageNo) {
       return groupPdfJsBodyItemsToOverlayLines(pdfJsItemsForLayoutGuide(items, pageNo));
     }
@@ -13747,6 +13765,9 @@
       })).filter(span => span.text);
     }
 
+    // ────────────────────────────── 3층 매칭: 줄 → 리뷰 아이템의 사각형 ──────────────────────────────
+    // 본문 아이템은 글자 스트림 매처로, 주석 아이템은 줄 포함으로 맞춘다.
+    // 어느 풀(body / note)에서 찾는지는 pdfGuideLineSetsForPage 가 정한다.
     function attachPdfOverlayRectsToReviewItems(items, pages) {
       const docLike = { draftPages: pages };
       const byPage = new Map();
@@ -18547,6 +18568,9 @@
       return (doc && doc.pdfAnnotations || []).filter(note => Number(note && note.pageNo || 1) === targetPageNo);
     }
 
+    // ────────────────────────────── 4층 렌더: 사각형 → 화면 가이드 ──────────────────────────────
+    // 디버그 모드의 점선 상자를 그린다. 여기서 보이는 것은 3층이 쓰는 것과
+    // **같은 줄 묶음**이다(pdfGuideLineSetsForPage) — 화면과 매칭이 갈라지지 않게.
     function renderPdfLayoutGuideLayer(items, pageNo) {
       const layer = $('pdfLayoutGuideLayer');
       if (!layer) return;
