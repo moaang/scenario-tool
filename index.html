@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v168';
+    const APP_VERSION = 'v169';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -18489,7 +18489,16 @@
           if (key && !lineByGlyphKey.has(key)) lineByGlyphKey.set(key, line);
         });
       });
-      const pageNumberGuides = (items || [])
+      // 마크업은 한 벌이다 — 아래 두 경로가 같은 모양을 그린다.
+      const pageNumberGuideHtml = (item) => {
+        const rect = pdfTextItemOverlayRect(item);
+        const style = `left:${rect.left}%;top:${rect.top}%;width:${rect.width}%;height:${rect.height}%`;
+        const edgeClass = pdfLayoutGuideLabelEdgeClass(rect);
+        return `<div class="pdf-layout-guide page-number${edgeClass}" style="${style}" title="${esc('PAGE ' + (item.text || ''))}">
+            <span class="pdf-layout-guide-label">PAGE</span>
+          </div>`;
+      };
+      const artifactPageNumberItems = (items || [])
         .filter((item) => {
           if (!item || !item.text || !isPdfTextItemArtifact(item, pageNo)) return false;
           const glyphKey = pdfTextItemKey(item);
@@ -18498,15 +18507,30 @@
           if (line && String(line.text || '').replace(/\s+/g, '').length > 6) return false;
           return true;
         })
-        .slice(0, 16)
-        .map((item) => {
-          const rect = pdfTextItemOverlayRect(item);
-          const style = `left:${rect.left}%;top:${rect.top}%;width:${rect.width}%;height:${rect.height}%`;
-          const edgeClass = pdfLayoutGuideLabelEdgeClass(rect);
-          return `<div class="pdf-layout-guide page-number${edgeClass}" style="${style}" title="${esc('PAGE ' + (item.text || ''))}">
-            <span class="pdf-layout-guide-label">PAGE</span>
-          </div>`;
-        }).join('');
+        .slice(0, 16);
+      // 쪽번호가 인쇄되는 자리는 문서마다 다르다. 위치 규칙만으로는 아래끝 91.5% 인 쪽번호가
+      // 92% 문턱에 안 걸려 가이드가 하나도 안 떴고, 화면만 보면 **인식 실패로 보인다**.
+      // 자체 파서는 그 쪽번호를 이미 읽어 두었으므로(printedPageNo) 그 값과 같은 글자를 아래
+      // 여백에서 찾아 잇는다. 표시 전용이라 본문 텍스트·블록에는 영향이 없다.
+      const printedPageNoText = (() => {
+        const target = (doc && doc.draftPages || [])
+          .find(entry => Number(entry && (entry.pageNo || entry.sourcePageIndex) || 1) === Number(pageNo || 1));
+        const value = target && target.printedPageNo;
+        return value == null ? '' : String(value).trim();
+      })();
+      const artifactKeys = new Set(artifactPageNumberItems.map(pdfTextItemKey));
+      const printedPageNoItems = !printedPageNoText ? [] : (items || [])
+        .filter((item) => {
+          if (!item || artifactKeys.has(pdfTextItemKey(item))) return false;
+          if (String(item.text || '').trim() !== printedPageNoText) return false;
+          return (Number(item.centerYPct) || 0) > 80;
+        })
+        // 쪽번호는 한 쪽에 하나이고 아래 여백 맨 끝에 온다. 같은 숫자가 아래쪽 본문에도
+        // 있을 수 있으므로 가장 아래 것만 남긴다(실측: 한 문서의 한 쪽에서 둘이 걸렸다).
+        .sort((a, b) => (Number(b.centerYPct) || 0) - (Number(a.centerYPct) || 0))
+        .slice(0, 1);
+      const pageNumberGuides = artifactPageNumberItems.concat(printedPageNoItems)
+        .map(pageNumberGuideHtml).join('');
       layer.innerHTML = lineGuides + pageNumberGuides + renderPdfBodyCutLineGuide(pageNo);
     }
 
