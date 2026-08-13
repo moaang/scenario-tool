@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v167';
+    const APP_VERSION = 'v168';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -19579,8 +19579,19 @@
       const sourceLines = (lines || []).filter(Boolean);
       if (sourceLines.length < 2) return { bodyLines: sourceLines, noteLines: [] };
       const glyphH = 1.8;
-      const lineTop = (line) => Number((line.compactOverlayRect || line.overlayRect || {}).top) || 0;
-      const minTop = Math.min.apply(null, sourceLines.map(lineTop));
+      const lineRect = (line) => line.compactOverlayRect || line.overlayRect || {};
+      const lineTop = (line) => Number(lineRect(line).top) || 0;
+      // 기준선은 **본문 열**의 시작이어야 한다. 가로로 놓인 머리말이 섞이면 그것이 기준을 위로
+      // 끌어내려 본문 열이 통째로 「깊다」고 판정되고, 그러면 그 쪽 본문이 전부 note 풀로 간다
+      // — 실측: 머리말 top 7.4 · 본문 top 28.0 인 문서에서 줄의 97% 가 note 였다.
+      // 본문 범위가 정해지는 문서는 머리말이 범위 밖이라 미리 빠져서 이 결함이 안 드러났다.
+      const isColumnLine = (line) => {
+        const rect = lineRect(line);
+        if (typeof rect.vertical === 'boolean') return rect.vertical;
+        return (Number(rect.height) || 0) >= (Number(rect.width) || 0);
+      };
+      const columnLines = sourceLines.filter(isColumnLine);
+      const minTop = Math.min.apply(null, (columnLines.length ? columnLines : sourceLines).map(lineTop));
       const startBand = minTop + 15;
       const noteLines = [];
       const shallow = [];
