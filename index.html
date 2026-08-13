@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v171';
+    const APP_VERSION = 'v172';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -10222,10 +10222,26 @@
         let dataEnd = endIndex;
         while (dataEnd > dataStart && (bytes[dataEnd - 1] === 10 || bytes[dataEnd - 1] === 13)) dataEnd -= 1;
         const rawBytes = bytes.slice(dataStart, dataEnd);
-        try {
-          const inflated = await inflateBytes(rawBytes, ['deflate', 'deflate-raw']);
+        // endstream 앞의 개행은 PDF 가 넣은 것이지만, **압축 데이터의 마지막 바이트가 0x0A 인
+        // 경우가 있다** — 그것을 개행으로 보고 지우면 해제가 통째로 실패한다.
+        // 실측: 21400 바이트짜리 한 쪽이 그렇게 700 바이트 조각으로 떨어져 **그 쪽이 통째로
+        // 사라졌다**(자체 파서가 21 쪽 문서를 20 쪽으로 냈다). 지운 것으로 먼저 풀고,
+        // 실패하면 **안 지운 것**으로 다시 푼다.
+        // 지운 개행이 하나가 아닐 수 있다(데이터의 0x0A 와 PDF 가 넣은 0x0A 가 잇달아 온다).
+        // 한 바이트씩 되돌리며 푼다 — 대개 첫 시도에서 끝나고, 실패한 스트림만 몇 번 더 돈다.
+        let inflated = null;
+        for (let end = dataEnd; end <= Math.min(endIndex, dataEnd + 4) && !inflated; end += 1) {
+          try {
+            inflated = await inflateBytes(bytes.slice(dataStart, end), ['deflate', 'deflate-raw']);
+          } catch (error) {
+            inflated = null;
+          }
+        }
+        if (inflated) {
           streams.push(new TextDecoder('latin1').decode(inflated));
-        } catch (error) {
+        } else {
+          // 조용히 넘기면 그 쪽이 어디서 없어졌는지 알 수 없다 — 앞머리만 남기고 기록한다.
+          notePdfOverlayDrop('streamInflateFailed', 'stream#' + streams.length + ' ' + rawBytes.length + 'B');
           streams.push(new TextDecoder('latin1').decode(rawBytes.slice(0, 700)));
         }
         entry.streamIndex = streams.length - 1;
