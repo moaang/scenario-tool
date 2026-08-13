@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v166';
+    const APP_VERSION = 'v167';
     const APP_BUILD_DATE = '2026-08-13';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -9446,10 +9446,20 @@
       (bodyLines || []).forEach((line) => {
         (line && line.items || []).forEach(item => used.add(pdfTextItemKey(item)));
       });
-      const candidates = pdfJsItemsForLayoutGuide(items || [], pageNo)
+      const rest = pdfJsItemsForLayoutGuide(items || [], pageNo)
         .filter(item => item && !used.has(pdfTextItemKey(item)))
-        .filter(item => !isPdfJsVerticalTextItemForColumnGrouping(item))
         .filter(item => !isPdfJsBlueTextItem(item) && !isPdfJsAnnotationColorTextItem(item));
+      // 세로 본문 아이템은 뺀다. 다만 **한 글자짜리는 모양으로 방향을 가를 수 없다** — 전각
+      // 한 글자는 가로줄에 놓여도 높이가 폭보다 커서 세로로 잡힌다. 실측: 가로 머리말에서
+      // 한 글자 아이템이 통째로 빠지고 폭이 넓은 조각만 남아, 줄이 이가 빠진 채 인식됐다.
+      // 같은 띠에 가로로 이어지는 이웃이 있으면 그 줄의 일부다 — 본문 아이템은 위에서 이미 뺐다.
+      const flagged = rest.map(item => ({ item, vertical: isPdfJsVerticalTextItemForColumnGrouping(item) }));
+      const horizontalBandYs = flagged.filter(entry => !entry.vertical)
+        .map(entry => Number(entry.item.centerYPct)).filter(Number.isFinite);
+      const candidates = flagged
+        .filter(entry => !entry.vertical
+          || horizontalBandYs.some(y => Math.abs(y - Number(entry.item.centerYPct)) < 0.9))
+        .map(entry => entry.item);
       if (!candidates.length) return [];
       return groupPdfJsTextItemsHorizontal(candidates)
         .filter(line => line && line.text && !isPdfPageArtifactOverlayLine(line, pageNo));
