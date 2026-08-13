@@ -2775,7 +2775,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v174';
+    const APP_VERSION = 'v175';
     const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -7769,7 +7769,25 @@
         }
         annotatePdfJsTextItemsFromLogicalAnnotations(textItems, logicalPage && logicalPage.annotations);
         const preSplitLogicalText = normalizePdfLogicalPageText(logicalPage && logicalPage.text);
-        const allLines = groupPdfJsTextItemsToOverlayLines(textItems, pageNo)
+        // 본문 상한(괘선) 위에는 가로쓰기 지문이 놓인다. 그것을 세로 묶기에 함께 넣으면
+        // 가로줄 여러 개를 세로로 가로지르며 글자를 주워 담아 뜻 없는 줄이 나온다 — 실측:
+        // 그런 줄이 한 문서에서만 71 건이었고, 꼬리 복구가 「근거 0건」으로 흘리던 것의
+        // 대부분이었다. 다만 **상한 위에는 씬 번호도 있다**(실측: 지문 w7~22 · 씬번호 w1.31).
+        // 그래서 위치로 범위를 좁힌 뒤 **모양**으로 가른다 — 위치만 보면 씬 번호가 본문에서
+        // 사라지고, 모양만으로 전 페이지를 훑으면 본문 안의 넓은 아이템까지 걸려 줄을 끊는
+        // 간격 통계가 흔들린다(둘 다 실측으로 확인했다).
+        const bodyTopCandidatePct = pdfJsBodyTopLineFromLayoutDividers(layoutDividers);
+        const aboveTopHorizontalItems = bodyTopCandidatePct == null ? []
+          : textItems.filter(item => item
+            && (Number(item.centerYPct) || 0) < bodyTopCandidatePct
+            && isClearlyHorizontalRunItem(item));
+        const aboveTopItemSet = new Set(aboveTopHorizontalItems);
+        const columnItems = aboveTopHorizontalItems.length
+          ? textItems.filter(item => !aboveTopItemSet.has(item))
+          : textItems;
+        const allLines = groupPdfJsTextItemsToOverlayLines(columnItems, pageNo)
+          .concat(aboveTopHorizontalItems.length
+            ? groupPdfJsTextItemsHorizontal(aboveTopHorizontalItems) : [])
           .filter((line) => {
             // 페이지 부속물로 보고 버리는 자리. 무엇을 버렸는지 남긴다 — 표지의 날짜나
             // 장수처럼 부속물이 아닌 글자가 여기로 사라지면 어디서 없어졌는지 알 수가 없다.
@@ -9104,6 +9122,17 @@
     // 말했고, 아이템 경계는 한 글자부터 열일곱 글자까지 제각각이었다. 그래서 아이템을 글자로
     // 되돌린 뒤 좌표만으로 축·줄·읽는 방향을 정한다. 판형도 폰트 선언도 보지 않는다.
     // 행번호는 여기 오기 전에 아이템 층에서 지워진다(pdfJsItemsForLayoutGuide).
+    // 여러 글자를 담고 폭이 높이보다 확실히 넓은 아이템은 **가로줄**이다. 한 글자짜리는
+    // 전각이 원래 세로로 길어 모양으로 못 가르므로 대상에서 뺀다(그래서 씬 번호는 안 걸린다).
+    // 세로 조판이 한 칸에 눕혀 쓰는 두세 자리 숫자도 폭이 높이보다 좁아 여기 안 걸린다.
+    function isClearlyHorizontalRunItem(item) {
+      if (!item || !item.text) return false;
+      if (charLen(String(item.text)) < 2) return false;
+      const width = Number(item.widthPct) || 0;
+      const height = Number(item.heightPct) || 0;
+      return width > height * PDF_VERTICAL_RUN_MIN_ASPECT;
+    }
+
     function groupPdfJsBodyItemsToOverlayLines(source) {
       if (!source.length) return [];
       return groupPdfGlyphsToOverlayLines(pdfGlyphItemsForGrouping(source), pdfGlyphAxisFromItemShape(source));
