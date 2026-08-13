@@ -2775,8 +2775,8 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v173';
-    const APP_BUILD_DATE = '2026-08-13';
+    const APP_VERSION = 'v174';
+    const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
     const APP_NAME = 'scenario-tool';
@@ -10241,7 +10241,11 @@
           streams.push(new TextDecoder('latin1').decode(inflated));
         } else {
           // 조용히 넘기면 그 쪽이 어디서 없어졌는지 알 수 없다 — 앞머리만 남기고 기록한다.
-          notePdfOverlayDrop('streamInflateFailed', 'stream#' + streams.length + ' ' + rawBytes.length + 'B');
+          // 다만 **zlib 머리(0x78)가 아닌 스트림은 애초에 deflate 가 아니다** — 이미지(DCTDecode)와
+          // 무필터 스트림이 그렇고, 그것까지 세면 한 문서에 수십 건이 쌓여 진짜 사고가 묻힌다.
+          if (rawBytes.length > 2 && rawBytes[0] === 0x78) {
+            notePdfOverlayDrop('streamInflateFailed', 'stream#' + streams.length + ' ' + rawBytes.length + 'B');
+          }
           streams.push(new TextDecoder('latin1').decode(rawBytes.slice(0, 700)));
         }
         entry.streamIndex = streams.length - 1;
