@@ -2800,7 +2800,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v182';
+    const APP_VERSION = 'v183';
     const APP_BUILD_DATE = '2026-08-15';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -11641,6 +11641,13 @@
           }
         }
       }
+      // 부수 문자를 정규 한자로 되돌린다 — pdf.js 경로(pdfTextItemsForPage)와 같은 보정이다.
+      // 두 경로가 같은 글자를 다르게 들고 있으면 그 둘을 대조하는 자리에서 어긋난다.
+      items.forEach((item) => {
+        if (!item || !item.text) return;
+        const folded = normalizePdfRadicalText(item.text);
+        if (folded !== item.text) item.text = folded;
+      });
       return items;
     }
 
@@ -20361,7 +20368,48 @@
       const drawn = await pdfDrawnGlyphsForPage(page, pdfjsLib);
       const filled = pdfItemsFromDrawnGlyphs(items, drawn);
       if (filled.length > items.length) notePdfOverlayDrop('glyphsRecovered', 'p' + pageNo + '×' + (filled.length - items.length));
+      // 부수 문자는 여기서 되돌린다 — 이 뒤의 줄 묶기·판정·저장·콘티 전달이 전부
+      // 정상 글자를 보게 하기 위해서다(자체 파서 경로에도 같은 보정이 있다).
+      filled.forEach((item) => {
+        if (!item || !item.text) return;
+        const folded = normalizePdfRadicalText(item.text);
+        if (folded !== item.text) item.text = folded;
+      });
       return filled;
+    }
+
+    // 부수 블록의 글자를 같은 모양의 정규 한자로 되돌린다. 「人」(U+4EBA)와 「⼈」(U+2F08)은
+    // 글꼴에서 똑같이 보이고 코드만 다르다 — 그대로 두면 검색·이름 대조·콘티 전달이
+    // 눈에 안 보이는 곳에서 어긋난다. 표본의 한 문서가 703개를 가지고 있었다.
+    //
+    // **앱이 잘못 읽는 것이 아니다** — 그 PDF 의 ToUnicode 가 부수 코드를 가리킨다
+    // (매핑 950개 중 74개). 자체 파서와 pdf.js 가 독립적으로 같은 703개를 낸다.
+    // 원본이 그렇게 만들어졌고 우리만 보정을 안 했던 것이라 되돌리는 쪽이 맞다.
+    //
+    // 글자 수가 변하지 않는 1:1 치환이다 — 좌표·사각형이 그대로여야 하므로 NFKC 를
+    // 통째로 쓰지 않는다(㏿ → 株式会社 처럼 한 글자가 여러 글자가 된다).
+    // 康熙부수(U+2F00~)는 NFKC 가 한 글자로 접어 그것을 쓰고, 동일성이 없어 안 접히는
+    // 部首補助(U+2E80~)만 표로 둔다.
+    const PDF_RADICAL_SUPPLEMENT_TO_CJK = {
+      '⺠': '民', '⻑': '長', '⻤': '鬼'
+    };
+
+    // NFKC 가 **중국식 자형**으로 접는 자리가 있다 — 일본어 원고는 다른 자형을 쓴다.
+    // 黑(U+9ED1) 과 黒(U+9ED2) 가 그렇다: 원문에는 黒 만 있는데 NFKC 는 黑 을 낸다.
+    // 접은 뒤 한 겹 더 되돌린다 — 안 그러면 부수는 고쳤는데 자형이 어긋난 채로 남는다.
+    const PDF_FOLDED_TO_JP_VARIANT = { '黑': '黒' };
+
+    function normalizePdfRadicalText(text) {
+      const source = String(text || '');
+      if (!/[\u2E80-\u2EFF\u2F00-\u2FDF]/.test(source)) return source;
+      return Array.from(source).map((ch) => {
+        const mapped = PDF_RADICAL_SUPPLEMENT_TO_CJK[ch];
+        if (mapped) return mapped;
+        if (!/[\u2F00-\u2FDF]/.test(ch)) return ch;
+        const folded = ch.normalize('NFKC');
+        if (Array.from(folded).length !== 1) return ch;
+        return PDF_FOLDED_TO_JP_VARIANT[folded] || folded;
+      }).join('');
     }
 
     function pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo) {
