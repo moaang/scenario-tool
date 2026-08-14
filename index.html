@@ -2783,7 +2783,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v179';
+    const APP_VERSION = 'v180';
     const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -2819,7 +2819,9 @@
     }
 
     const ENTITY_TYPES = ['character', 'organization', 'place', 'technology'];
-    const EDIT_ENTITY_TYPES = ['character', 'organization', 'place', 'technology', 'unclassified'];
+    // 편집 모달의 종류 목록은 소재 목록·필터의 것과 같아야 한다 — 목록에 없는 종류를 고르는
+    // 순간 그 소재가 모든 목록에서 사라지고 UI 로는 되돌릴 길이 없다.
+    const EDIT_ENTITY_TYPES = ENTITY_TYPES;
     // 설정 블록으로 취급할 claimType. 새로 만들어지는 것은 canonical_setting 하나뿐이고
     // (설정창에서 종류 선택을 없앴다) summary·intent 는 그 이전 데이터에만 있다.
     const SETTING_BLOCK_TYPES = ['summary', 'canonical_setting', 'intent'];
@@ -2859,6 +2861,7 @@
         restoreReasonBeforeRestore: '復元前',
         importJson: 'ファイル読込',
         restoredToast: '復元しました',
+        saveFailedToast: '保存に失敗しました',
         exportedToast: '設定ファイルを保存しました',
         exportFail: '書き出し失敗（データ過大）',
         importedToast: '読み込みました',
@@ -2904,12 +2907,14 @@
         untitledProject: '無題作品',
         saveStatusWaiting: '自動保存待ち',
         saveStatusSaved: '自動保存済み: {time}',
+        saveStatusFailed: '自動保存に失敗しました',
         projectGate: '先に作品を追加すると文書作業を開始できます。',
         workDocuments: '作品文書',
         addDocument: '+ 文書を追加',
         confirmDeleteWork: '作品「{title}」を削除しますか？文書・ブロック・素材・注釈がすべて削除されます。',
         confirmDeleteDocument: '"{title}" を削除しますか？この文書のブロックと文書別素材も削除されます。',
         confirmDeleteFolder: '"{title}" フォルダと中の文書を削除しますか？',
+        folderDeleteBlockedToast: '中の文書を削除できないため、フォルダは残しました',
         documentTitle: '文書タイトル',
         documentKind: '文書区分',
         documentEmptyNote: '文書を追加して本文/PDF/DOCX/TXTを読み込みます。作品共通は自動集計用なのでここでは選択しません。',
@@ -3146,6 +3151,7 @@
         restoreReasonBeforeRestore: '복원 전',
         importJson: '파일에서 불러오기',
         restoredToast: '복원했습니다',
+        saveFailedToast: '저장에 실패했습니다',
         exportedToast: '설정 파일을 저장했습니다',
         exportFail: '내보내기 실패(데이터 과대)',
         importedToast: '불러왔습니다',
@@ -3191,12 +3197,14 @@
         untitledProject: '무제 작품',
         saveStatusWaiting: '자동 저장 대기',
         saveStatusSaved: '자동 저장됨: {time}',
+        saveStatusFailed: '자동 저장 실패',
         projectGate: '먼저 작품을 추가하면 문서 작업을 시작할 수 있음.',
         workDocuments: '작품 문서',
         addDocument: '+ 문서 추가',
         confirmDeleteWork: '작품 "{title}"을(를) 삭제할까요? 문서·블록·소재·주석이 모두 영구 삭제됩니다.',
         confirmDeleteDocument: '"{title}" 문서를 삭제할까요? 블록과 문서별 소재도 함께 삭제됩니다.',
         confirmDeleteFolder: '"{title}" 폴더와 포함된 문서를 삭제할까요?',
+        folderDeleteBlockedToast: '안의 문서를 지우지 못해 폴더를 남겼습니다',
         documentTitle: '문서 타이틀',
         documentKind: '문서 구분',
         documentEmptyNote: '문서를 추가해서 본문/PDF/DOCX/TXT를 불러온다. 작품 공용은 자동 집계용이라 여기서 선택하지 않음.',
@@ -3432,6 +3440,7 @@
         restoreReasonBeforeRestore: 'Pre-restore',
         importJson: 'Import file',
         restoredToast: 'Restored',
+        saveFailedToast: 'Save failed',
         exportedToast: 'Settings file saved',
         exportFail: 'Export failed (data too large)',
         importedToast: 'Imported',
@@ -3477,12 +3486,14 @@
         untitledProject: 'Untitled work',
         saveStatusWaiting: 'Waiting for autosave',
         saveStatusSaved: 'Autosaved: {time}',
+        saveStatusFailed: 'Autosave failed',
         projectGate: 'Add a work first to start document work.',
         workDocuments: 'Work Documents',
         addDocument: '+ Add Document',
         confirmDeleteWork: 'Delete the work "{title}"? All its documents, blocks, materials and notes will be permanently removed.',
         confirmDeleteDocument: '"{title}" delete this document? Blocks and document-scoped materials will also be deleted.',
         confirmDeleteFolder: '"{title}" delete this folder and contained documents?',
+        folderDeleteBlockedToast: 'Folder kept: its documents could not be deleted',
         documentTitle: 'Document Title',
         documentKind: 'Document Type',
         documentEmptyNote: 'Add a document and load body text/PDF/DOCX/TXT. Work-common is for automatic aggregation and is not selected here.',
@@ -4119,6 +4130,17 @@
       pdfOverlayDropPhase = 'render';
     }
 
+    // 페이지 부속물로 보고 버리는 자리. 무엇을 버렸는지 남긴다 — 표지의 날짜나 장수처럼
+    // 부속물이 아닌 글자가 여기로 사라지면 어디서 없어졌는지 알 수가 없다.
+    // pdf.js 경로와 그 실패 폴백 경로가 같은 판정·같은 기록을 쓴다.
+    // 쓰는 곳: PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
+    function keepPdfOverlayLineNotingArtifactDrop(line, pageNo) {
+      if (!isPdfPageArtifactOverlayLine(line, pageNo)) return true;
+      notePdfOverlayDrop('pageArtifactLine',
+        'p' + pageNo + ' "' + String(line && line.text || '').slice(0, 10) + '"');
+      return false;
+    }
+
     // 쓰는 곳: 클리핑 · 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfBodyRangeForPage(doc, pageNo) {
       const cut = pdfBodyLinePctForPage(doc, pageNo, 'cut');
@@ -4729,8 +4751,11 @@
       const activeId = d.activeVersionId || d.latestVersionId || '';
       const existing = activeId ? d.versions.find(version => version.id === activeId) : null;
       if (!existing) return createNewDocumentVersionSnapshot(d, Object.assign({ label: nextDocumentVersionLabel(d) }, options || {}));
+      // Object.assign 의 target 이 existing 이라 새 스냅샷의 id 가 existing.id 를 **먼저** 덮는다.
+      // 미리 잡아 두지 않으면 저장할 때마다 버전 id 가 바뀌어 latestVersionId 가 없는 id 를 가리킨다.
+      const previousId = existing.id;
       const next = Object.assign(existing, makeDocumentVersionSnapshot(d, existing.label));
-      next.id = existing.id;
+      next.id = previousId;
       next.label = existing.label || nextDocumentVersionLabel(d);
       d.activeVersionId = next.id;
       if (!d.latestVersionId) d.latestVersionId = next.id;
@@ -4828,6 +4853,8 @@
       return t(UI_LABEL_KEYS.scope[scope] || 'scopeDocument');
     }
 
+    // 'unclassified' 는 어느 경로도 새로 만들지 않는다(EDIT_ENTITY_TYPES 참조) — 옛 데이터에
+    // 남아 있을 수 있어 가드는 남긴다.
     function entityVisibleInActiveDocument(entity, project) {
       const p = project || state.project;
       if (!entity || entity.type === 'unclassified') return false;
@@ -4918,7 +4945,13 @@
       const doc = activeDocument();
       saveActiveInputToDocument();
       doc.lastSavedAt = nowIso();
-      await pushProjectRestorePoint('manual', { force: true });
+      // 호출부가 await 하지 않아 여기서 거절되면 아래 저장 파일 내려받기까지 통째로 안 돈다.
+      try {
+        await pushProjectRestorePoint('manual', { force: true });
+      } catch (err) {
+        console.warn('manual restore point failed', err);
+        toast(t('saveFailedToast'));
+      }
       await putSettingsAutosaveSnapshot('manual_save').catch(err => console.warn('settings autosave failed', err));
       lastAutosaveAt = Date.now();
       updateSaveStatus();
@@ -5504,6 +5537,15 @@
         .slice(0, 1);
     }
 
+    // 이미 대사 부호로 감싼 글에 부호를 한 겹 더 씨우지 않기 위한 판정.
+    // **프로파일로 좁히지 않는다** — 좁힌 목록은 문서의 주 부호가 아닌 쌍을 못 알아보고,
+    // 그러면 쓴 것과 되읽는 것이 다른 답을 내 왜복할 때마다 부호가 한 겹씩 덮씨워진다.
+    function dialogTextAlreadyQuoteWrapped(text) {
+      const clean = String(text || '');
+      if (!clean) return false;
+      return dialogQuotePairs().some(pair => clean.startsWith(pair.open) && clean.endsWith(pair.close));
+    }
+
     function looksLikeDialogWithQuotePair(raw, pair) {
       return Boolean(matchDialogQuoteParts(raw, pair));
     }
@@ -5525,13 +5567,16 @@
       if (!headMatch) return null;
       if (isInvalidDialogHeadShape(headMatch[1])) return null;
       const bodyModifier = extractLeadingDialogModifier(body);
+      // 머리에 수식자가 있으면 그쪽이 이긴다 — 그때 본문 앞 괄호는 수식자로 쓰이지 않으므로
+      // 잘라 낸 채 버리지 않고 본문에 그대로 돌려준다(사용자가 쓴 글자가 조용히 사라진다).
+      const bodyText = headMatch[2] ? body : bodyModifier.text;
       const headParts = normalizeDialogHeadParts(headMatch[1], headMatch[2] || bodyModifier.modifierRaw || '');
       const speaker = headParts.speaker;
       if (isNonSpeakerDialogHead(headParts.rawHead || headMatch[1])) return null;
       if (!speaker || charLen(speaker) > 32) return null;
       const rawModifier = headParts.modifierRaw;
       const modifierInfo = headParts.modifierInfo;
-      return { speaker, modifier: modifierInfo.modifier, modifierRaw: rawModifier, dialogMode: modifierInfo.mode, text: bodyModifier.text, openQuote: pair.open, closeQuote: pair.close };
+      return { speaker, modifier: modifierInfo.modifier, modifierRaw: rawModifier, dialogMode: modifierInfo.mode, text: bodyText, openQuote: pair.open, closeQuote: pair.close };
     }
 
     function matchDialogStartQuoteParts(raw, pair) {
@@ -5976,7 +6021,8 @@
         const openIndex = source.indexOf(pair.open);
         if (openIndex < 0) continue;
         const closeIndex = source.indexOf(pair.close, openIndex + pair.open.length);
-        return closeIndex < 0;
+        // 처음 걸린 쌍에서 곧장 반환하면 뒤 쌍이 열린 채여도 못 본다 — 하나라도 열려 있으면 참이다.
+        if (closeIndex < 0) return true;
       }
       return false;
     }
@@ -6419,7 +6465,9 @@
           c.characterProfile = Object.assign({}, castProfile);
           return c;
         }
-        if (isStrongBodyStart(raw)) {
+        // profile 을 빼면 isSceneHeading 안에서 문서의 지배 마커 목록이 빈 배열이 되어, 장소
+        // 낱말이 없는 마커식 씬머리가 본문 시작으로 안 잡힌다.
+        if (isStrongBodyStart(raw, profile)) {
           context.zone = 'body';
           context.bodyStarted = true;
           return classifyBody(raw, context, quality, ['body start exits cast list'], profile);
@@ -6434,7 +6482,7 @@
         return classification('cast_note', 'cast_list', false, 'none', 0.56, ['inside cast list before body'], ['cast note / body boundary review']);
       }
       if (!context.bodyStarted) {
-        if (isStrongBodyStart(raw)) {
+        if (isStrongBodyStart(raw, profile)) {
           context.zone = 'body';
           context.bodyStarted = true;
           return classifyBody(raw, context, quality, ['strong body start'], profile);
@@ -6504,7 +6552,9 @@
       if (isNonSceneMarkerTextLine(raw, profile)) return classification('body_text', 'body', true, 'action', 0.74, evidence.concat(['non-scene marker text']));
       if (/^□/.test(raw)) return classification('section_marker', 'body', true, 'action', 0.82, evidence.concat(['title/section marker']));
       if (/^(暗転|回想|フラッシュバック|カットバック|戻って|×××)/.test(raw)) return classification('transition', 'body', true, 'action', 0.76, evidence.concat(['transition']));
-      if (/^(SE|ＳＥ|BGM|Ｍ|音楽|無音|環境音)[：:「]/.test(raw)) return classification('sound_cue', 'body', true, 'dialog', 0.78, evidence.concat(['sound/music cue']));
+      // 받는 쪽(#conte)의 대사 영역 타입은 dialog/narration/telop/monologue 넷뿐이라
+      // 음향 지시는 actionText 로 간다 — 내보내는 값과 같은 기본값을 쓴다.
+      if (/^(SE|ＳＥ|BGM|Ｍ|音楽|無音|環境音)[：:「]/.test(raw)) return classification('sound_cue', 'body', true, 'action', 0.78, evidence.concat(['sound/music cue']));
       const dialog = parseDialog(raw, profile);
       if (dialog) {
         const c = classification(dialog.type, 'body', true, 'dialog', dialog.confidence, evidence.concat(['dialog pattern']));
@@ -6531,7 +6581,7 @@
       if (/ペラ|二百字換算|八百字換算|枚/.test(raw)) score += 3;
       if (lineIndex < 8 && charLen(raw) < 38) score += 2;
       if (parseDialog(raw, profile)) score -= 4;
-      if (isStrongBodyStart(raw)) score -= 4;
+      if (isStrongBodyStart(raw, profile)) score -= 4;
       return score;
     }
 
@@ -6660,7 +6710,9 @@
 
     // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function castLineHasLocationSignal(raw) {
-      return hasLocationSignal(castLineNamePart(raw));
+      // 이름 쪽만 보는 자리다. 한 글자 장소 낱말은 성이나 이름 안에 흔히 들어가서, 그것까지 세면
+      // 사람 이름 줄이 통째로 캐스트에서 빠진다 — 여러 글자 항목만 본다.
+      return LOCATION_SIGNAL_MULTI_RE.test(String(castLineNamePart(raw) || ''));
     }
 
     // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -6701,7 +6753,9 @@
     // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isFrontMatterMetaLine(text) {
       if (CREDIT_ROLE_RE.test(text)) return true;
-      if (/第|話|稿|ペラ|換算|枚|ページ/i.test(text)) return true;
+      // 한 글자 부분일치로 보면 이 낱말들이 든 인명·본문까지 앞머리 메타가 되고, 이 함수를 쓰는
+      // 배제 가드 넷이 그 줄을 통째로 버린다 — 숫자 동반형으로 앵커한다.
+      if (/第\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十百]+)\s*[話稿]|[0-9０-９]{1,4}\s*(?:話|稿|枚|ページ|頁)|[一二三四五六七八九十百]+\s*(?:話|稿|枚|ページ|頁)(?![ぁ-んァ-ヴ一-龠々])|ペラ|換算/i.test(text)) return true;
       if (/(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)\s*[年月日]|[年月日]\s*(?:[0-9０-９]{1,4}|[一二三四五六七八九十]+)/.test(text)) return true;
       return /^[【\[][^】\]]+[】\]]$/.test(text);
     }
@@ -6769,12 +6823,18 @@
       return isSectionLabel(label);
     }
 
+    // 장소 낱말 — 여러 글자 항목. 「・」 하나만으로 장소라 하지 않는다 — 인명에도 중점이 든다
+    // (이 파일은 다른 곳에서 「・」를 화자 목록 구분자로 쓴다). 「同・」는 앞 장면과 같은 장소를
+    // 가리키는 표기라 남긴다.
+    const LOCATION_SIGNAL_MULTI_RE = /(同・|〜|～|画面|（\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*）|\(\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*\)|本部|広場|広間|幕内|部屋|病室|会場|ロビー|観客席|ステージ|屋上|窓辺|廊下|階段|道路|街道|地区|学校|教室|公園|車内|車外|船内|馬車内|馬車の中|病院|ホテル|オフィス|ラボ|ホール|倉庫|宮殿|基地|外観|内観|横転現場)/;
+    // 한 글자 장소 낱말 — 목록을 두 벌로 만들지 않으려고 여기서만 따로 센다. 이 글자들은 성이나
+    // 이름 안에 그대로 들어가므로 **이름 줄 판정에서는 쓰지 않는다**(castLineHasLocationSignal).
+    const LOCATION_SIGNAL_SINGLE_RE = /(室|港|街|町|村|市|区|店|駅|庭|空|海|森|山|川|橋|城)/;
+
     // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasLocationSignal(line) {
-      // 「・」 하나만으로 장소라 하지 않는다 — 인명에도 중점이 든다(이 파일은 다른 곳에서
-      // 「・」를 화자 목록 구분자로 쓴다). 진짜 장소는 아래 낱말 목록에서 걸리고, 「同・」는
-      // 앞 장면과 같은 장소를 가리키는 표기라 남긴다.
-      return /(同・|〜|～|画面|（\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*）|\(\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*\)|本部|広場|広間|幕内|室|部屋|病室|会場|ロビー|観客席|ステージ|屋上|窓辺|廊下|階段|道路|街道|港|地区|街|町|村|市|区|学校|教室|公園|店|駅|車内|車外|船内|馬車内|馬車の中|病院|ホテル|オフィス|ラボ|ホール|倉庫|庭|空|海|森|山|川|橋|城|宮殿|基地|外観|内観|横転現場)/.test(String(line || ''));
+      const source = String(line || '');
+      return LOCATION_SIGNAL_MULTI_RE.test(source) || LOCATION_SIGNAL_SINGLE_RE.test(source);
     }
     // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function parseDialog(raw, profile) {
@@ -6831,9 +6891,13 @@
     }
 
     // 쓰는 곳: 내보내기 · 기타 · 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
+    // normalizeSpeakerName 은 여럿을 "A・B" 한 이름으로 합쳐 돌려주는데 그 꼴에는 명시
+    // 구분자가 없어 다시 쪼개지지 않는다 — 합치기 전 이름으로 바로 쪼갠다.
     function splitDialogSpeakerNames(value) {
-      const clean = normalizeSpeakerName(value);
-      return splitDialogSpeakerNamesFromClean(clean);
+      const clean = cleanDialogSpeakerNameCore(value);
+      const names = splitDialogSpeakerNamesFromClean(clean);
+      if (names.length > 1) return names;
+      return [speakerNameFromClean(clean)].filter(Boolean);
     }
 
     function splitDialogSpeakerNamesFromClean(value) {
@@ -7752,15 +7816,21 @@
         if (!lineQueues.has(key)) lineQueues.set(key, []);
         lineQueues.get(key).push(line);
       });
+      let unmatchedBlocks = 0;
       parsed.blocks.forEach((block) => {
         const key = norm(block.rawText || block.text || '');
         const queue = lineQueues.get(key) || [];
         const sourceLine = queue.shift() || null;
+        // 매칭에 실패하면 그 줄의 서식(빨간 글자)이 평문으로 떨어져 수정노트가 통째로 안 생긴다.
+        if (key && !sourceLine) unmatchedBlocks += 1;
         block.inlineRuns = normalizeMarkdownRuns(sourceLine && sourceLine.runs, block.rawText || block.text || '');
         block.markdownSourceLine = sourceLine && sourceLine.source || '';
         block.markdownHeadingLevel = sourceLine && sourceLine.headingLevel || 0;
         block.markdownLineIndex = sourceLine ? sourceLine.index : -1;
       });
+      if (unmatchedBlocks && parsed.quality && Array.isArray(parsed.quality.warnings)) {
+        parsed.quality.warnings.push('markdown source line match failed x' + unmatchedBlocks);
+      }
       parsed.parserName = 'structured_markdown_parser';
       parsed.quality.sourceType = 'md';
       parsed.markdownSource = String(markdownSource || '');
@@ -7972,14 +8042,7 @@
         const allLines = groupPdfJsTextItemsToOverlayLines(columnItems, pageNo)
           .concat(aboveTopHorizontalItems.length
             ? groupPdfJsTextItemsHorizontal(aboveTopHorizontalItems) : [])
-          .filter((line) => {
-            // 페이지 부속물로 보고 버리는 자리. 무엇을 버렸는지 남긴다 — 표지의 날짜나
-            // 장수처럼 부속물이 아닌 글자가 여기로 사라지면 어디서 없어졌는지 알 수가 없다.
-            if (!isPdfPageArtifactOverlayLine(line, pageNo)) return true;
-            notePdfOverlayDrop('pageArtifactLine',
-              'p' + pageNo + ' "' + String(line && line.text || '').slice(0, 10) + '"');
-            return false;
-          });
+          .filter(line => keepPdfOverlayLineNotingArtifactDrop(line, pageNo));
         const bodyCandidateContext = createPdfOverlayBodyCandidateContext(allLines, pageNo, preSplitLogicalText);
         const lineGroups = splitPdfJsOverlayLinesForBodyAndAnnotations(allLines, pageNo, { bodyCandidateContext });
         const bodyCutLineCandidatePct = pdfJsBodyCutLineFromColorLines(lineGroups.colorLines)
@@ -8053,7 +8116,7 @@
         const pageNo = Number(page && (page.pageNo || page.sourcePageIndex) || index + 1);
         const items = pdfLogicalFallbackTextItems(page, pageNo);
         const lines = (page && page.lines && page.lines.length ? page.lines : groupPdfJsTextItemsToOverlayLines(items, pageNo))
-          .filter(line => !isPdfPageArtifactOverlayLine(line, pageNo));
+          .filter(line => keepPdfOverlayLineNotingArtifactDrop(line, pageNo));
         const horizontalMetadataLines = pdfJsHorizontalMetadataLinesForBodyItems(items, lines, pageNo);
         return Object.assign({}, page, {
           pageNo,
@@ -8097,11 +8160,16 @@
 
     function applyStablePdfJsBodyCutLineToPages(pages, knownStableTopLinePct) {
       const stableCut = pdfJsStableBodyCutLineFromCandidates((pages || []).map(page => page && page.bodyCutLineCandidatePct), (pages || []).length);
-      // 상한은 파싱 첫 패스가 이미 정해 넘겨준다. 못 받은 경로(pdf.js 실패 폴백)에서만
-      // 여기서 낸다 — 같은 값을 두 곳에서 세지 않기 위해서다.
+      // 상한은 파싱 첫 패스가 이미 정해 넘겨준다 — 같은 값을 두 곳에서 세지 않기 위해서다.
+      // 못 받은 경로는 pdf.js 실패 폴백 하나뿐인데, 그 경로의 페이지에는 bodyTopLineCandidatePct
+      // 가 아예 없다(그 후보는 pdf.js 층에서만 만들어진다). 그래서 아래 갈래는 언제나 null 이고
+      // 폴백 문서는 본문 상한 없이 간다 — 조용히 넘기지 말고 기록한다.
       const stableTopLine = knownStableTopLinePct !== undefined
         ? knownStableTopLinePct
         : pdfJsStableBodyTopLineFromCandidates((pages || []).map(page => page && page.bodyTopLineCandidatePct), (pages || []).length);
+      if (knownStableTopLinePct === undefined && stableTopLine == null) {
+        notePdfOverlayDrop('fallbackNoBodyTopLine', 'p\u00d7' + (pages || []).length);
+      }
       (pages || []).forEach((page) => {
         const sourceLines = pdfBaseBodyLinesForPage(page);
         const pageNo = Number(page && (page.pageNo || page.sourcePageIndex) || 1);
@@ -8695,10 +8763,9 @@
       if (!items.length) return false;
       const annotationBlue = items.filter(isPdfOverlayLineBlueTextItem).length;
       if (annotationBlue > 0 && annotationBlue >= Math.ceil(items.length * 0.55)) return true;
-      const colored = items.filter(item => pdfJsTextItemVisualGroupKey(item));
-      if (!colored.length) return false;
-      const blue = colored.filter(item => isPdfJsBlueColorKey(pdfJsTextItemVisualGroupKey(item))).length;
-      return blue > 0 && blue >= Math.ceil(colored.length * 0.55);
+      // 아이템 수로 세면 중립색(빈 키) 검은 본문이 분모에서 빠져 파란 아이템 하나만으로 줄이
+      // 넘어간다 — 줄의 색은 글자 수로 정하는 그 함수 한 곳에서만 세운다.
+      return isPdfJsBlueColorKey(pdfOverlayLineVisualGroupKey(items));
     }
 
     // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -8974,7 +9041,9 @@
         if (!normalized) return;
         Array.from(normalized).forEach((char) => {
           chars.push(char);
-          owners.push(item);
+          // 소비자가 indexOf 로 낸 **UTF-16** 오프셋으로 owners 를 자른다 — 서로게이트 페어가
+          // 앞에 하나만 있어도 그 뒤 모든 매치가 엉뚱한 아이템에 찍힌다.
+          for (let unit = 0; unit < char.length; unit += 1) owners.push(item);
         });
       });
       return { text: chars.join(''), owners };
@@ -9703,7 +9772,9 @@
       if (!kept.length) return null;
       const keptItems = kept.reduce((acc, run) => acc.concat(run.items), []);
       const vertical = Boolean((line.compactOverlayRect || line.overlayRect || {}).vertical);
-      const rebuilt = pdfJsOverlayLine(keptItems, vertical);
+      // 글리프는 좌표로 읽는 순서가 정해진다 — pdfJsOverlayLine 은 세로쓰기일 때 sourceIndex 로
+      // 다시 정렬하므로 여기서 쓰면 그 순서가 무너진다. 이 경로 전용 빌더로 다시 세운다.
+      const rebuilt = pdfGlyphOverlayLine(keptItems, vertical);
       if (!rebuilt || !rebuilt.text) return line;
       return Object.assign({}, line, rebuilt, {
         overlayRect: Object.assign({}, rebuilt.overlayRect || line.overlayRect || {}, { vertical }),
@@ -9872,6 +9943,9 @@
         items: orderedItems,
         overlayRect,
         compactOverlayRect: overlayRect,
+        // 조각마다 색이 다른 것이 병합의 이유다 — 첫 조각 키를 물려받으면 몇 글자짜리 색이
+        // 줄 전체를 끌고 간다. 줄의 색은 글자 수로 정하는 그 함수 한 곳에서만 세운다.
+        visualGroupKey: pdfOverlayLineVisualGroupKey(orderedItems),
       });
     }
 
@@ -10005,8 +10079,11 @@
         const gray = Number(values[0]);
         return Number.isFinite(gray) && gray <= 0.35;
       }
-      if (color.space === 'rgb') {
-        const rgb = values.slice(0, 3).map(value => Number(value));
+      // cmyk 는 분기가 없어 먹 본문까지 '색이 있는 글자'로 새어 나갔다. 임계는 rgb 것 한 벌만
+      // 두고, 색 변환은 이미 있는 커널(pdfColorToRgb)에 맡긴다.
+      if (color.space === 'rgb' || color.space === 'cmyk') {
+        const converted = color.space === 'cmyk' ? pdfColorToRgb(color) : null;
+        const rgb = converted ? [converted.r, converted.g, converted.b] : values.slice(0, 3).map(value => Number(value));
         if (rgb.length < 3 || rgb.some(value => !Number.isFinite(value))) return false;
         const max = Math.max(...rgb);
         const min = Math.min(...rgb);
@@ -10250,7 +10327,10 @@
       const page = String(Number(pageNo) || '').replace(/^0+/, '');
       if (/^[\-‐ー―–—]*[0-9]{1,4}[\-‐ー―–—]*$/.test(compact)) {
         const num = compact.replace(/[^0-9]/g, '').replace(/^0+/, '');
-        return !page || !num || num === page || compact.length <= 4;
+        // 쪽번호와 안 맞아도 버리는 이유: 앞에 세지 않는 장이 있으면 인쇄된 번호가 이 쪽
+        // 번호와 어긋난다. 다만 자릿수를 안 따지면 홀로 선 네 자리 수(연도 표기 따위)까지
+        // 부속물로 삼켜 본문에서 사라지므로, 어긋난 번호는 세 자리까지만 본다.
+        return !page || !num || num === page || (compact.length <= 4 && num.length <= 3);
       }
       if (/^(?:p|P|page|PAGE|頁|Ｐ)\.?[0-9]{1,4}$/.test(compact)) return true;
       return false;
@@ -10616,7 +10696,10 @@
           return filtered;
         }
       }
+      // 여기부터는 __entries/__pageEntries 를 심지 못한다 — 소비자가 '스트림 하나 = 쪽 하나'로
+      // 떨어져 한 쪽에 콘텐츠 스트림이 여럿인 문서는 쪽 수가 늘어난다. 격하 사실을 남긴다.
       const contentIds = extractPdfPageContentObjectIds(pdfSource);
+      notePdfOverlayDrop('pageMappingDegraded', 'streams x' + streams.length);
       if (!contentIds.size) return streams;
       const filtered = streams.filter((stream, index) => contentIds.has(String(entries[index] && entries[index].objectId || '')));
       return filtered.length ? filtered : streams;
@@ -10983,7 +11066,11 @@
       for (let streamIndex = 0; streamIndex < pageStreams.length; streamIndex += 1) {
         const pageStream = pageStreams[streamIndex] || {};
         const stream = pageStream.stream || '';
-        if (itemBudget <= 0 || pages.length >= 180) break;
+        if (itemBudget <= 0 || pages.length >= 180) {
+          // 상한에 걸리면 뒷부분이 통째로 빠진 채 정상 결과처럼 반환된다 — 조용히 넘기지 않는다.
+          notePdfOverlayDrop('pageBudgetExceeded', 'p' + (streamIndex + 1) + '+ x' + (pageStreams.length - streamIndex));
+          break;
+        }
         if (!/BT[\s\S]*?(Tj|TJ|'|")/.test(stream)) continue;
         const pageSize = pdfPageSizeFromMediaBox(pageStream.mediaBox);
         if (pageStream.width) pageSize.width = Number(pageStream.width) || pageSize.width;
@@ -11079,6 +11166,7 @@
         '|' + number + '\\s+' + number + '\\s+T[dD]' +
         '|' + number + '\\s+TL' +
         '|\\bT\\*' +
+        '|(?:^|\\s)BT\\b' +
         '|' + number + '\\s+' + number + '\\s+' + number + '\\s+(?:rg|RG)' +
         '|' + number + '\\s+(?:g|G)' +
         '|' + number + '\\s+' + number + '\\s+' + number + '\\s+' + number + '\\s+(?:k|K)' +
@@ -11120,6 +11208,13 @@
           if (Number(nums[0]) > 0) currentFontSize = Number(nums[0]);
         } else if (/\s+TL$/.test(op)) {
           leading = Number(pdfOperatorNumbers(op)[0]) || 0;
+        } else if (op === 'BT') {
+          // BT 는 텍스트 객체의 시작이라 규격상 텍스트 행렬이 항등으로 돌아간다.
+          // 되돌리지 않으면 Tm 없이 Td/T* 로만 움직이는 문서에서 앞 객체의
+          // 이동량이 계속 누적돼 그 뒤 글자가 통째로 밀린다.
+          textMatrix = [1, 0, 0, 1, 0, 0];
+          x = 0;
+          y = 0;
         } else if (op === 'T*') {
           // 줄바꿈. 읽지 않으면 다음 글자가 앞 글자 위에 그대로 놓여
           // 두 글자가 한 자리를 차지하고 줄 묶기에서 한 자가 사라진다 —
@@ -11162,6 +11257,13 @@
         } else if (/\s+Tr$/.test(op)) {
           textRenderingMode = Math.max(0, Math.round(Number(pdfOperatorNumbers(op)[0]) || 0));
         } else if (/(?:\s*Tj|\s*TJ|'|")$/.test(op)) {
+          // ' 와 " 는 규격상 「줄바꿈 + 표시」다(" 의 앞 두 수는 간격이라 여기선 버린다).
+          // 줄바꿈을 빼면 그 줄들이 앞줄 y 에 곹쳐 쌓여 줄 묶기가 뒤엉킨다.
+          if (/['"]$/.test(op)) {
+            textMatrix = multiplyPdfMatrix(textMatrix, [1, 0, 0, 1, 0, -leading]);
+            x = Number(textMatrix[4]) || 0;
+            y = Number(textMatrix[5]) || 0;
+          }
           const text = decodePdfTextOp(op, cmap, currentFontName).replace(/\s+/g, ' ').trim();
           if (text) {
             items.push(pdfPositionedTextItemFromMatrix({
@@ -11299,7 +11401,7 @@
       if (!bodyTextItems.length) return { bodyLines: [], annotations: colorAnnotations.concat(detachedAnnotations) };
       const contentOrderLines = groupPdfItemsByContentOrder(bodyTextItems);
       const horizontalRows = tryGroupPdfHorizontalRows(bodyTextItems);
-      const verticalResult = groupPdfVerticalColumns(bodyTextItems);
+      const verticalResult = groupPdfVerticalColumns(bodyTextItems, majorityBlue);
       const verticalColumns = verticalResult.bodyLines || [];
       const horizontalScore = pdfGroupedTextScore(horizontalRows);
       const verticalScore = pdfGroupedTextScore(verticalColumns);
@@ -11556,7 +11658,11 @@
       return score;
     }
 
-    function groupPdfVerticalColumns(items) {
+    // majorityBlue = 본문 자체가 파랑으로 인쇄된 쪽. 그때는 여기서 파랑을 주석으로 떼지 않는다 —
+    // 떼면 부르는 쪽이 본문으로 남긴 글자가 다시 주석이 되고, markPdfAnnotationSegments 의
+    // 본문 보호는 colorRole === 'blue_note' 를 되살리지 않는다.
+    function groupPdfVerticalColumns(items, majorityBlue) {
+      const blueIsBody = Boolean(majorityBlue);
       const columnItems = stripPdfLineGuideNumberItems(items);
       const columns = [];
       columnItems.forEach((item) => {
@@ -11571,8 +11677,8 @@
       const segments = [];
       columns.forEach((column) => {
         const sortedColumn = sortPdfVerticalColumnItemsTopToBottom(column.items);
-        const blueItems = sortedColumn.filter(isPdfBlueTextItem);
-        const bodyItems = sortedColumn.filter(item => !isPdfBlueTextItem(item));
+        const blueItems = blueIsBody ? [] : sortedColumn.filter(isPdfBlueTextItem);
+        const bodyItems = blueIsBody ? sortedColumn : sortedColumn.filter(item => !isPdfBlueTextItem(item));
         if (blueItems.length) {
           splitPdfColumnRuns(blueItems).forEach((run) => {
             pushPdfRunSegment(segments, sortPdfVerticalColumnItemsTopToBottom(run), true, 'blue_note');
@@ -11699,14 +11805,9 @@
       // 하나가 기준점을 0.61% 밀어 행번호 여섯이 전부 격자에서 탈락했다.
       const inBand = candidates.filter(item => Math.abs(Number(item.centerYPct) - bandY) <= 1.2);
       if (inBand.length < 2) return candidates;
-      const xs = inBand.map(item => Number(item.centerXPct)).filter(Number.isFinite).sort((a, b) => a - b);
-      const gaps = [];
-      for (let i = 1; i < xs.length; i += 1) {
-        const gap = xs[i] - xs[i - 1];
-        if (gap > 0.2) gaps.push(gap);
-      }
-      const pitch = pdfMedian(gaps);
-      if (!xs.length || !Number.isFinite(bandY) || !Number.isFinite(pitch) || pitch <= 0) return candidates;
+      const grid = pdfLineGuideNumberGrid(inBand);
+      const pitch = grid.xPitch;
+      if (!Number.isFinite(grid.xRef) || !Number.isFinite(bandY) || !Number.isFinite(pitch) || pitch <= 0) return candidates;
       const known = new Set(candidates.map(pdfTextItemKey));
       const extra = (items || []).filter((item) => {
         if (!item || known.has(pdfTextItemKey(item))) return false;
@@ -11715,7 +11816,7 @@
         const y = Number(item.centerYPct);
         if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
         if (Math.abs(y - bandY) > 1.2) return false;
-        const steps = (x - xs[0]) / pitch;
+        const steps = (x - grid.xRef) / pitch;
         return Math.abs(steps - Math.round(steps)) <= 0.2;
       });
       if (!extra.length) return candidates;
@@ -11807,20 +11908,35 @@
       // 아래에 본문이 없어 앵커를 못 찾은 컬럼의 행번호는 후보에 못 들어오고,
       // 그러면 minValue/maxValue 가 실제보다 좁게 잡혀 그 숫자들이 값 범위 검사에서
       // 탈락한다(표지에서 1~35 만 지워지고 36~39 가 남던 원인이다).
-      const xs = source.map(item => Number(item.centerXPct)).filter(Number.isFinite).sort((a, b) => a - b);
+      const yMin = Number.isFinite(medianY) ? medianY - 1.4 : -Infinity;
+      const yMax = Number.isFinite(medianY) ? medianY + 1.4 : Infinity;
+      // 격자는 **띄 안 후보로만** 재다. 앵커를 통과해 후보에 섞인 본문 숫자의 x 가
+      // 기준점을 밀면 격자 위상이 통째로 어긋난다 — 후보 확장 쪽이 띄로 좁힌 것과 같은 이유다.
+      const grid = pdfLineGuideNumberGrid(source.filter((item) => {
+        const y = Number(item.centerYPct);
+        return y >= yMin && y <= yMax;
+      }));
+      return {
+        minValue,
+        maxValue,
+        yMin,
+        yMax,
+        xRef: grid.xRef,
+        xPitch: grid.xPitch
+      };
+    }
+
+    // 행번호 격자(기준점·간격)를 재는 한 벌. 부르는 쪽이 **띄 안으로 좁혀** 넘긴다 —
+    // 띄 밖 숫자가 섞이면 기준점이 밀려 행번호가 격자에서 통째로 탈락한다.
+    function pdfLineGuideNumberGrid(bandItems) {
+      const xs = (bandItems || []).map(item => Number(item && item.centerXPct))
+        .filter(Number.isFinite).sort((a, b) => a - b);
       const gaps = [];
       for (let i = 1; i < xs.length; i += 1) {
         const gap = xs[i] - xs[i - 1];
         if (gap > 0.2) gaps.push(gap);
       }
-      return {
-        minValue,
-        maxValue,
-        yMin: Number.isFinite(medianY) ? medianY - 1.4 : -Infinity,
-        yMax: Number.isFinite(medianY) ? medianY + 1.4 : Infinity,
-        xRef: xs.length ? xs[0] : NaN,
-        xPitch: gaps.length ? pdfMedian(gaps) : NaN
-      };
+      return { xRef: xs.length ? xs[0] : NaN, xPitch: gaps.length ? pdfMedian(gaps) : NaN };
     }
 
     // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -13355,7 +13471,15 @@
       state.selectedBlockId = '';
       state.activeBlockTab = '';
       loadActiveDocumentToInput();
-      putSettingsAutosaveSnapshot('delete_work').catch(err => console.warn('settings autosave failed', err));
+      // works 가 비면 putSettingsAutosaveSnapshot 은 **아무것도 쓰지 않는다**(빈 목록 거부).
+      // 옛 스냅샷이 남아 다음 부팅에 지운 작품이 되살아나므로, 그때는 스냅샷을 지운다.
+      const persisted = (state.settings.works || []).length
+        ? putSettingsAutosaveSnapshot('delete_work')
+        : clearSettingsAutosaveSnapshot();
+      persisted.catch((err) => {
+        console.warn('settings autosave failed', err);
+        toast(t('saveFailedToast'));
+      });
       toast(t('workDeletedToast'));
       syncAll(false);
     }
@@ -13469,9 +13593,10 @@
     function deleteDocumentById(documentId, options) {
       const doc = documentById(documentId);
       const docs = state.project.documents || [];
-      if (!doc || doc.id === 'project-common' || docs.length <= 1) return;
+      // 삭제 성공 여부를 반환한다 — 폴더 삭제가 이 값을 보고 멈춘다.
+      if (!doc || doc.id === 'project-common' || docs.length <= 1) return false;
       if (!(options && options.skipConfirm)
-        && !confirm(t('confirmDeleteDocument', { title: doc.title || doc.id }))) return;
+        && !confirm(t('confirmDeleteDocument', { title: doc.title || doc.id }))) return false;
       const removedBlockIds = new Set((state.project.sourceBlocks || []).filter(b => b.sourceDocumentId === doc.id).map(b => b.id));
       const removedEntityIds = new Set((state.project.entities || []).filter(e => e.scope !== 'project' && e.sourceDocumentId === doc.id).map(e => e.id));
       state.project.sourceBlocks = (state.project.sourceBlocks || []).filter(b => b.sourceDocumentId !== doc.id);
@@ -13489,6 +13614,7 @@
         markProjectChanged('delete_sub_document');
         syncAll(false);
       }
+      return true;
     }
 
     function addSubDocument(parentId) {
@@ -13539,13 +13665,21 @@
       const folderIds = [folderId].concat(childFolderIds(folderId));
       const docIds = editableDocuments(state.project).filter(doc => folderIds.includes(doc.parentId || 'root')).map(doc => doc.id);
       if (!confirm(t('confirmDeleteFolder', { title: folder.title || folder.id }))) return;
-      docIds.forEach(id => deleteDocumentById(id, { skipConfirm: true, deferRender: true }));
+      const removedDocumentIds = docIds.filter(id => deleteDocumentById(id, { skipConfirm: true, deferRender: true }));
+      state.documentContextMenu = null;
+      state.renamingTreeNode = null;
+      if (removedDocumentIds.length !== docIds.length) {
+        // 문서가 남았는데 폴더만 지우면 그 문서의 parentId 가 없는 폴더를 가리켜 트리에서 통째로
+        // 사라진다(저장·재로드 뒤에야 root 로 되돌아온다). 하나라도 못 지웠으면 폴더는 남긴다.
+        toast(t('folderDeleteBlockedToast'));
+        markProjectChanged('delete_sub_document');
+        syncAll(false);
+        return;
+      }
       state.project.documentFolders = (state.project.documentFolders || []).filter(item => !folderIds.includes(item.id));
       const nextDoc = editableDocuments(state.project)[0] || commonDocument(state.project);
       state.project.activeDocumentId = nextDoc.id;
-      state.documentContextMenu = null;
-      state.renamingTreeNode = null;
-      state.project.audit.push({ at: nowIso(), action: 'delete_document_folder', folderId, removedDocumentIds: docIds });
+      state.project.audit.push({ at: nowIso(), action: 'delete_document_folder', folderId, removedDocumentIds });
       markProjectChanged('delete_document_folder');
       loadActiveDocumentToInput();
       syncAll(false);
@@ -13841,14 +13975,19 @@
     // 빈 조각으로 남아야 페이지 색인이 맞는다).
     function pdfScriptBodyReviewTextFromDraftPages(doc) {
       if (!doc || doc.draftSourceType !== 'pdf' || !Array.isArray(doc.draftPages) || !doc.draftPages.length) return '';
-      return doc.draftPages.map((page) => {
+      const pageTexts = doc.draftPages.map((page) => {
         // 조용한 실패 금지: 줄 풀은 있는데 필드가 없으면 applyStablePdfJsBodyCutLineToPages 를
         // 안 거친 페이지다(있을 수 없는 상태). 빈 문자열을 조용히 내보내지 말고 남긴다.
         if (page && page.bodyReviewText == null && (page.lines || []).length) {
           console.warn('draft page has body lines but no bodyReviewText', page.pageNo || page.sourcePageIndex);
         }
         return String(page && page.bodyReviewText || '');
-      }).join('\n\f\n').trim();
+      });
+      // 본문이 한 글자도 없으면 빈 문자열을 낸다 — 호출부의 `pdfBodyText || text` 폴백이 살아야 한다.
+      if (!pageTexts.some(text => text.trim())) return '';
+      // JS trim 은 \f(U+000C)도 공백으로 보므로 여기서 .trim() 을 쓰면 앞뒤 빈 페이지의 구분자가
+      // 통째로 사라진다 — 소비자는 구분자 순번으로 쪽 번호를 매기므로 이후 쪽이 한 쪽씩 밀린다.
+      return pageTexts.join('\n\f\n').replace(/^\n+|\n+$/g, '');
     }
 
     // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -15384,7 +15523,7 @@
         appendPlainSourceReviewItems(out, text, pageNo, orderRef, sectionType === 'SCENE' || pageHasActionNarrativeSignal(String(text || '').split(/\n/), profile) ? 'action' : 'text', profile);
       }
       if (dialog || headingType === 'DIALOG') {
-        pushSourceReviewItem(out, 'dialog', pageNo, sourceReviewDialogItemText(dialog || text || looseText, cha, mode, profile), orderRef);
+        pushSourceReviewItem(out, 'dialog', pageNo, sourceReviewDialogItemText(dialog || text || looseText, cha, mode), orderRef);
       }
       if (action || headingType === 'ACTION') {
         appendPlainSourceReviewItems(out, action || text || looseText, pageNo, orderRef, 'action', profile);
@@ -15394,9 +15533,9 @@
 
     // 리뷰 대사 항목의 표시 문자열을 어떻게 조립하는가(따옴표 감싸기 + 화자（표기） 접두).
     // 마크다운 리더와 태그 리더가 같은 형식을 내야 하므로 조립은 이 한 벌뿐이다.
-    function sourceReviewDialogItemText(text, speakerName, mode, profile) {
+    function sourceReviewDialogItemText(text, speakerName, mode) {
       const clean = String(text || '').trim();
-      const wrapped = dialogQuotePairs(profile).some(pair => clean.startsWith(pair.open) && clean.endsWith(pair.close)) ? clean : `「${clean}」`;
+      const wrapped = dialogTextAlreadyQuoteWrapped(clean) ? clean : `「${clean}」`;
       const speaker = speakerName && mode ? speakerName + '（' + mode + '）' : speakerName;
       return speaker ? speaker + wrapped : wrapped;
     }
@@ -15679,7 +15818,7 @@
           return;
         }
         if (key === 'DIALOG') {
-          pushSourceReviewItem(items, 'dialog', pageNo, sourceReviewDialogItemText(value, pendingSpeaker, pendingMode, profile), orderRef);
+          pushSourceReviewItem(items, 'dialog', pageNo, sourceReviewDialogItemText(value, pendingSpeaker, pendingMode), orderRef);
           pendingSpeaker = '';
           pendingMode = '';
           return;
@@ -15724,7 +15863,12 @@
       let clean = String(text || '').trim();
       if (type === 'scene') clean = normalizeSceneHeadingText(clean);
       if (!clean) return null;
-      if (isPdfPageArtifactText(clean, pageNo) && !['end', 'note', 'link'].includes(type)) return null;
+      if (isPdfPageArtifactText(clean, pageNo) && !['end', 'note', 'link'].includes(type)) {
+        // 쪽 부속물로 보고 버리는 자리 — 부속물이 아닌 글자가 여기로 사라지면 어디서
+        // 없어졌는지 알 길이 없으므로 무엇을 버렸는지 남긴다.
+        notePdfOverlayDrop('pageArtifactReviewItem', 'p' + (Number(pageNo) || 0) + ' "' + clean.slice(0, 10) + '"');
+        return null;
+      }
       orderRef.value += 1;
       const item = makeSourceReviewItem(type, pageNo, clean, orderRef.value);
       items.push(item);
@@ -16285,7 +16429,9 @@
     // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function characterColorValue(name) {
       const raw = norm(name) || 'unknown';
-      const seed = parseInt(hashText(raw).slice(0, 8), 16) || 0;
+      // hashText 는 36진수를 낸다(toString(36)) — 16진수로 읽으면 첫 글자가 f 를 넘는 이름이
+      // 전부 NaN 이 되어 같은 색으로 뭉친다.
+      const seed = parseInt(hashText(raw).slice(0, 8), 36) || 0;
       return CHARACTER_COLOR_PALETTE[seed % CHARACTER_COLOR_PALETTE.length];
     }
 
@@ -16932,7 +17078,7 @@
     function dialogTextWithQuotes(item) {
       const dialog = String(item && item.dialog || '').trim();
       if (!dialog) return '';
-      const alreadyWrapped = dialogQuotePairs().some(pair => dialog.startsWith(pair.open) && dialog.endsWith(pair.close));
+      const alreadyWrapped = dialogTextAlreadyQuoteWrapped(dialog);
       if (alreadyWrapped) return dialog;
       const open = item && item.openQuote || '「';
       const close = item && item.dialogOpenEnded ? '' : item && item.closeQuote || '」';
@@ -17228,7 +17374,16 @@
       const end = range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement;
       const startBlock = start && start.closest && start.closest('[data-md-line-index]');
       const endBlock = end && end.closest && end.closest('[data-md-line-index]');
-      if (!startBlock || startBlock !== endBlock) return;
+      if (!startBlock || startBlock !== endBlock) {
+        // 한 줄에 담기지 않는 선택은 기억을 지운다 — 남겨 두면 서식 명령이 낡은 범위를 되살려
+        // 사용자가 보고 있지 않은 줄에 서식이 들어간다. 선택이 이 영역 밖으로 나간 경우
+        // (툴바로 초점이 옮겨간 자리)는 예전대로 기억을 유지한다.
+        if (startBlock || endBlock) {
+          state.markdownSelectionRange = null;
+          state.markdownSelectionLineIndex = '';
+        }
+        return;
+      }
       state.markdownSelectionRange = range.cloneRange();
       state.markdownSelectionLineIndex = startBlock.getAttribute('data-md-line-index');
     }
@@ -18277,7 +18432,9 @@
       const page = pdfLogicalPageForDocument(doc, targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
-      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v21' });
+      // 좌표원은 아이템이 정한다 — 여기서 '렌더된 pdf.js' 로 못박으면 폴백 아이템으로
+      // 잡은 사각형까지 isCurrentPdfCoordinateSource 가 렌더 좌표로 인정한다.
+      return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false });
     }
 
     function hydratePdfOverlayRectsForPageFromReviewItems(doc, pageNo) {
@@ -18288,6 +18445,11 @@
       (doc.reviewItems || []).forEach((item) => {
         if (!item) return;
         if (item.id) reviewById.set(item.id, item);
+        // 텍스트 매칭은 이 쪽을 실제로 덮는 아이템으로 좁힌다 — 같은 대사가 여러 쪽에 나오면
+        // 문서 전체에서 처음 걸린 아이템의 좌표를 물려받아 엉뚱한 자리에 상자가 선다.
+        const coversTargetPage = Number(item.pageNo || 0) === targetPageNo
+          || (item.pageSpans || []).some(span => Number(span && span.pageNo || 0) === targetPageNo);
+        if (!coversTargetPage) return;
         const key = normalizePdfCoordinateMatchText(sourceReviewItemText(item));
         if (key && !reviewByText.has(key)) reviewByText.set(key, item);
       });
@@ -18728,8 +18890,9 @@
     function refreshPdfFrontSummaryOverlayRectsForRenderedPage(doc, pageNo, items) {
       const targetPageNo = overlayPageNoForBlock(null, pageNo);
       if (!doc || doc.draftSourceType !== 'pdf' || !items || !items.length) return 0;
-      const groups = pdfLayoutGuideLineGroupsForPage(doc, items, targetPageNo, pdfBodyRangeForPage(doc, targetPageNo));
-      const sourceLines = (groups.bodyLines || [])
+      // 줄 묶음은 화면 가이드·매칭이 쓰는 그 한 벌이어야 한다(pdfGuideLineSetsForPage).
+      // 여기서만 in-body 필터와 start-band split 을 건너뛰면 front_summary 좌표만 갈라진다.
+      const sourceLines = (pdfGuideLineSetsForPage(doc, targetPageNo, items).bodyLines || [])
         .filter(line => line && line.overlayRect && !isPdfPageArtifactOverlayLine(line, targetPageNo));
       if (!sourceLines.length) return 0;
       let changed = 0;
@@ -19119,6 +19282,16 @@
     }
 
     function annotatePdfRubyTextItems(items) {
+      // 한 쪽에서 두 번 돌다 — 글자 회수 전 집합과 회수 뒤 새 배열이다. 회수본은 앞 회차의
+      // 플래그를 복사해 들고 오고, 중앙값이 바뀌어 판정은 달라진다. 먼저 지우지 않으면
+      // 이번 회차가 루비가 아니라고 한 글자까지 플래그가 남아 본문 줄 묶기에서 영원히 빠진다.
+      (items || []).forEach((item) => {
+        if (!item || !item.pdfRuby) return;
+        delete item.pdfRuby;
+        delete item.pdfRubyParentText;
+        delete item.pdfRubyGroupId;
+        delete item.pdfRubyText;
+      });
       const source = (items || []).filter(item => item && item.text && !isPdfJsBlueTextItem(item));
       if (source.length < 8) return [];
       const verticalItems = source.filter(item => Boolean(item.verticalTextItem || Number(item.heightPct || 0) > Number(item.widthPct || 0) * 1.2));
@@ -19367,6 +19540,18 @@
       const glyphs = Array.isArray(drawn) ? drawn : [];
       if (!glyphs.length || !source.length) return source;
       const drawnText = glyphs.map(glyph => glyph.text).join('');
+      // drawnText 의 오프셋 → glyphs 인덱스 표. 한 글리프가 한 코드유닛이 아닌 글자(서로게이트
+      // 페어·합자 전개)가 한 번이라도 나오면 그 뒤 색과 되찾은 글자가 통째로 밀린다.
+      const glyphIndexByOffset = [];
+      glyphs.forEach((glyph, index) => {
+        const length = String(glyph && glyph.text || '').length;
+        for (let unit = 0; unit < length; unit += 1) glyphIndexByOffset.push(index);
+      });
+      glyphIndexByOffset.push(glyphs.length);
+      const glyphIndexAt = (offset) => {
+        const clamped = Math.max(0, Math.min(glyphIndexByOffset.length - 1, Number(offset) || 0));
+        return glyphIndexByOffset[clamped];
+      };
       const out = [];
       let at = 0;
       source.forEach((item, index) => {
@@ -19376,7 +19561,8 @@
           out.push(item);
           return;
         }
-        const colorKey = glyphs[found] && glyphs[found].colorKey || '';
+        const foundGlyph = glyphs[glyphIndexAt(found)];
+        const colorKey = foundGlyph && foundGlyph.colorKey || '';
         out.push(Object.assign({}, item, { colorKey, visualGroupKey: colorKey }));
         at = found + own.length;
         const next = source[index + 1];
@@ -19384,7 +19570,7 @@
         const nextAt = nextOwn ? drawnText.indexOf(nextOwn, at) : drawnText.length;
         const gapEnd = nextAt < 0 ? at : nextAt;
         if (gapEnd <= at) return;
-        pdfAppendRecoveredGlyphs(out, item, glyphs.slice(at, gapEnd));
+        pdfAppendRecoveredGlyphs(out, item, glyphs.slice(glyphIndexAt(at), glyphIndexAt(gapEnd)));
         at = gapEnd;
       });
       return out;
@@ -20750,6 +20936,7 @@
       const onUp = () => {
         document.removeEventListener('pointermove', onMove);
         document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
         if (raf) { cancelAnimationFrame(raf); applyFrame(); }
         stack.classList.remove('dragging');
         if (!moved) return;
@@ -20762,6 +20949,9 @@
       };
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
+      // 터치에서 취소된 제스처는 pointerup 이 오지 않는다 — 안 떼면 리스너가 남아 캡슐이 계속
+      // 포인터를 따라다니고, 다음 무관한 pointerup 이 그 자리로 위치를 저장한다.
+      document.addEventListener('pointercancel', onUp);
     }
 
     function renderPdfFeedbackLayer() {
@@ -21859,7 +22049,12 @@
       }));
       document.querySelectorAll('[data-close-note]').forEach(el => el.addEventListener('click', () => {
         const note = state.project.revisionNotes.find(x => x.id === el.getAttribute('data-close-note'));
-        if (note) note.status = note.status === 'done' ? 'open' : 'done';
+        // syncAll 은 렌더 나열이라 저장 경로가 아니다 — 이것을 부르지 않으면 토글이 자동저장도
+        // 미저장 표시도 못 받고 리로드에 사라진다.
+        if (note) {
+          note.status = note.status === 'done' ? 'open' : 'done';
+          markProjectChanged('toggle_note_status');
+        }
         syncAll(false);
       }));
       bindRevisionNoteDeleteButtons();
@@ -22119,7 +22314,11 @@
       settingsAutosaveTimer = window.setTimeout(() => {
         putSettingsAutosaveSnapshot(reason || 'edit')
           .then(() => { lastAutosaveAt = Date.now(); updateSaveStatus(); })
-          .catch(err => console.warn('settings autosave failed', err));
+          .catch((err) => {
+            // 콘솔만 찍으면 스트립이 마지막 성공에 멈춰 있어 저장된 것처럼 보인다.
+            console.warn('settings autosave failed', err);
+            updateSaveStatus(t('saveStatusFailed'));
+          });
         // Coarse rolling restore points: at most one automatic slot per interval.
         if (Date.now() - lastAutoSlotAt > AUTO_SLOT_INTERVAL_MS) {
           pushProjectRestorePoint('auto').catch(err => console.warn('auto restore point failed', err));
@@ -23344,8 +23543,14 @@
       const cleanBody = String(body || '').trim();
       if (!cleanTitle && !cleanBody) return null;
       const doc = activeDocument();
-      const index = (state.project.sourceBlocks || []).length + 1;
-      const id = doc.id + '-manual-' + pad(index, 4);
+      // sourceBlocks 는 문서 삭제·재임포트로 줄어든다 — 길이+1 은 이 문서가 이미 쓴 번호로
+      // 되감겨 id 가 겹치고, 블록 조회가 전부 첫 일치이므로 다른 블록이 잡힌다.
+      let index = (state.project.sourceBlocks || []).length + 1;
+      let id = doc.id + '-manual-' + pad(index, 4);
+      while ((state.project.sourceBlocks || []).some(block => block && block.id === id)) {
+        index += 1;
+        id = doc.id + '-manual-' + pad(index, 4);
+      }
       const entityType = ['character', 'place', 'organization', 'technology'].includes(kind) ? kind : (kind === 'dialog' ? 'character' : (kind === 'scene_heading' ? 'place' : ''));
       let entity = null;
       if (entityType && cleanTitle) {
