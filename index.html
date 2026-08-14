@@ -2783,7 +2783,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v180';
+    const APP_VERSION = 'v181';
     const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -4853,11 +4853,32 @@
       return t(UI_LABEL_KEYS.scope[scope] || 'scopeDocument');
     }
 
+    // 사람이 직접 채우는 칸이 하나라도 차 있으면 자동 정리가 그 엔티티를 지우지 않는다.
+    // 확정 사실·빨간 노트·수동 추가 표시에 요약·별명·성별·나이·확정 등급(soft 이상)까지 센다.
+    // 넓게 잡는 쪽이 맞다 — 남은 자료는 사용자가 지우면 되지만 지운 입력은 되돌릴 수 없다.
+    function entityHasUserData(entity) {
+      if (!entity) return false;
+      return Boolean((entity.fixedFactIds || []).length
+        || (entity.revisionNoteIds || []).length
+        || (entity.tags || []).includes('source:manual')
+        || norm(entity.summary)
+        || (entity.aliases || []).length
+        || norm(entity.gender)
+        || norm(entity.age)
+        || authorityRank(entity.authority || 'inferred') >= authorityRank('soft'));
+    }
+
+    // 리뷰에서 뺀 소재는 지우지 않고 이 표시로만 감춘다(되돌릴 수 있어야 하므로).
+    // 목록·블록 연결·내보내기가 다 이 판정을 본다 — 한 곳이라도 빼면 뺀 소재가 거기서 되살아난다.
+    function entityExcludedFromMaterials(entity) {
+      return Boolean(entity && entity.excludedFromMaterials);
+    }
+
     // 'unclassified' 는 어느 경로도 새로 만들지 않는다(EDIT_ENTITY_TYPES 참조) — 옛 데이터에
     // 남아 있을 수 있어 가드는 남긴다.
     function entityVisibleInActiveDocument(entity, project) {
       const p = project || state.project;
-      if (!entity || entity.type === 'unclassified') return false;
+      if (!entity || entity.type === 'unclassified' || entityExcludedFromMaterials(entity)) return false;
       if ((entity.scope || 'document') === 'project') return true;
       const doc = activeDocument(p);
       const docId = entity.sourceDocumentId || inferEntityDocumentId(p, entity) || doc.id;
@@ -4868,7 +4889,7 @@
 
     function entityVisibleInMaterialTab(entity, tab, project) {
       const p = project || state.project;
-      if (!entity || entity.type === 'unclassified') return false;
+      if (!entity || entity.type === 'unclassified' || entityExcludedFromMaterials(entity)) return false;
       const scope = entity.scope || ((entity.tags || []).includes('scope:project') ? 'project' : 'document');
       if (tab === 'commonMaterials') return scope === 'project' || entity.sourceDocumentId === 'project-common';
       if (tab === 'episodeMaterials') return scope !== 'project' && entityVisibleInActiveDocument(entity, p);
@@ -5307,7 +5328,7 @@
     function entitiesForBlock(block) {
       if (!block) return [];
       const directIds = block.linkedEntityIds || [];
-      return (state.project.entities || []).filter(e => directIds.includes(e.id) || blockMatchesEntity(block, e));
+      return (state.project.entities || []).filter(e => !entityExcludedFromMaterials(e) && (directIds.includes(e.id) || blockMatchesEntity(block, e)));
     }
 
     function entityNameAppearsInText(entity, text) {
@@ -6445,7 +6466,7 @@
       if (/^\d+$/.test(raw)) return classification('page_number', context.zone, false, 'none', 0.92, ['page number']);
       if (/^https?:\/\//.test(raw)) return classification('reference_url', 'appendix', false, 'none', 0.9, ['reference url']);
       if (isRevisionLine(raw)) return classification('revision_comment', 'editorial_comment', false, 'none', 0.76, ['comment marker']);
-      if (isEndMarkerLine(raw)) {
+      if (isEndMarkerLine(raw, context.bodyStarted)) {
         context.bodyEnded = true;
         return classification('end_marker', 'body_end', false, 'none', 0.96, ['end marker']);
       }
@@ -6668,7 +6689,10 @@
     }
 
     // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
-    function isEndMarkerLine(raw) {
+    // 매수 환산 메모는 **본문이 시작된 뒤에만** 끝표시다 — 같은 문구가 표지에도
+    // 적혀 있어서, 본문 전에 그것을 끝으로 보면 뒤따르는 문서 전체가 부록으로 떨어진다.
+    // bodyStarted 를 아는 호출부만 넘긴다 — 생략하면 종전대로 끝표시로 본다.
+    function isEndMarkerLine(raw, bodyStarted) {
       const source = norm(raw).normalize('NFKC');
       const compact = source.replace(/\s+/g, '');
       if (!source || charLen(source) > 80) return false;
@@ -6680,7 +6704,7 @@
         || /^(?:本文|シナリオ|脚本)\s*(?:END|完|了|終わり|終り)\s*$/i.test(bare)
         || /^(?:第\s*[0-9０-９一二三四五六七八九十]+\s*話|[#＃]\s*[0-9０-９]+)\s*(?:了|完|END|THE\s*END|終わり|終り)$/i.test(source)
         || isBracketedContinuationMarker(compact)
-        || isPageCountConversionMarker(compact);
+        || (bodyStarted !== false && isPageCountConversionMarker(compact));
     }
 
     // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -7481,13 +7505,14 @@
       if (!project || !documentId || !oldBlockIds || !oldBlockIds.size) return;
       const removedEntityIds = new Set();
       project.entities = (project.entities || []).filter((entity) => {
-        if ((entity.scope || 'document') === 'project') return true;
         const refs = entity.sourceRefs || [];
+        // 사라진 블록 id 는 범위를 가리지 않고 먼저 턴다 — 블록 id 는 재임포트 때 자리순으로
+        // 다시 찍히므로, 남겨 두면 그 id 를 물려받은 다른 줄에 이 엔티티가 붙는다.
         entity.sourceRefs = refs.filter(ref => !oldBlockIds.has(ref));
+        if ((entity.scope || 'document') === 'project') return true;
         const tiedToDocument = entity.sourceDocumentId === documentId || refs.some(ref => oldBlockIds.has(ref));
         if (!tiedToDocument) return true;
-        const hasUserData = (entity.fixedFactIds || []).length || (entity.revisionNoteIds || []).length || (entity.tags || []).includes('source:manual');
-        if (entity.sourceRefs.length || hasUserData) return true;
+        if (entity.sourceRefs.length || entityHasUserData(entity)) return true;
         removedEntityIds.add(entity.id);
         return false;
       });
@@ -7855,27 +7880,31 @@
     // 쓰는 곳: 기타 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function syncMarkdownFeedbackNotesForBlock(project, block) {
       if (!project || !block) return;
-      const removedIds = new Set();
+      const previousById = new Map();
       project.revisionNotes = (project.revisionNotes || []).filter((note) => {
         const remove = note && note.origin === 'markdown_red' && note.targetType === 'block' && note.targetId === block.id;
-        if (remove) removedIds.add(note.id);
+        if (remove) previousById.set(note.id, note);
         return !remove;
       });
-      block.revisionNoteIds = (block.revisionNoteIds || []).filter(id => !removedIds.has(id));
+      block.revisionNoteIds = (block.revisionNoteIds || []).filter(id => !previousById.has(id));
       markdownFeedbackSegments(block.inlineRuns).forEach((text, index) => {
-        const note = {
-          id: stableId('note', ['markdown_red', block.id, index, text].join('|')),
+        // 노트 id 는 자리(블록·순번)로만 만든다 — 본문을 id 에 섞으면 한 글자만 고쳐도 다른
+        // 노트가 되어 사용자가 닫아 둔 status 가 open 으로 되돌아간다. 같은 자리면 있던
+        // 노트를 그대로 두고 본문만 갈아 끼운다(status 등 사용자 편집분은 손대지 않는다).
+        const id = stableId('note', ['markdown_red', block.id, index].join('|'));
+        const note = previousById.get(id) || {
+          id,
           targetType: 'block',
           targetId: block.id,
           noteType: 'retake',
-          text,
           linkedEntityIds: [],
           status: 'open',
           color: 'red',
           origin: 'markdown_red',
-          sourceDocumentId: block.sourceDocumentId || '',
           createdAt: nowIso()
         };
+        note.text = text;
+        note.sourceDocumentId = block.sourceDocumentId || '';
         project.revisionNotes.push(note);
         block.revisionNoteIds = uniq((block.revisionNoteIds || []).concat(note.id));
       });
@@ -10327,10 +10356,10 @@
       const page = String(Number(pageNo) || '').replace(/^0+/, '');
       if (/^[\-‐ー―–—]*[0-9]{1,4}[\-‐ー―–—]*$/.test(compact)) {
         const num = compact.replace(/[^0-9]/g, '').replace(/^0+/, '');
-        // 쪽번호와 안 맞아도 버리는 이유: 앞에 세지 않는 장이 있으면 인쇄된 번호가 이 쪽
-        // 번호와 어긋난다. 다만 자릿수를 안 따지면 홀로 선 네 자리 수(연도 표기 따위)까지
-        // 부속물로 삼켜 본문에서 사라지므로, 어긋난 번호는 세 자리까지만 본다.
-        return !page || !num || num === page || (compact.length <= 4 && num.length <= 3);
+        // 홀로 선 숫자 줄은 그 값이 이 쪽번호와 같을 때만 부속물로 버린다 — 쪽번호를
+        // 모를 때만 값 없이 버린다. 자릿수로 가르지 않는 이유: 이 판정은 좌표 없이 텍스트만
+        // 보고 부르는 곳이 많아, 값이 어긋나는 숫자까지 버리면 본문의 숫자 한 줄이 사라진다.
+        return !page || !num || num === page;
       }
       if (/^(?:p|P|page|PAGE|頁|Ｐ)\.?[0-9]{1,4}$/.test(compact)) return true;
       return false;
@@ -12502,13 +12531,15 @@
     }
 
     function pdfSingleByteText(code) {
+      // WinAnsi(cp1252) 는 0x80~0x9f 만 Latin-1 과 다르다 — 그 구간만 표로 둔다.
+      // 0x81·0x8d·0x8f·0x90·0x9d 는 WinAnsi 에 정의가 없어 일부러 비운다.
       const winAnsi = {
-        0x80: '?', 0x82: '?', 0x83: '?', 0x84: '?', 0x85: '…',
-        0x86: '†', 0x87: '‡', 0x88: '?', 0x89: '‰', 0x8a: '?',
-        0x8b: '?', 0x8c: '?', 0x8e: '?', 0x91: '‘', 0x92: '’',
-        0x93: '“', 0x94: '”', 0x95: '?', 0x96: '?', 0x97: '?',
-        0x98: '?', 0x99: '?', 0x9a: '?', 0x9b: '?', 0x9c: '?',
-        0x9e: '?', 0x9f: '?'
+        0x80: '€', 0x82: '‚', 0x83: 'ƒ', 0x84: '„', 0x85: '…',
+        0x86: '†', 0x87: '‡', 0x88: 'ˆ', 0x89: '‰', 0x8a: 'Š',
+        0x8b: '‹', 0x8c: 'Œ', 0x8e: 'Ž', 0x91: '‘', 0x92: '’',
+        0x93: '“', 0x94: '”', 0x95: '•', 0x96: '–', 0x97: '—',
+        0x98: '˜', 0x99: '™', 0x9a: 'š', 0x9b: '›', 0x9c: 'œ',
+        0x9e: 'ž', 0x9f: 'Ÿ'
       };
       return winAnsi[code] || String.fromCharCode(code);
     }
@@ -12661,7 +12692,15 @@
       if (/^\d{1,4}$|^\d{4}[./年-]/.test(clean)) return false;
       if (/[、，。！？!?「」『』]/.test(clean)) return false;
       if (/^(全部|それは|これは|あれは|から|まで|ほか|その他)$/.test(clean)) return false;
-      if (/(場所|広場|広間|本部|幕内|外|内|前|中|横|道路|路地|教室|学校|公園|病室|部屋|屋上|廊下|駅|港|市|区|町|村|ラボ|施設|館|社|省|庁|課)$/.test(clean)) return false;
+      // 장소 접미사 — 여러 글자 항목은 그대로 건다.
+      if (/(場所|広場|広間|本部|幕内|道路|路地|教室|学校|公園|病室|部屋|屋上|廊下|ラボ|施設)$/.test(clean)) return false;
+      // 한 글자 항목은 성씨 안에도 그대로 들어가서, 끝글자만 보면 흔한 성이 통째로 이름에서 빠진다.
+      // 그래서 **앞에 장소 신호가 있을 때만** 장소로 본다. 앞이 비면 그 글자가 곧 장소말 자체고,
+      // 낱말 전체가 이미 장소말이면 그대로 장소다.
+      if (/[外内前中横駅港市区町村館社省庁課]$/.test(clean)) {
+        const head = clean.slice(0, -1);
+        if (!head || hasLocationSignal(head) || LOCATION_SIGNAL_MULTI_RE.test(clean)) return false;
+      }
       if (/^(ニュースキャスター|記者|警備員|店員|職員|警官|教師|生徒|男|女|老人|子供|母|父|少年|少女|群衆|客|兵士|隊員)[、，]/.test(clean)) return false;
       return /[\u3040-\u30ff\u3400-\u9fffA-Za-zＡ-Ｚａ-ｚ]/.test(clean);
     }
@@ -13132,7 +13171,7 @@
       return p.documentFolders.sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || String(a.title || a.id).localeCompare(String(b.title || b.id)));
     }
 
-    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
+    // 쓰는 곳: 렌더 · 저장 · 콘티 내보내기 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function documentTreeChildren(project, parentId) {
       const p = project || state.project;
       const parent = parentId || 'root';
@@ -16391,16 +16430,15 @@
     function applySourceReviewMaterialDraftToProject(project, draft, doc) {
       if (!project || !draft || !doc) return;
       const excluded = new Set(draft.materialExcludedKeys || []);
-      if (excluded.size) {
-        const docBlockIds = new Set((project.sourceBlocks || []).filter(block => block.sourceDocumentId === doc.id).map(block => block.id));
-        project.entities = (project.entities || []).filter((entity) => {
-          const key = sourceReviewMaterialKey(entity.type, entity.name);
-          if (!excluded.has(key)) return true;
-          const tiedToDoc = entity.sourceDocumentId === doc.id || (entity.sourceRefs || []).some(ref => docBlockIds.has(ref));
-          const hasUserData = (entity.fixedFactIds || []).length || (entity.revisionNoteIds || []).length || (entity.tags || []).includes('source:manual');
-          return !tiedToDoc || hasUserData;
-        });
-      }
+      const docBlockIds = new Set((project.sourceBlocks || []).filter(block => block.sourceDocumentId === doc.id).map(block => block.id));
+      // 제외는 삭제가 아니라 표시다 — 지우면 그 엔티티에 달아 둔 사용자 입력까지 함께 사라져
+      // 제외를 취소해도 못 되살린다. 매번 다시 계산하므로 목록에서 뺀 키를 지우면 그대로 돌아온다.
+      (project.entities || []).forEach((entity) => {
+        const tiedToDoc = entity.sourceDocumentId === doc.id || (entity.sourceRefs || []).some(ref => docBlockIds.has(ref));
+        if (!tiedToDoc) return;
+        if (excluded.has(sourceReviewMaterialKey(entity.type, entity.name))) entity.excludedFromMaterials = true;
+        else delete entity.excludedFromMaterials;
+      });
       (draft.manualMaterialCards || []).map(cloneReviewManualMaterial).forEach((card) => {
         const clean = normalizeEntityName(card.name, card.type) || card.name;
         if (!clean) return;
@@ -18654,7 +18692,10 @@
     }
 
     // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
+    // 여백 메모는 정의상 본문 밖에 놓인다 — 아래 여백도 제 자리라, 아래 여백 잔재 판정에서 뺀다.
+    // 나머지 page_metadata · pdf_link 는 그대로 걸린다.
     function isOverlayRectPageMetadataFooterArtifact(block, rect) {
+      if (isPdfNoteOverlayBlock(block)) return false;
       return isPageMetadataBlock(block) && isOverlayRectFooterStartBand(rect);
     }
 
@@ -19676,8 +19717,11 @@
       const compact = normalizePdfCompactTextPreserveMarks(value);
       if (!compact) return false;
       if (isPdfVerticalPunctuationFragment(compact)) return false;
-      const latin = countTextMatches(compact, /[A-Za-z0-9#&:;.,'!?+\-\/()[\]{}]/g);
-      const jp = countTextMatches(compact, /[\u3040-\u30ff\u3400-\u9fff々〆?]/g);
+      // 한 글자가 두 클래스에 다 들면 latin 은 1 오르는데 문턱인 jp*2 는 2 오른다 —
+      // 물음표는 어느 쪽 신호도 아니라 두 클래스에서 모두 제외한다.
+      // 〇 는 세로 조판의 숫자라 々〆 와 같은 일본어 쪽이다.
+      const latin = countTextMatches(compact, /[A-Za-z0-9#&:;.,'!+\-\/()[\]{}]/g);
+      const jp = countTextMatches(compact, /[\u3040-\u30ff\u3400-\u9fff々〆〇]/g);
       // 몇 글자부터 「눕힌 런」으로 볼지는 부르는 쪽이 정한다 — 표시용과 높이 확장용의 문턱이
       // 다르다(아래 확장 자리의 주석 참고). 기본은 종전대로 셋이다.
       const need = Number(minLatin) > 0 ? Number(minLatin) : 3;
@@ -22822,11 +22866,30 @@
       return (project && project.documents || []).find(doc => doc.id === id) || null;
     }
 
+    // 문서 순서의 정본은 사용자가 트리에서 잡은 자리(parentId·sortOrder)다 — 화면과
+    // 같은 깊이우선 순서로 문서에 번호를 매긴다.
+    function conteExportDocumentOrderIndex(project) {
+      const index = new Map();
+      if (!project) return index;
+      const walk = (parentId) => {
+        documentTreeChildren(project, parentId).forEach((item) => {
+          if (item.nodeType === 'document') index.set(item.node.id, index.size);
+          else walk(item.node.id);
+        });
+      };
+      walk('root');
+      return index;
+    }
+
     function conteExportSortedBlocks(project) {
+      // id 문자열 비교는 문서를 만든 순서라 트리를 옮겨도 안 바뀜다.
+      // 트리 밖 문서(작품공통)는 뒤로 보낸다 — 끝의 id 순은 거기서 갈래를 묶는 용도다.
+      const docOrder = conteExportDocumentOrderIndex(project);
+      const docRank = id => (docOrder.has(id) ? docOrder.get(id) : docOrder.size);
       return (project && project.sourceBlocks || []).slice().sort((a, b) => {
         const docA = String(a.sourceDocumentId || '');
         const docB = String(b.sourceDocumentId || '');
-        if (docA !== docB) return docA.localeCompare(docB);
+        if (docA !== docB) return docRank(docA) - docRank(docB) || docA.localeCompare(docB);
         return (Number(a.pageNo) || 0) - (Number(b.pageNo) || 0)
           || (Number(a.globalOrder || a.order) || 0) - (Number(b.globalOrder || b.order) || 0);
       });
@@ -22970,7 +23033,7 @@
 
     function conteExportCharacters(project, blocks) {
       const map = new Map();
-      (project.entities || []).filter(e => e.type === 'character').forEach((entity) => {
+      (project.entities || []).filter(e => e.type === 'character' && !entityExcludedFromMaterials(e)).forEach((entity) => {
         conteMergeCharacter(map, entity.name, {
           aliases: entity.aliases || [],
           gender: entity.gender || '',
@@ -23026,7 +23089,7 @@
 
     function conteExportPlaces(project, blocks) {
       const map = new Map();
-      (project.entities || []).filter(e => e.type === 'place').forEach((entity) => {
+      (project.entities || []).filter(e => e.type === 'place' && !entityExcludedFromMaterials(e)).forEach((entity) => {
         conteMergePlace(map, entity.name, {
           aliases: entity.aliases || [],
           sourceDocumentId: entity.sourceDocumentId || '',
