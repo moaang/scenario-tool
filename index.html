@@ -2783,7 +2783,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v178';
+    const APP_VERSION = 'v179';
     const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -3757,6 +3757,7 @@
 
     let activeUiLanguage = normalizeUiLanguage(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY) || 'ko');
 
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI · 저장 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function t(key, vars) {
       const lang = normalizeUiLanguage(activeUiLanguage);
       const table = UI_I18N[lang] || UI_I18N.ko;
@@ -4024,6 +4025,7 @@
       top: { triggerField: 'bodyTopLineTrigger', valueField: 'bodyTopLinePct', isTrigger: isPdfBodyTopLineTrigger, min: 8, max: 65 }
     };
 
+    // 쓰는 곳: 클리핑 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfBodyLinePctForPage(doc, pageNo, kind) {
       const spec = PDF_BODY_LINE_SPECS[kind];
       if (!spec) return null;
@@ -4042,10 +4044,12 @@
     const PDF_BODY_CUT_LINE_TRIGGER = 'annotation_layout_stable';
     const PDF_BODY_TOP_LINE_TRIGGER = 'layout_divider_stable';
 
+    // 쓰는 곳: 클리핑 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfBodyCutLineTrigger(trigger) {
       return trigger === PDF_BODY_CUT_LINE_TRIGGER;
     }
 
+    // 쓰는 곳: 클리핑 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfBodyTopLineTrigger(trigger) {
       return trigger === PDF_BODY_TOP_LINE_TRIGGER;
     }
@@ -4071,6 +4075,7 @@
 
     let pdfOverlayDropChipQueued = false;
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function notePdfOverlayDrop(kind, detail) {
       const prev = pdfOverlayDrops.get(kind) || { count: 0, last: '' };
       pdfOverlayDrops.set(kind, {
@@ -4114,6 +4119,7 @@
       pdfOverlayDropPhase = 'render';
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfBodyRangeForPage(doc, pageNo) {
       const cut = pdfBodyLinePctForPage(doc, pageNo, 'cut');
       const topLine = pdfBodyLinePctForPage(doc, pageNo, 'top');
@@ -4146,6 +4152,7 @@
       return top + (Number.isFinite(height) ? height / 2 : 0);
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfTextItemInsideBodyRange(item, range) {
       if (!range || !range.enabled) return true;
       const centerY = Number(item && item.centerYPct);
@@ -4248,6 +4255,7 @@
       };
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 저장 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function $(id) { return document.getElementById(id); }
     function esc(value) {
       return String(value == null ? '' : value)
@@ -4257,6 +4265,7 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 · 저장 · 텍스트분류 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function norm(value) { return String(value || '').replace(/[\u3000\t]+/g, ' ').replace(/\s+/g, ' ').trim(); }
     // 이 블록의 본문을 한 줄로 이어 보여줄 것인가(displayPdfBlockText 적용 여부).
     // 목록과 상세가 같은 블록을 각자 그리므로 판정은 이 한 벌뿐이다.
@@ -4285,6 +4294,7 @@
     function stableId(prefix, name) { return prefix + '_' + hashText(norm(name)).slice(0, 8); }
     function uniq(arr) { return Array.from(new Set((arr || []).filter(Boolean))); }
     function charLen(text) { return Array.from(String(text || '')).length; }
+    // 쓰는 곳: 저장 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function nowIso() { return new Date().toISOString(); }
     function escapeRegExp(value) { return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
@@ -4328,6 +4338,7 @@
     // 거기 있어서 외부 의존은 여전히 CDN 하나다.
     const PDF_JS_CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/';
     const PDF_JS_CMAP_URL = PDF_JS_CDN + 'cmaps/';
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsDocumentParams(data) {
       return { data, cMapUrl: PDF_JS_CMAP_URL, cMapPacked: true };
     }
@@ -4344,6 +4355,7 @@
         .catch(() => { pdfJsCmapReachable = false; });
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     async function loadPdfJsLibrary() {
       if (window.pdfjsLib) return window.pdfjsLib;
       if (window.__scenarioPdfJsLoading) return window.__scenarioPdfJsLoading;
@@ -4574,6 +4586,7 @@
       return work;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function activeDocument(project) {
       const p = project || state.project;
       if (!p.documents || !p.documents.length) {
@@ -4606,6 +4619,7 @@
       return doc;
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function editableDocuments(project) {
       const p = project || state.project;
       return (p.documents || [])
@@ -4626,12 +4640,14 @@
         || block.zone === MANUAL_REVIEW_ZONE);
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function activeDocumentBlocks(project) {
       const p = project || state.project;
       const doc = activeDocument(p);
       return (p.sourceBlocks || []).filter(b => (b.sourceDocumentId || doc.id) === doc.id);
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isScriptPreviewBlock(block) {
       if (!block || isPageArtifactBlock(block)) return false;
       if (isPageMetadataBlock(block)) return false;
@@ -4640,6 +4656,7 @@
         || block.type === 'body_text' || block.type === 'appendix_text';
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isFrontPreviewBlock(block) {
       if (!block) return false;
       return block.zone === 'front_matter' || block.zone === 'cast_list'
@@ -4652,10 +4669,12 @@
         || block.zone === MANUAL_REVIEW_ZONE || block.type === 'body_text';
     }
 
+    // 쓰는 곳: 매칭 · 저장 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cloneJson(value) {
       return JSON.parse(JSON.stringify(value == null ? null : value));
     }
 
+    // 쓰는 곳: 매칭 · 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sortedDocumentBlocks(doc, project) {
       const p = project || state.project;
       const d = doc || activeDocument(p);
@@ -4787,11 +4806,13 @@
       return (version && version.label || t('versionUntitled')) + mark;
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function docTitleById(project, id) {
       const doc = conteExportDocumentById(project || state.project, id);
       return doc ? (doc.title || doc.id) : (id || '');
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function inferEntityDocumentId(project, entity) {
       const refs = entity && entity.sourceRefs || [];
       const blocks = project && project.sourceBlocks || [];
@@ -4802,6 +4823,7 @@
       return '';
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function entityScopeLabel(scope) {
       return t(UI_LABEL_KEYS.scope[scope] || 'scopeDocument');
     }
@@ -4843,6 +4865,7 @@
       entity.tags = uniq((entity.tags || []).filter(tag => tag !== 'scope:project' && tag !== 'scope:document').concat(entity.scope === 'project' ? ['scope:project'] : ['scope:document']));
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function setEntityScope(entity, scope, documentId) {
       if (!entity) return;
       entity.scope = scope === 'project' ? 'project' : 'document';
@@ -4850,11 +4873,13 @@
       syncEntityScopeTags(entity);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function documentWorkUnlocked(doc) {
       const d = doc || activeDocument();
       return Boolean(d && d.documentKind !== 'project_common' && d.sourceConfirmed);
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function loadActiveDocumentToInput() {
       const doc = activeDocument();
       const blocks = activeDocumentBlocks();
@@ -4873,6 +4898,7 @@
       doc.updatedAt = nowIso();
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markProjectChanged(reason) {
       if (!workspaceReady()) return;
       const at = nowIso();
@@ -4902,6 +4928,7 @@
     }
 
     let lastAutosaveAt = 0;
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function updateSaveStatus(message) {
       const el = $('saveStatus');
       if (!el) return;
@@ -4911,23 +4938,27 @@
         : t('saveStatusWaiting');
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function workspaceReady(project) {
       const p = project || state.project;
       return Boolean(p && p.workspace && p.workspace.created);
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function workspaceTitle(project) {
       const p = project || state.project;
       const title = p && p.workspace && p.workspace.title || p && p.project && (p.project.savedProjectTitle || p.project.title) || '';
       return title === 'Imported Project' ? t('untitledProject') : title;
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function requireProjectReady() {
       if (workspaceReady()) return true;
       openCreateProjectModal();
       return false;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function applyWorkspaceLock() {
       const ready = workspaceReady();
       const doc = activeDocument();
@@ -4967,14 +4998,17 @@
       select.innerHTML = works.map(work => `<option value="${esc(work.workspace.workId)}" ${work.workspace.workId === activeId ? 'selected' : ''}>${esc(workspaceTitle(work) || t('untitledWork'))}</option>`).join('');
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function notesFor(targetType, targetId) {
       return (state.project.revisionNotes || []).filter(n => n.targetType === targetType && n.targetId === targetId);
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function claimsForEntity(entityId) {
       return (state.project.settingClaims || []).filter(c => c.targetId === entityId);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function claimLabel(claim) {
       if (claim.claimType === 'summary') return t('settingSummary');
       if (claim.claimType === 'canonical_setting') return t('settingCanonical');
@@ -4984,11 +5018,13 @@
       return claim.claimType || t('claimMemo');
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function authorityLabel(value) {
       const visible = editableAuthorityValue(value);
       return t(UI_LABEL_KEYS.authority[visible] || '');
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function editableAuthorityValue(value) {
       return AUTHORITY.includes(value) ? value : 'soft';
     }
@@ -5010,6 +5046,7 @@
         .concat(own.filter(c => !SETTING_BLOCK_TYPES.includes(c.claimType)));
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function renderTagChips(entity) {
       return (entity.tags || []).filter(t => !/^scope:/.test(t)).map(t => `<span class="chip">${esc(tagLabel(t))}</span>`).join('');
     }
@@ -5019,6 +5056,7 @@
     }
 
     // 노트 종류의 라벨. 종류 목록의 정본은 UI_LABEL_KEYS.note 한 벌뿐이고 여기는 그것을 푼다.
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function noteLabel(note) {
       return t(UI_LABEL_KEYS.note[note.noteType] || 'noteRetake');
     }
@@ -5195,6 +5233,7 @@
       return true;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function bindRevisionNoteDeleteButtons() {
       document.querySelectorAll('[data-delete-revision-note]').forEach(btn => {
         if (btn.dataset.boundDeleteRevisionNote === '1') return;
@@ -5231,6 +5270,7 @@
       return false;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function entitiesForBlock(block) {
       if (!block) return [];
       const directIds = block.linkedEntityIds || [];
@@ -5268,6 +5308,7 @@
     // 대사 여는 부호 목록의 유일본 — 쌍 목록에서 뽑으므로 쌍을 더하면 이것을 보는 판정이 같이 따라온다.
     const DEFAULT_DIALOG_OPEN_QUOTES = Object.freeze(DEFAULT_DIALOG_QUOTE_PAIRS.map(pair => pair.open));
 
+    // 쓰는 곳: 클리핑 · 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function createScenarioParserProfile(pagesOrText) {
       const pages = typeof pagesOrText === 'string' ? splitPages(pagesOrText) : (pagesOrText || []);
       const lines = pages.flatMap(page => page.lines || []).map(line => String(line || '').trim()).filter(Boolean);
@@ -5317,6 +5358,7 @@
     // requireLocation:false
     // is used by the per-line checks below that only run when profile.numberedSceneHeadings
     // is already true, so the punctuation/length/marker guards are enough to avoid false hits.
+    // 쓰는 곳: 클리핑 · PDF파싱 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function numberedSceneHeadingLineNumber(raw, opts) {
       const requireLocation = !opts || opts.requireLocation !== false;
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
@@ -5351,6 +5393,7 @@
     // 그중 **파트 소속**(아반 · 프롤로그 · A파트)만 여기 걸린다 — 그것들은 씬을 묶는 이름표이지
     // 그 자체가 씬은 아니다. 나머지(OP · CM · ED)는 그 자리가 곧 하나의 마커다.
     const PART_LABEL_RE = /^(?:アバン|プロローグ|[A-Z]パート)$/;
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPartLabelLine(raw) {
       const source = norm(raw).normalize('NFKC').trim();
       if (!source || charLen(source) > 12) return false;
@@ -5359,9 +5402,11 @@
     }
     // SINGLE decision point (used by classifyBody AND sourceReviewItemsToBlocks): in a
     // numbered-scene document a part label is a part marker, not a scene of its own.
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPartMarkerText(raw, profile) {
       return Boolean(profile && profile.numberedSceneHeadings && isPartLabelLine(raw));
     }
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function partMarkerLabel(raw) {
       return norm(raw)
         .replace(/^[【\[\(（]\s*/, '')
@@ -5401,6 +5446,7 @@
       return Object.keys(SCENE_MARKER_SHAPES).find(name => SCENE_MARKER_SHAPES[name].indexOf(source) >= 0) || '';
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isNonSceneMarkerTextLine(raw, profile) {
       const family = scenarioLineMarkerFamily(raw);
       const families = profile && Array.isArray(profile.sceneMarkerFamilies) ? profile.sceneMarkerFamilies : [];
@@ -5426,6 +5472,7 @@
         .sort((a, b) => (b.observed - a.observed) || (b.weight - a.weight));
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogQuotePairKey(pair) {
       return `${pair.open}/${pair.close}`;
     }
@@ -5434,6 +5481,7 @@
     // 이 함수는 줄마다 여러 번(대사·장면·머리) 불려서 배열을 만들고 버리는 값이 컸다.
     const dialogQuotePairsCache = new WeakMap();
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogQuotePairs(profile) {
       const pairs = profile && profile.quotePairs && profile.quotePairs.length ? profile.quotePairs : DEFAULT_DIALOG_QUOTE_PAIRS;
       // 기본 목록에는 observed 가 없다(freeze 라 붙지도 않는다) — 좁힐 것이 없으니 그대로다.
@@ -5515,6 +5563,7 @@
       return { speaker, modifier: modifierInfo.modifier, modifierRaw: norm(match[2] || ''), dialogMode: modifierInfo.mode };
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function startsWithDialogQuote(raw, profile) {
       const source = String(raw || '').trim();
       return dialogQuotePairs(profile).some(pair => source.startsWith(pair.open));
@@ -5593,6 +5642,7 @@
       return false;
     }
 
+    // 쓰는 곳: PDF파싱 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeDialogModifier(value) {
       const raw = norm(value);
       const folded = raw.normalize('NFKC').replace(/\s+/g, '').toUpperCase();
@@ -5673,6 +5723,7 @@
     // 그래서 대사를 먼저 세고, 그 자리가 진짜 시작인지는 **뒤 네 장이 이어지는가**로 확정한다.
     const BODY_START_LOOKAHEAD_PAGES = 4;
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function scenarioPageLooksLikeBody(lines, profile) {
       let dialog = 0, scene = 0, action = 0;
       (lines || []).forEach((line) => {
@@ -5687,6 +5738,7 @@
       return dialog >= 1 && scene >= 1 && action >= 2;
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function scenarioBodyStartsAtPage(logicalPages, pageIndex, profile) {
       const page = (logicalPages || [])[pageIndex];
       if (!page) return false;
@@ -5759,12 +5811,14 @@
       return { blocks, quality };
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pageHasBodySignal(lines, profile) {
       return (lines || []).some(line => lineIsScriptBodySignal(line, profile))
         || pageHasActionNarrativeSignal(lines, profile);
     }
 
     // 이 쪽이 표지·머리말 쪽인가. 파싱·리뷰 양쪽 경로가 전부 이 한 벌을 부른다.
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function looksLikeFrontMatterPage(lines, pageNo, profile) {
       const source = (lines || []).map(norm).filter(Boolean);
       const head = source.slice(0, 12);
@@ -5784,11 +5838,13 @@
     }
 
     // 이 쪽에 지문(액션 서술)이 둘 이상인가 — 본문 신호와 표지 판정이 같이 쓰는 유일본이다.
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pageHasActionNarrativeSignal(lines, profile) {
       const actionLines = (lines || []).filter(line => isLikelyActionNarrativeLine(line, profile)).length;
       return actionLines >= 2;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isLikelyActionNarrativeLine(line, profile) {
       const raw = norm(line);
       if (!raw || charLen(raw) < 6) return false;
@@ -5801,6 +5857,7 @@
       return false;
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function expandSceneHeadingRuns(line, profile) {
       const raw = norm(line);
       if (!raw || !SCENE_MARKER_LEAD_RE.test(raw)) return [line];
@@ -5810,6 +5867,7 @@
       return sceneLikeCount >= 2 ? parts : [line];
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function buildScenarioLogicalPageLines(pages, profile) {
       const logicalPages = (pages || []).map(page => ({
         pageNo: page.pageNo || 1,
@@ -5818,6 +5876,7 @@
       return mergeDialogAcrossPageBoundaries(logicalPages, profile);
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function mergeDialogAcrossPageBoundaries(logicalPages, profile) {
       for (let pageIndex = 0; pageIndex < logicalPages.length - 1; pageIndex += 1) {
         const page = logicalPages[pageIndex];
@@ -5887,6 +5946,7 @@
       return logicalPages;
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function findOpenDialogAtPageEnd(lines, profile) {
       const safeLines = (lines || []).map(line => String(line || '').trim());
       const last = safeLines.length - 1;
@@ -5901,11 +5961,13 @@
       return -1;
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isDialogPageTailHardBoundary(raw, profile) {
       const source = String(raw || '').trim();
       return lineIsScriptBlockBoundary(source, profile, { dialogStart: false, cast: false });
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogTextHasUnclosedQuote(raw, profile) {
       const source = String(raw || '').trim();
       if (!source) return false;
@@ -5919,6 +5981,7 @@
       return false;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function lineHasDialogStartSignal(raw, profile, options) {
       const source = String(raw || '').trim();
       if (!source) return false;
@@ -5926,11 +5989,13 @@
       return Boolean(options && options.includeSpeakerCue && matchDialogSpeakerCueLine(source));
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function lineHasDialogSignal(raw, profile, options) {
       const source = String(raw || '').trim();
       return Boolean(source && (parseDialog(source, profile) || lineHasDialogStartSignal(source, profile, options)));
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function lineHasOpenDialogStartSignal(raw, profile, options) {
       const source = String(raw || '').trim();
       return Boolean(source && !parseDialog(source, profile) && lineHasDialogStartSignal(source, profile, options));
@@ -5938,12 +6003,14 @@
 
     // 이 줄이 본문 신호인가 — 끝표시만 뺀 블록 경계와 같은 자다. 판정 본체는 갖지 않고
     // lineIsScriptBlockBoundary 한 벌에 갈래만 넘긴다.
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function lineIsScriptBodySignal(raw, profile) {
       return lineIsScriptBlockBoundary(raw, profile, { end: false });
     }
 
     // 이 줄이 블록 경계인가(대사·끝표시·씬머리·강한 본문 시작·캐스트). 어느 갈래를 볼지는
     // 옵션으로 정하고, 경계 판정 본체는 이 한 벌뿐이다.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function lineIsScriptBlockBoundary(raw, profile, options) {
       const source = String(raw || '').trim();
       if (!source) return false;
@@ -5966,6 +6033,7 @@
       return false;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitPages(text) {
       const rawLines = String(text || '').replace(/\r/g, '').split('\n');
       if (String(text || '').includes('\f')) {
@@ -6038,6 +6106,7 @@
       };
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function buildLogicalLines(lines, profile) {
       const trimmed = (lines || []).map(l => String(l || '').trim()).filter(Boolean);
       if (!trimmed.length) return [];
@@ -6064,12 +6133,14 @@
       return prepareScenarioLogicalLines(rebuilt, profile);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function prepareScenarioLogicalLines(lines, profile) {
       const inlineSplit = splitInlineDialogMarkerLines(lines, profile);
       const openDialogSplit = splitLinesWith(inlineSplit, profile, splitEmbeddedOpenDialogStartLine);
       return splitLinesWith(regroupWrappedProseLines(regroupMultilineDialogLines(openDialogSplit, profile), profile), profile, splitEmbeddedDialogLine);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitInlineDialogMarkerLines(lines, profile) {
       const output = [];
       (lines || []).forEach((line) => {
@@ -6086,6 +6157,7 @@
       return output;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitInlineDialogMarkerLine(raw, profile) {
       const source = String(raw || '').trim();
       if (!source) return null;
@@ -6100,6 +6172,7 @@
       return null;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isInlineStoryboardMarker(text) {
       const source = String(text || '').trim();
       return /^[×xX＊*]{1,8}$/.test(source);
@@ -6117,6 +6190,7 @@
       return output;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitEmbeddedOpenDialogStartLine(raw, profile) {
       const source = norm(raw);
       if (!source || lineHasDialogSignal(source, profile)) return source ? [source] : [];
@@ -6127,6 +6201,7 @@
       return [prefix, dialogStart].filter(Boolean);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function findEmbeddedOpenDialogStartMatch(source, cursor, profile) {
       let best = null;
       dialogQuotePairs(profile).forEach((pair) => {
@@ -6154,6 +6229,7 @@
       return best;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitEmbeddedDialogLine(raw, profile) {
       const source = norm(raw);
       if (!source || parseDialog(source, profile)) return source ? [source] : [];
@@ -6176,6 +6252,7 @@
       return segments.length > 1 ? segments : [source];
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function findEmbeddedDialogMatch(source, cursor, profile) {
       let best = null;
       dialogQuotePairs(profile).forEach((pair) => {
@@ -6201,6 +6278,7 @@
       return best;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function embeddedDialogHeadBefore(source, cursor, openIndex) {
       const before = source.slice(cursor, openIndex);
       const match = before.match(/(?:^|[\n。！？!?、，]\s*)([^\n。！？!?、，「」『』“”〝〟＂"]{1,42})$/u);
@@ -6210,6 +6288,7 @@
       return head ? { head, start } : null;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isLikelyEmbeddedDialogSpeakerHead(head, profile, pair) {
       const raw = norm(head);
       if (!raw || charLen(raw) > 24) return false;
@@ -6237,6 +6316,7 @@
       return cursor;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function regroupMultilineDialogLines(lines, profile) {
       const output = [];
       for (let index = 0; index < (lines || []).length; index += 1) {
@@ -6273,10 +6353,12 @@
       return null;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogGroupComplete(group, profile) {
       return Boolean(dialogGroupCompleteParts(group, profile));
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pushCompleteDialogGroup(output, group, profile) {
       const parts = dialogGroupCompleteParts(group, profile);
       if (!parts) return false;
@@ -6284,6 +6366,7 @@
       return true;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function regroupWrappedProseLines(lines, profile) {
       const output = [];
       let buffer = '';
@@ -6372,19 +6455,23 @@
       return classifyBody(raw, context, quality, ['body classifier'], profile);
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function classification(type, zone, assignableToCut, assignDefault, confidence, evidence, warnings) {
       return { type, zone, assignableToCut, assignDefault, confidence, evidence: evidence || [], warnings: warnings || (confidence < 0.6 ? ['manual review recommended'] : []) };
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function castSectionClassification() {
       return classification('cast_section', 'cast_list', false, 'none', 0.94, ['cast section marker'], []);
     }
 
     // 등장인물 목록을 닫는 표기. 이름이 아니므로 characterName 은 붙이지 않는다.
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isCastListTrailerLine(value) {
       return /^(?:ほか|他|その他|等|など)$/.test(String(value || '').trim());
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function classifyFront(raw, score) {
       // 등장인물 머리글은 표지 제목이 아니라 **캐스트 목록의 머리**다. 텍스트 임포트는 이 함수에
       // 닿기 전에 그것을 갈랐지만 PDF 는 여기로 바로 들어와서, 그 줄이 제목으로 떨어지고 있었다.
@@ -6433,6 +6520,7 @@
       return classification('action', 'body', true, 'action', quality.verticalPdfSuspected ? 0.52 : 0.72, evidence.concat(['action fallback']));
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function frontScore(raw, pageNo, lineIndex, profile) {
       let score = 0;
       if (pageNo <= 2) score += 5;
@@ -6447,6 +6535,7 @@
       return score;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isCastSectionLine(raw) {
       const clean = norm(raw).replace(/^[0-9０-９]+\s+/, '');
       return /^(登場人物|登場キャラ|キャラクター|人物|キャスト|CAST|Cast|cast|モブキャラクター)(?:\s*[（(][^）)]{0,30}[）)])?\s*$/.test(clean.replace(SCENE_MARKER_OPTIONAL_LEAD_RE, ''))
@@ -6454,11 +6543,14 @@
         || /^《\s*(登場人物|キャラクター|人物|キャスト)\s*》$/.test(clean)
         || /^\[\s*(登場人物|キャラクター|人物|キャスト)\s*\]$/.test(clean);
     }
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isRevisionLine(raw) { return /^[※＊*]|^メモ|^テーマ|^■前回|^・原作設定|^・制作サイド/.test(raw); }
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isStrongBodyStart(raw, profile) { return isSectionMarkerLine(raw) || isSceneHeading(raw, profile) || /^(アバン|プロローグ|[A-ZＡ-Ｚ]パート|OP|ＯＰ|○オープニング|●OP)/.test(raw); }
     const SECTION_LABEL_RE = /^(?:オープニング|OP|アバン|プロローグ|[A-Z]パート|CM|中CM|エンディング|ED)[0-9０-９]*$/i;
     const SECTION_LABEL_SPLIT_RE = /^((?:アバン|プロローグ|オープニング|OP|ＯＰ|[A-ZＡ-Ｚ]パート|CM|ＣＭ|中CM|中ＣＭ|ED|ＥＤ|エンディング)\s*[0-9０-９]*)(?:[・／/\s]+(.+))?$/i;
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeSectionLabel(value) {
       return norm(value)
         .normalize('NFKC')
@@ -6468,10 +6560,12 @@
         .toUpperCase();
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isSectionLabel(value) {
       return SECTION_LABEL_RE.test(normalizeSectionLabel(value));
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitSectionLabelAndLocation(value) {
       const source = norm(value);
       if (!source) return { scenePart: '', locationText: '' };
@@ -6482,6 +6576,7 @@
       return { scenePart, locationText };
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isSectionMarkerLine(raw) {
       const source = norm(raw).normalize('NFKC').trim();
       if (!source || charLen(source) > 32) return false;
@@ -6490,6 +6585,7 @@
       return Boolean(payload && isSectionLabel(payload));
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function standaloneStructureMarkerPayload(value) {
       return norm(value)
         .normalize('NFKC')
@@ -6500,6 +6596,7 @@
         .toUpperCase();
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isStandaloneStructureMarkerLine(raw) {
       const source = norm(raw).normalize('NFKC').trim();
       if (!source || charLen(source) > 32) return false;
@@ -6515,10 +6612,12 @@
     // A line LEADING with ××× (or ✕✕✕) marks a shot/beat transition (cf. classifyBody's
     // ^××× transition rule) — anchored at the start only, since extraction sometimes glues
     // the following sentence onto the same line as the marker instead of giving it its own.
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfTransitionMarkerLeadLine(raw) {
       return /^[×✕]{2,}/.test(norm(raw));
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isEndMarkerLine(raw) {
       const source = norm(raw).normalize('NFKC');
       const compact = source.replace(/\s+/g, '');
@@ -6534,12 +6633,14 @@
         || isPageCountConversionMarker(compact);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isBracketedContinuationMarker(compact) {
       const source = String(compact || '');
       if (!source) return false;
       return /^[（(《〈<【\[][^\n]{0,70}(?:つづく|続く|つづき|続き)[^\n]{0,20}[）)》〉>】\]]$/i.test(source);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPageCountConversionMarker(compact) {
       const source = String(compact || '').normalize('NFKC');
       if (!source) return false;
@@ -6550,16 +6651,19 @@
     // 통째로 빠진다. **장소는 이름 쪽에서만 본다.**
     // 「이름 + 점선 + 설명」을 가르는 자리는 하나다. 오래 이름 쪽만 썼는데 설명 쪽도 쓸 곳이 생겼다.
     const CAST_LINE_DESCRIPTION_LEADER = /[…‥]{2,}|\.{3,}/;
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function castLineNamePart(raw) {
       const source = norm(raw);
       const head = source.split(CAST_LINE_DESCRIPTION_LEADER)[0];
       return String(head || '').trim() || source;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function castLineHasLocationSignal(raw) {
       return hasLocationSignal(castLineNamePart(raw));
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isLikelyCastEntryLine(raw, profile) {
       const source = norm(raw);
       if (!source || isCastSectionLine(source) || parseDialog(source, profile)) return false;
@@ -6571,6 +6675,7 @@
     }
     // 등장인물 한 항목은 「이름 줄 + 설명 몇 줄」이다. 어디서 끊는지를 두 곳이 각자 적고 있어
     // 조건이 갈렸다 — 여기 한 벌만 둔다. 다음 줄이 **그 자체로 이름 줄이면 붙이지 않는다**.
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function collectCastEntryLines(lines, startIndex, profile, options) {
       const opts = options || {};
       const collected = [lines[startIndex]];
@@ -6593,6 +6698,7 @@
     }
 
     // 표지·간지의 항목 — 직함, 지면 셈, 날짜, 대괄호 표제. 어느 쪽도 인물 이름이 아니다.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isFrontMatterMetaLine(text) {
       if (CREDIT_ROLE_RE.test(text)) return true;
       if (/第|話|稿|ペラ|換算|枚|ページ/i.test(text)) return true;
@@ -6600,6 +6706,7 @@
       return /^[【\[][^】\]]+[】\]]$/.test(text);
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isExplicitCastListNameLine(raw, profile) {
       const source = norm(raw);
       if (!source || charLen(source) > 42) return false;
@@ -6617,6 +6724,7 @@
       if (namePart === source && /…/.test(source)) return false;
       return extractCastNames(namePart).length === 1;
     }
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isCastDescriptionLine(raw, profile) {
       const source = norm(raw);
       if (!source || charLen(source) > 140) return false;
@@ -6626,6 +6734,7 @@
       // 하는 것은 씬 머리인데, 그것은 바로 위에서 이미 걸러진다.
       return /[。！？、，]|主人公|自由市民|貴族|軍人|故人|副官|司教|総主教|隊長|老人|若者|研究者|旅人|リーダー|巫女|暗殺者|間者|世話人|男|女|男性|女性/.test(source);
     }
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isSceneHeading(raw, profile) {
       if (isCastSectionLine(raw)) return false;
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
@@ -6651,6 +6760,7 @@
       return hasHeadMarker && hasPlaceSignal;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isMarkedScenarioSectionHeading(raw, markerFamily, markerAllowed) {
       if (!markerFamily || !markerAllowed) return false;
       const source = norm(raw).replace(/^\[[^\]]+\]\s*/, '');
@@ -6659,12 +6769,14 @@
       return isSectionLabel(label);
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasLocationSignal(line) {
       // 「・」 하나만으로 장소라 하지 않는다 — 인명에도 중점이 든다(이 파일은 다른 곳에서
       // 「・」를 화자 목록 구분자로 쓴다). 진짜 장소는 아래 낱말 목록에서 걸리고, 「同・」는
       // 앞 장면과 같은 장소를 가리키는 표기라 남긴다.
       return /(同・|〜|～|画面|（\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*）|\(\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*\)|本部|広場|広間|幕内|室|部屋|病室|会場|ロビー|観客席|ステージ|屋上|窓辺|廊下|階段|道路|街道|港|地区|街|町|村|市|区|学校|教室|公園|店|駅|車内|車外|船内|馬車内|馬車の中|病院|ホテル|オフィス|ラボ|ホール|倉庫|庭|空|海|森|山|川|橋|城|宮殿|基地|外観|内観|横転現場)/.test(String(line || ''));
     }
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function parseDialog(raw, profile) {
       let matched = null;
       for (const pair of dialogQuotePairs(profile)) {
@@ -6680,6 +6792,7 @@
       return { speaker, modifier, modifierRaw: matched.modifierRaw || '', dialogMode, text: matched.text || '', type, confidence: modifier ? 0.90 : 0.84, openQuote: matched.openQuote, closeQuote: matched.closeQuote };
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function parseDialogStart(raw, profile) {
       for (const pair of dialogQuotePairs(profile)) {
         const matched = matchDialogStartQuoteParts(raw, pair);
@@ -6688,6 +6801,7 @@
       return null;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cleanDialogSpeakerNameCore(value) {
       let clean = norm(value)
         .replace(/[：:]$/, '')
@@ -6701,6 +6815,7 @@
     }
 
     // 이미 정리된 이름 하나를 무엇으로 볼지. 정리를 겹쳐 하면 꼬리가 두 번 깎인다.
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function speakerNameFromClean(clean) {
       if (/^(SE|ＳＥ|BGM|Ｍ|N|Ｎ|モノローグ|テロップ|字幕|ナレーション)$/i.test(clean)) return '';
       if (isGenericDialogSpeakerName(clean)) return clean;
@@ -6715,6 +6830,7 @@
       return speakerNameFromClean(clean);
     }
 
+    // 쓰는 곳: 내보내기 · 기타 · 렌더 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitDialogSpeakerNames(value) {
       const clean = normalizeSpeakerName(value);
       return splitDialogSpeakerNamesFromClean(clean);
@@ -6812,6 +6928,7 @@
       '山', '道', '街', '庭'
     ];
 
+    // 쓰는 곳: 기타 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitSceneHeadingActionTail(raw) {
       const source = norm(raw);
       if (!source) return null;
@@ -6839,6 +6956,7 @@
       return { location, action };
     }
 
+    // 쓰는 곳: 클리핑 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitSceneHeadingDashLeader(raw) {
       const source = norm(raw);
       if (!source) return null;
@@ -6851,12 +6969,14 @@
       return { sceneText, dashText: match[2] };
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeSceneHeadingText(raw) {
       const source = norm(raw);
       const split = splitSceneHeadingDashLeader(source);
       return split ? split.sceneText : source;
     }
 
+    // 쓰는 곳: 매칭 · 기타 · 렌더 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function parseSceneMeta(raw, previousLocation) {
       const normalizedRaw = normalizeSceneHeadingText(raw);
       const split = splitSceneHeadingActionTail(normalizedRaw);
@@ -6992,6 +7112,7 @@
       return result;
     }
 
+    // 쓰는 곳: 매칭 · 기타 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isBareFrontCharacterLine(text, index, pageNo) {
       const raw = norm(text);
       if (!isFrontCastLine(raw, index, pageNo)) return false;
@@ -7004,6 +7125,7 @@
       return names.length === 1 && charLen(raw) <= 42;
     }
 
+    // 쓰는 곳: 매칭 · 기타 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isFrontCastLine(text, index, pageNo) {
       const raw = norm(text);
       if (!raw || charLen(raw) < 2) return false;
@@ -7140,6 +7262,7 @@
       return blocks;
     }
 
+    // 쓰는 곳: 기타 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeImportedBlocks(blocks) {
       const normalized = [];
       (blocks || []).forEach((block, index) => {
@@ -7203,6 +7326,7 @@
       return expanded;
     }
 
+    // 쓰는 곳: 기타 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function expandSceneHeadingActionTailBlock(block) {
       if (!block || block.type !== 'scene_heading') return [block];
       const sourceText = block.rawText || block.text || '';
@@ -7278,6 +7402,7 @@
       return result;
     }
 
+    // 쓰는 곳: 기타 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function linkBlocksToExtractedEntities(project) {
       (project.sourceBlocks || []).forEach((block) => {
         const ids = [];
@@ -7324,6 +7449,7 @@
       grey: '#747168'
     };
 
+    // 쓰는 곳: 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeMarkdownColor(value) {
       const source = String(value || '').trim().toLowerCase();
       if (!source) return '';
@@ -7338,6 +7464,7 @@
       return '#' + values.map(part => part.toString(16).padStart(2, '0')).join('');
     }
 
+    // 쓰는 곳: 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownColorIsFeedback(value) {
       const color = normalizeMarkdownColor(value);
       const match = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
@@ -7348,6 +7475,7 @@
       return red >= 135 && red >= green * 1.32 && red >= blue * 1.22;
     }
 
+    // 쓰는 곳: 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function appendMarkdownRun(runs, text, style) {
       if (!text) return;
       const next = {
@@ -7364,6 +7492,7 @@
       }
     }
 
+    // 쓰는 곳: 기타 · 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeMarkdownRuns(runs, fallbackText) {
       const normalized = [];
       (runs || []).forEach(run => appendMarkdownRun(normalized, run && run.text, run || {}));
@@ -7653,6 +7782,7 @@
       return segments;
     }
 
+    // 쓰는 곳: 기타 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function syncMarkdownFeedbackNotesForBlock(project, block) {
       if (!project || !block) return;
       const removedIds = new Set();
@@ -7698,6 +7828,7 @@
       });
     }
 
+    // 쓰는 곳: 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownEscapeSourceText(value) {
       return String(value || '')
         .replace(/\\/g, '\\\\')
@@ -7707,6 +7838,7 @@
         .replace(/>/g, '&gt;');
     }
 
+    // 쓰는 곳: 기타 · 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownRunsToSource(runs) {
       return normalizeMarkdownRuns(runs).map((run) => {
         let text = markdownEscapeSourceText(run.text);
@@ -7952,6 +8084,7 @@
     // 한 쪽의 본문 상한은 「그 쪽 괘선이 문서 전체의 안정값과 맞을 때만」 선다.
     // **판정은 여기 한 곳이다** — 예전에는 줄 묶기가 그 쪽 후보를, 확정 단계가 안정값을
     // 각자 써서 같은 이름이 두 값을 가리켰다.
+    // 쓰는 곳: 클리핑 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsPageBodyTopLinePct(pageCandidatePct, stableTopLinePct) {
       const candidate = Number(pageCandidatePct);
       if (stableTopLinePct == null || !Number.isFinite(candidate)) return null;
@@ -8074,6 +8207,7 @@
       }
     }
 
+    // 쓰는 곳: 클리핑 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizePdfLogicalPageText(text) {
       return String(text || '')
         .replace(/\r\n?/g, '\n')
@@ -8098,6 +8232,7 @@
       return SCENE_MARKER_HEAD_RE.test(text);
     }
 
+    // 쓰는 곳: 줄묶기 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function expandPdfOverlayLineBoundsForMissingLogicalTails(lines, logicalText, options) {
       // (No page-level skip: title/cast pages used to be excluded wholesale because tail matching
       // corrupted cast entries, but the same-tail agreement rule below blocks that class per line — a
@@ -8212,6 +8347,7 @@
       return lines || [];
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function appendPdfLogicalTailToLineText(text, tailText) {
       const base = String(text || '').trim();
       const tail = String(tailText || '').trim();
@@ -8252,11 +8388,13 @@
       return Math.max(0.6, Number(rect && rect.height || 0) / Math.max(1, Number(glyphCount) || 1));
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLogicalFallbackTextItems(logicalPage, pageNo) {
       const items = Array.isArray(logicalPage && logicalPage.textItems) ? logicalPage.textItems : [];
       return markPdfLogicalFallbackTextItems(items.slice(), pageNo || logicalPage && (logicalPage.pageNo || logicalPage.sourcePageIndex) || 1);
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function shouldUsePdfLogicalFallbackTextItems(pdfJsItems, logicalPage) {
       const fallbackItems = Array.isArray(logicalPage && logicalPage.textItems) ? logicalPage.textItems : [];
       if (!fallbackItems.length) return false;
@@ -8354,12 +8492,14 @@
       return Math.round(median * 100) / 100;
     }
 
+    // 쓰는 곳: 클리핑 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfRequiredBodyCutCandidateCount(pageCount) {
       const total = Math.max(1, Number(pageCount) || 1);
       if (total >= 16) return 3;
       return 2;
     }
 
+    // 쓰는 곳: 클리핑 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfNumberRange(values) {
       const nums = (values || []).filter(value => Number.isFinite(Number(value))).map(Number);
       if (!nums.length) return 0;
@@ -8451,6 +8591,7 @@
     // 범위도 클러스터 허용치도 필요 개수 계산도 다르고, 무엇보다 동점 처리의 정렬 방향이
     // 서로 반대다 — 하한은 큰 값을, 상한은 작은 값을 고른다(둘 다 본문을 넓게 잡는 쪽이라
     // 의도된 비대칭이다). 합치면 커널 안에 방향 분기가 들어간다.
+    // 쓰는 곳: 클리핑 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsStableBodyTopLineFromCandidates(values, pageCount) {
       const nums = (values || [])
         .map(value => Number(value))
@@ -8546,6 +8687,7 @@
       };
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsBlueOverlayLine(line) {
       if (!line) return false;
       if (line.visualGroupKey === 'annotation:blue_comment' || isPdfJsBlueColorKey(line.visualGroupKey)) return true;
@@ -8559,12 +8701,14 @@
       return blue > 0 && blue >= Math.ceil(colored.length * 0.55);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsOverlayLineColorNote(line, lines, pageNo, bodyCandidateContext) {
       if (!isPdfJsBlueOverlayLine(line)) return false;
       const context = bodyCandidateContext || createPdfOverlayBodyCandidateContext(lines || [], pageNo);
       return !isPdfJsBlueOverlayLineLikelyScriptBody(line, lines || [], pageNo, context);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsBlueOverlayLineLikelyScriptBody(line, lines, pageNo, bodyCandidateContext) {
       if (pdfOverlayLineHasBodyCandidateContext(line, pageNo, bodyCandidateContext || createPdfOverlayBodyCandidateContext(lines || [], pageNo))) return true;
       const score = pdfOverlayLineScriptBodySignalScore(line, pageNo);
@@ -8573,6 +8717,7 @@
       return false;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayLineHasBodyCandidateContext(line, pageNo, bodyCandidateContext) {
       const raw = norm(line && line.text || '');
       if (isPdfPageArtifactText(raw, pageNo || line && line.pageNo || 0) || isPdfDetachedNoteText(raw)) return false;
@@ -8580,6 +8725,7 @@
       return Boolean(context && context.bodyLineSet && context.bodyLineSet.has(line));
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function createPdfOverlayBodyCandidateContext(lines, pageNo, logicalTextOrLines) {
       const source = (lines || []).filter(line => line && line.overlayRect);
       const band = pdfOverlayDetectedScriptBodyVerticalBand(source);
@@ -8614,6 +8760,7 @@
       return { pageNo: pageNo || 1, band, profile, candidateTexts, bodyLineSet };
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayLogicalLineIsScriptBodyCandidate(text, profile, pageNo) {
       const raw = norm(text);
       if (!raw || isPdfPageArtifactText(raw, pageNo || 0) || isPdfDetachedNoteText(raw)) return false;
@@ -8623,6 +8770,7 @@
       return stats.japanese >= 6 && stats.japanese >= stats.latin && /[。、，,！？!?」』）)]$/.test(raw);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayLineScriptBodySignalScore(line, pageNo) {
       const raw = norm(line && line.text || '');
       if (!raw || isPdfPageArtifactText(raw, pageNo || line && line.pageNo || 0) || isPdfDetachedNoteText(raw)) return 0;
@@ -8638,6 +8786,7 @@
       return score;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayLineInsideDetectedScriptBodyBand(line, band) {
       const rect = pdfOverlayLineRectForBodyCheck(line);
       if (!rect) return false;
@@ -8668,6 +8817,7 @@
       });
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayRectInsideDetectedScriptBodyBand(rect, band) {
       if (!band) return false;
       const top = Number(rect.top || 0);
@@ -8679,6 +8829,7 @@
       return top >= bandTop && bottom <= bandBottom && centerY >= bandTop && centerY <= bandBottom;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayDetectedScriptBodyVerticalBand(lines) {
       const candidates = (lines || [])
         .filter(line => line && line.overlayRect && !isPdfJsBlueOverlayLine(line))
@@ -8710,24 +8861,29 @@
     }
 
     // 본문 판정에 쓸 오버레이 라인 사각형을 고른다(compact 우선) — 이 규칙의 유일한 사본이다.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayLineRectForBodyCheck(line) {
       const rect = line && (line.compactOverlayRect || line.overlayRect);
       return rect ? normalizeOverlayRect(rect) : null;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsBlueTextItem(item) {
       return isPdfJsAnnotationColorTextItem(item) || isPdfJsBlueColorKey(String(item && (item.visualGroupKey || item.colorKey) || '').trim());
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfOverlayLineBlueTextItem(item) {
       return isPdfJsBlueTextItem(item) || isPdfBlueTextItem(item);
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsAnnotationColorTextItem(item) {
       if (!item) return false;
       return item.pdfAnnotationTrigger === 'color' || item.pdfAnnotationRole === 'blue_comment';
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function annotatePdfJsTextItemsFromLogicalAnnotations(items, annotations) {
       const source = Array.isArray(items) ? items : [];
       clearPdfJsLogicalAnnotationMarks(source);
@@ -8769,6 +8925,7 @@
       return matches;
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function clearPdfJsLogicalAnnotationMarks(items) {
       (items || []).forEach((item) => {
         if (!item || item.pdfAnnotationSource !== 'logical_annotation') return;
@@ -8781,6 +8938,7 @@
       if (Array.isArray(items)) items.pdfLogicalAnnotationMatches = [];
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLogicalAnnotationMatchTargets(annotations) {
       const targets = [];
       const seen = new Set();
@@ -8807,6 +8965,7 @@
       return targets.sort((a, b) => b.key.length - a.key.length);
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfTextItemMatchStream(items) {
       const chars = [];
       const owners = [];
@@ -8854,6 +9013,7 @@
     // 색 키는 문자열 하나로 답이 정해진다 — 뜯어서 색을 만드는 일까지 통째로 아낀다.
     const pdfJsBlueColorKeyCache = new Map();
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsBlueColorKey(key) {
       const raw = String(key || '');
       if (pdfJsBlueColorKeyCache.has(raw)) return pdfJsBlueColorKeyCache.get(raw);
@@ -8863,6 +9023,7 @@
       return result;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsColorKeyToPdfColor(key) {
       const raw = String(key || '').trim();
       const match = raw.match(/^color:([^:]+):(.+)$/);
@@ -8975,6 +9136,7 @@
     // 그 호출이 획·칠 두 번씩이라 한 쪽에 수만 번이었다(pdfJsStrokeOpsSet 과 같은 결함이다).
     const pdfJsColorOpsCache = new WeakMap();
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsColorOpsMap(OPS, which) {
       let byWhich = pdfJsColorOpsCache.get(OPS);
       if (!byWhich) {
@@ -8995,6 +9157,7 @@
       return map;
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsOperatorColorKey(fn, args, OPS, which) {
       if (!OPS || !PDF_JS_COLOR_OP_NAMES[which]) return '';
       const space = pdfJsColorOpsMap(OPS, which).get(fn);
@@ -9115,6 +9278,7 @@
         }));
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsOperatorArgsToArray(args) {
       if (Array.isArray(args)) return args;
       if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView && ArrayBuffer.isView(args)) return Array.from(args);
@@ -9122,6 +9286,7 @@
       return [args];
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsColorKey(space, values) {
       const nums = flattenPdfJsColorValues(values)
         .map(value => Number(value))
@@ -9134,6 +9299,7 @@
       return 'color:' + (space || 'unknown') + ':' + normalized.join(',');
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function flattenPdfJsColorValues(values) {
       const out = [];
       const visit = (value) => {
@@ -9163,6 +9329,7 @@
     // 한 문서 임포트 시간의 상당부분이 그 재계산이었다.
     const pdfJsLayoutGuideCache = new WeakMap();
 
+    // 쓰는 곳: 줄묶기 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsItemsForLayoutGuide(items, pageNo) {
       if (!Array.isArray(items)) return stripPdfJsLineGuideNumberItems([], pageNo);
       let byPage = pdfJsLayoutGuideCache.get(items);
@@ -9194,6 +9361,7 @@
       return width > height * PDF_VERTICAL_RUN_MIN_ASPECT;
     }
 
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function groupPdfJsBodyItemsToOverlayLines(source) {
       if (!source.length) return [];
       return groupPdfGlyphsToOverlayLines(pdfGlyphItemsForGrouping(source), pdfGlyphAxisFromItemShape(source));
@@ -9203,6 +9371,7 @@
     // 달리 이것은 실제 배치에서 나온 값이라, 세로쓰기인데 가로라고 말하는 문서에서도 맞다.
     // 글자마다 아이템이 따로 오는 문서에서는 아무것도 답하지 않는다(null) — 그 경우는
     // 정사각 글자뿐이라 모양으로 가를 것이 없다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphAxisFromItemShape(items) {
       let vertical = 0, horizontal = 0, total = 0;
       (items || []).forEach((item) => {
@@ -9229,6 +9398,7 @@
 
     // 아이템을 글자 단위로 되돌린다. 자리는 pdfItemGlyphSlot 이 낸다 — 되찾은 글자를 이어
     // 붙일 때와 **같은 산식**이다. px 필드도 함께 옮긴다(pct 와 갈라지면 하류가 조용히 어긋난다).
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphItemsForGrouping(items) {
       const out = [];
       (items || []).forEach((item) => {
@@ -9274,6 +9444,7 @@
     // (일본어 조판은 글자 폭 ≈ 간격), 0.5 미만이면 이웃 칸이 합쳐지지 않는다.
     const PDF_GLYPH_CLUSTER_SIZE_RATIO = 0.4;
 
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphSize(item, key) {
       return Number(item && (key === 'x' ? item.widthPct : item.heightPct)) || 0;
     }
@@ -9283,6 +9454,7 @@
     // 넓다(4.7). 자기 크기로 재면 좁은 쪽을 놓치고, 큰 쪽으로 재면 넓은 쪽이 옆 칸까지
     // 삼킨다(실측: 등장인물 하나가 앞 설명과 한 칸이 됐다). 페이지 글자 크기의 중앙값이
     // 격자를 가장 잘 대표한다 — 예외적으로 좁거나 넓은 글자가 자를 흔들지 못한다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphClusterTolerance(items, key) {
       const sizes = (items || []).map(item => pdfGlyphSize(item, key)).filter(size => size > 0);
       const median = sizes.length ? pdfMedian(sizes) : 0;
@@ -9298,11 +9470,13 @@
 
     // 값 목록의 중앙값(길이가 짝수면 위쪽, 빈 목록은 0)을 내는 정본 — 간격·피치 계산이 이것을 쓴다.
     // 중앙값(짝수 길이면 위쪽 중앙)을 정하는 유일한 사본이다 — 빈 배열은 0.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfMedian(values) {
       const sorted = (values || []).slice().sort((a, b) => a - b);
       return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
     }
 
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphClusterAxis(items, key) {
       const self = key === 'x' ? 'centerXPct' : 'centerYPct';
       const other = key === 'x' ? 'centerYPct' : 'centerXPct';
@@ -9323,6 +9497,7 @@
     // 쓰기 축은 **클러스터 간격 ÷ 클러스터 안쪽 글자 간격**이 1 에 가까운 축이다.
     // 일본어 조판은 격자가 정사각형이라 진짜 축에서만 둘이 같아진다(실측 5/5: 진짜 축
     // 0.85~1.33, 가짜 축 0.04~0.80). 폰트가 세로라고 말하는지는 보지 않는다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphAxisScore(items, key) {
       const axis = pdfGlyphClusterAxis(items, key);
       const big = axis.clusters.filter(c => c.items.length >= 3);
@@ -9349,6 +9524,7 @@
     // 축을 가르는 자 — 그 축으로 조립한 줄에 각본 문법이 얼마나 서는가.
     // 뒤집어 읽은 것도 함께 재는 것은 **방향을 고르기 위해서가 아니라** 축이 맞는지 보기
     // 위해서다: 축이 맞으면 어느 쪽으로 읽든 낱말이 이어지고, 틀리면 양쪽 다 무너진다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphAxisSyntaxScore(runs, across) {
       const ordered = runs.map(run => run.slice().sort((a, b) => (Number(a[across]) || 0) - (Number(b[across]) || 0)));
       const asText = (list) => list.map(run => run.map(item => item.text).join('')).filter(Boolean);
@@ -9359,6 +9535,7 @@
     }
 
     // 한 줄은 **끊기지 않고 이어지는** 글리프의 연속이다. 끊는 자리는 글자 간격의 몇 배다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphSplitClusterRuns(clusters, along, step) {
       const runs = [];
       (clusters || []).forEach((cluster) => {
@@ -9378,6 +9555,7 @@
 
     // 한 축을 골라 놓고 그 축으로 줄을 끊는다. 몇 칸 떨어져 같은 좌표를 공유하는 글자는 다른
     // 것(상단 가로 머리글)이므로 같은 줄로 묶지 않고 다른 축으로 다시 모은다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphRunsForAxis(source, main) {
       const step = main.step || 2;
       const kept = pdfGlyphSplitClusterRuns(main.axis.clusters, main.axis.other, step).filter(run => run.length >= 2);
@@ -9401,6 +9579,7 @@
     // 글리프 경로 전용 줄 빌더. pdfJsOverlayLine 은 세로쓰기일 때 items 를 sourceIndex 로
     // 다시 정렬하는데, 그것은 「아이템이 이미 읽는 순서로 온다」를 전제한 것이다. 글리프는
     // 좌표로 순서가 정해지므로 여기서는 받은 순서를 그대로 쓴다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphOverlayLine(orderedItems, vertical) {
       const clean = (orderedItems || []).filter(Boolean);
       if (!clean.length) return null;
@@ -9420,6 +9599,7 @@
     // (실측: 한 문서 25쪽 중 3쪽이 뒤집혀 대사 줄이 글자 단위로 흩어졌다).
     // 그래서 축도 방향과 같은 것으로 가른다 — 두 축으로 조립해 각본 문법이 서는 쪽이 옳다.
     // 둘 다 문장이 안 서면(표·그림 페이지) 그때만 기하 점수로 떨어진다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function groupPdfGlyphsToOverlayLines(items, shapeVertical) {
       const source = (items || []).filter(item => item && String(item.text || '').trim());
       if (!source.length) return [];
@@ -9477,6 +9657,7 @@
 
     // 한 축 후보를 실제 줄로 조립한다. 축을 고르기 전에도 불러야 하므로(밴드 판정이 줄을 본다)
     // 고르는 쪽과 만드는 쪽을 갈라 둔다.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphOverlayLinesForAxis(option) {
       const main = option.main;
       const vertical = main.key === 'x';
@@ -9498,6 +9679,7 @@
     // body column, so column grouping unions them into the line: the rect grows a tail down
     // to the page edge and the dash pollutes the line text ("—とく…"). Split off any run of
     // pure digits/dashes that sits in the bottom margin, far below the line's main run.
+    // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function stripPdfPageBottomArtifactRunFromLine(line) {
       const items = line && line.items || [];
       if (!items.length) return line;
@@ -9695,6 +9877,7 @@
 
 
 
+    // 쓰는 곳: 클리핑 · 줄묶기 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsOverlayLine(items, vertical) {
       const clean = (items || []).filter(Boolean);
       const textItems = vertical ? orderPdfItemsBySourceOrder(clean) : clean;
@@ -9711,6 +9894,7 @@
       };
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sortPdfJsVerticalItemsTopToBottom(items) {
       return (items || []).filter(Boolean).slice().sort((a, b) => {
         const ay = Number(a && a.centerYPct) || 0;
@@ -9764,6 +9948,7 @@
       return /(?:として|について|による|される|された|する|した|して|ある|いる)$/.test(clean);
     }
 
+    // 쓰는 곳: 줄묶기 · PDF파싱 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfScenarioSyntaxScore(lines) {
       return (lines || []).reduce((sum, line) => sum + pdfVerticalLineDirectionScore(line), 0);
     }
@@ -9789,6 +9974,7 @@
       return best;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · 렌더 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsTextItemVisualGroupKey(item) {
       if (isPdfJsAnnotationColorTextItem(item)) return item.pdfAnnotationVisualGroupKey || 'annotation:blue_comment';
       const key = String(item && item.visualGroupKey || item && item.colorKey || '').trim();
@@ -9829,6 +10015,7 @@
       return false;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function compactPdfItemUnionRect(items, vertical, pad) {
       const clean = (items || []).filter(Boolean);
       const source = clean.map(item => compactPdfItemRectForLine(item, vertical));
@@ -9915,6 +10102,7 @@
       });
     }
 
+    // 쓰는 곳: 줄묶기 · 렌더 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfVerticalPunctuationFragment(text) {
       const compact = normalizePdfCompactTextPreserveMarks(text);
       if (!compact) return false;
@@ -9976,6 +10164,7 @@
     // 계수는 무차원이라 규모에 안전하지만 **상·하한은 페이지 높이 % 절대값**이다
     // (실측: 런 쪽에서 3.2% 가 상·하한에 걸리고 대부분 큰 글자다). pitch 배수로 바꾸면
     // 무차원이 되지만 그때는 좌표가 바뀌므로 별건이다.
+    // 쓰는 곳: 줄묶기 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfVerticalPadPct(pitch, factor, minPad, maxPad) {
       const source = Number(pitch) || 0;
       if (!source) return 0;
@@ -10018,6 +10207,7 @@
     // 가이드 줄에서 만든 세로 사각형에 거는 최소 [폭, 높이] 퍼센트 — 이 하한의 유일한 사본이다.
     const PDF_GUIDE_RECT_MIN = [0.24, 0.75];
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeCompactOverlayRect(rect, minWidth, minHeight) {
       const source = rect || {};
       const bound = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -10035,6 +10225,7 @@
     }
 
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfPageArtifactOverlayLine(line, pageNo) {
       const text = norm(line && line.text || line || '');
       if (!isPdfPageArtifactText(text, pageNo)) return false;
@@ -10051,6 +10242,7 @@
       return Number(rect.top || 0) > 90 || bottom > 94 || Number(rect.top || 0) < 3;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfPageArtifactText(text, pageNo) {
       const raw = String(text || '').normalize('NFKC').trim();
       if (!raw) return true;
@@ -10154,6 +10346,7 @@
         .trim();
     }
 
+    // 쓰는 곳: PDF파싱 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     async function inflateBytes(bytes, formats) {
       let lastError = null;
       for (const format of formats) {
@@ -10259,10 +10452,12 @@
       return chars.join('');
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfAnnotationsFromPages(pages) {
       return (pages || []).flatMap((page, pageIndex) => combinePdfPageAnnotations(page.annotations || [], page.pageNo || pageIndex + 1, pdfPrintedPageNoValue(page.printedPageNo)));
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function combinePdfPageAnnotations(annotations, pageNo, printedPageNo) {
       const links = [];
       const noteFragments = [];
@@ -10300,6 +10495,7 @@
       return out;
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfReviewSignalsFromAnnotations(annotations) {
       const notes = annotations || [];
       return {
@@ -11058,6 +11254,7 @@
       return item;
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markPdfLogicalFallbackTextItems(items, pageNo) {
       const source = Array.isArray(items) ? items : [];
       source.pdfFallbackSource = 'pdf-logical-fallback';
@@ -11173,6 +11370,7 @@
       return text ? [Object.assign({ text }, meta || {})] : [];
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function joinPdfAnnotationTextFragments(fragments) {
       const lines = (fragments || [])
         .flatMap(fragment => String(fragment || '').split(/\n+/))
@@ -11191,6 +11389,7 @@
       return out.join('\n').trim();
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function shouldJoinPdfAnnotationLine(prev, next) {
       const before = String(prev || '').trim();
       const after = String(next || '').trim();
@@ -11462,6 +11661,7 @@
 
     // 지운 글자를 그대로 적는다 — 「몇 개 지웠다」만으로는 행번호를 지웠는지 표지의 날짜를
     // 지웠는지 구별할 수 없다.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function notePdfLineGuideNumberRemoval(removed, pageNo, kind) {
       if (!removed || !removed.length) return;
       const text = removed.slice(0, 12).map(item => String(item && item.text || '').trim()).join('');
@@ -11469,6 +11669,7 @@
         'p' + Number(pageNo || 0) + '×' + removed.length + ' ' + kind + ' "' + text + '"');
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function stripPdfJsLineGuideNumberItems(items, pageNo) {
       const source = Array.isArray(items) ? items.filter(Boolean) : [];
       if (!source.length) return [];
@@ -11488,6 +11689,7 @@
     // 행번호는 같은 띠에 균등 간격으로 늘어선 무리이므로, 이미 잡힌 후보와 같은 띠·같은 간격에
     // 놓인 숫자는 앵커가 없어도 같은 무리다. 격자 문턱을 낮추는 것으로는 안 된다 —
     // 등장인물 나이 목록(（16）（23）…)이 통째로 지워졌다(실측). 그쪽은 줄마다 y 가 달라 띠가 안 선다.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function extendPdfLineGuideNumberCandidatesAlongBand(candidates, items) {
       if (!Array.isArray(candidates) || candidates.length < 2) return candidates || [];
       const bandY = pdfMedian(candidates.map(item => Number(item.centerYPct)).filter(Number.isFinite));
@@ -11536,12 +11738,14 @@
     // 한 문서 임포트 시간의 30% 가 그 반복이었다. 배열당 한 번만 재 둔다.
     const pdfLineGuideAnchorCache = new WeakMap();
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfLineGuideAnchorTextItem(item) {
       const text = String(item && item.text || '').normalize('NFKC').trim();
       if (!text || /^[0-9]{1,3}$/.test(text)) return false;
       return !/^[.…‥ー―─－\-「」『』（）()×]+$/.test(text);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLineGuideAnchorItems(items) {
       if (!Array.isArray(items)) return [];
       if (pdfLineGuideAnchorCache.has(items)) return pdfLineGuideAnchorCache.get(items);
@@ -11550,6 +11754,7 @@
       return anchors;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfJsLineGuideNumberCandidate(item, items, pageNo) {
       const value = pdfJsLineGuideNumberValue(item);
       if (!Number.isFinite(value)) return false;
@@ -11559,10 +11764,12 @@
       return hasPdfJsLineGuideNumberColumnAnchor(item, items);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfJsLineGuideNumberValue(item) {
       return pdfLineGuideNumberValueFromText(item && item.text, 999);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasPdfJsLineGuideNumberColumnAnchor(item, items) {
       const x = Number(item && item.centerXPct);
       const y = Number(item && item.centerYPct);
@@ -11582,10 +11789,12 @@
       });
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasPdfJsLineGuideNumberGrid(candidates) {
       return hasPdfLineGuideNumberValueGrid(pdfLineGuideNumberValues(candidates, 999), 8, 8, 6);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLineGuideNumberBand(candidates) {
       const source = (candidates || []).filter(item => Number.isFinite(Number(item && item.centerYPct)));
       const values = source
@@ -11614,6 +11823,7 @@
       };
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfLineGuideNumberInDetectedBand(item, band, pageNo) {
       const value = pdfJsLineGuideNumberValue(item);
       if (!Number.isFinite(value)) return false;
@@ -11665,12 +11875,14 @@
       return result;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLineGuideNumberValues(items, maxValue) {
       return (items || [])
         .map(item => pdfLineGuideNumberValueFromText(item && item.text, maxValue))
         .filter(value => Number.isFinite(value));
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLineGuideNumberValueFromText(text, maxValue) {
       const clean = String(text || '').normalize('NFKC').trim();
       if (!/^[0-9]{1,3}$/.test(clean)) return NaN;
@@ -11679,6 +11891,7 @@
       return Number.isFinite(value) && value >= 1 && value <= limit ? value : NaN;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasPdfLineGuideNumberValueGrid(values, minCount, minUnique, minSpan) {
       const source = (values || []).filter(value => Number.isFinite(value));
       const unique = Array.from(new Set(source)).sort((a, b) => a - b);
@@ -11701,6 +11914,7 @@
       });
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function orderPdfItemsBySourceOrder(items) {
       return (items || []).filter(Boolean)
         .map((item, fallbackIndex) => ({ item, fallbackIndex, order: pdfItemSourceOrder(item, fallbackIndex) }))
@@ -11708,6 +11922,7 @@
         .map(entry => entry.item);
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfItemSourceOrder(item, fallbackIndex) {
       const sourceIndex = Number(item && item.sourceIndex);
       if (Number.isFinite(sourceIndex)) return sourceIndex;
@@ -11796,6 +12011,7 @@
 
     // **0 쪽도 인쇄된 쪽번호다** — 표지를 0 으로 매기는 문서가 있다. `|| null` 로 접으면 그 값이
     // 조용히 사라져, 읽어 놓고도 쪽번호가 없는 쪽처럼 다뤄진다(화면에서 그 쪽만 상자가 안 떴다).
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfPrintedPageNoValue(value) {
       if (value == null || value === '') return null;
       const number = Number(value);
@@ -11836,6 +12052,7 @@
       return (String(op || '').match(/[-+]?\d*\.?\d+/g) || []).map(value => Number(value)).filter(value => Number.isFinite(value));
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizePdfColorValue(value) {
       const number = Number(value);
       if (!Number.isFinite(number)) return 0;
@@ -11843,6 +12060,7 @@
       return Math.max(0, Math.min(1, number));
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function clonePdfColor(color) {
       return {
         space: color && color.space ? color.space : 'gray',
@@ -11883,6 +12101,7 @@
       return pdfRgbColor(values);
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfColorToRgb(color) {
       const safe = clonePdfColor(color);
       if (safe.space === 'rgb') {
@@ -11903,6 +12122,7 @@
     // 색은 같은 값이면 같은 답이고 문서 안에서 종류가 한 줌이라, 판정을 적어 두고 다시 쓴다.
     const pdfBlueColorCache = new Map();
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfBlueColor(color) {
       const key = color && color.space && Array.isArray(color.values)
         ? color.space + ':' + color.values.join(',')
@@ -11913,6 +12133,7 @@
       return result;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function computeIsPdfBlueColor(color) {
       const rgb = pdfColorToRgb(color);
       const strongestNonBlue = Math.max(rgb.r, rgb.g);
@@ -11920,11 +12141,13 @@
       return rgb.b >= 0.72 && rgb.g >= 0.45 && rgb.r <= 0.84 && rgb.b - rgb.r >= 0.12 && rgb.b >= rgb.g * 0.96;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfBlueTextItem(item) {
       if (!item) return false;
       return isPdfBlueColor(item.color) || isPdfBlueColor(item.strokeColor);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfTextStats(text) {
       const raw = String(text || '').normalize('NFKC');
       return {
@@ -11981,6 +12204,7 @@
       return /^https?:\/\//i.test(raw) || /www\.|\.com|\.jp|\.html/i.test(raw);
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfDetachedNoteText(text) {
       const raw = String(text || '').trim();
       if (/^※/.test(raw)) return true;
@@ -11992,12 +12216,14 @@
 
     const PDF_INLINE_NOISE_PATTERN = /\s*[（(]?\s*[A-Z][A-Za-z][A-Za-z ._/-]{1,44}\s+[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:g|kg|mg|mm|cm|m|%|％)?\s*[)）]?\s*[:：]\s*[\u3040-\u30ff\u3400-\u9fff]{1,12}\s*/gi;
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfInlineNoiseText(text) {
       const raw = String(text || '').normalize('NFKC').trim();
       if (!raw) return false;
       return !raw.replace(PDF_INLINE_NOISE_PATTERN, '').trim();
     }
 
+    // 쓰는 곳: 클리핑 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cleanPdfInlineNoiseText(text) {
       return String(text || '').replace(PDF_INLINE_NOISE_PATTERN, '');
     }
@@ -12180,6 +12406,7 @@
         .trim();
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isLikelyPdfGarbledLine(line) {
       const raw = String(line || '').trim();
       if (!raw) return false;
@@ -12221,6 +12448,7 @@
       };
     }
 
+    // 쓰는 곳: 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function authorityRank(authority) {
       return ({ inferred: 0, draft: 1, soft: 2, hard: 3 })[authority] || 0;
     }
@@ -12238,6 +12466,7 @@
       return entity;
     }
 
+    // 쓰는 곳: 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function upsertEntity(project, name, type, sourceBlockId, confidence, status) {
       const clean = normalizeEntityName(name, type);
       if (!clean) return null;
@@ -12260,6 +12489,7 @@
       return entity;
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeEntityName(name, type) {
       let clean = norm(name).replace(SCENE_MARKER_TRIM_RE, '').trim();
       clean = clean.replace(/[「『].*$/, '').replace(/[：:].*$/, '').trim();
@@ -12302,6 +12532,7 @@
       return false;
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isLikelyCharacterName(name) {
       const clean = norm(name);
       if (!clean) return false;
@@ -12376,6 +12607,7 @@
       });
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cleanPlaceName(value) {
       let clean = stripSceneTimeExpressions(norm(value))
         .replace(/^\[[^\]]+\]\s*/, '')
@@ -12393,6 +12625,7 @@
       return clean;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogSpeakerNamesForBlock(block) {
       if (!block) return [];
       const names = Array.isArray(block.speakerNames) && block.speakerNames.length
@@ -12417,6 +12650,7 @@
       return charLen(clean.slice(0, clean.length - suffix[0].length)) >= 2;
     }
 
+    // 쓰는 곳: 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function extractEntities(project) {
       const orgSpecific = workTermAlternation(WORK_TERMS.organizations);
       const orgRegex = new RegExp('(' + (orgSpecific ? orgSpecific + '|' : '')
@@ -12524,6 +12758,7 @@
       return uniq(aliases);
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function parseCharacterProfileFromCastText(text, fallbackName) {
       const raw = String(text || '').trim();
       const name = normalizeEntityName(fallbackName || extractCastName(raw), 'character') || fallbackName || '';
@@ -12581,6 +12816,7 @@
         .trim();
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function characterProfileTags(profile) {
       const tags = [];
       if (profile && profile.gender) tags.push('gender:' + profile.gender);
@@ -12634,6 +12870,7 @@
       return chips.join('');
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function extractCastName(text) {
       let clean = String(text || '').replace(/[\u3000\t]+/g, ' ').replace(SCENE_MARKER_TRIM_RE, '').trim();
       clean = clean.split(/[、，。]/)[0];
@@ -12713,6 +12950,7 @@
       });
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function extractCastNames(text) {
       let raw = String(text || '').replace(/[\u3000\t]+/g, ' ').trim();
       raw = raw
@@ -12778,6 +13016,7 @@
       return p.documentFolders.sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || String(a.title || a.id).localeCompare(String(b.title || b.id)));
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function documentTreeChildren(project, parentId) {
       const p = project || state.project;
       const parent = parentId || 'root';
@@ -13492,11 +13731,13 @@
       [SCENARIO_UNIT.LINK, 'sourceReviewTypeLink']
     ];
 
+    // 쓰는 곳: 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfLinkAnnotation(note) {
       const text = String(note && (note.href || note.text) || '');
       return Boolean(note && note.role === 'pdf_link') || isPdfUrlLikeText(text);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfColorNoteAnnotation(note) {
       return Boolean(note && (note.trigger === 'color' || note.role === 'blue_comment'));
     }
@@ -13528,6 +13769,7 @@
       };
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sourceReviewOptionsForDoc(doc) {
       const signals = pdfReviewSignalsForDoc(doc);
       const defaults = {
@@ -13609,6 +13851,7 @@
       }).join('\n\f\n').trim();
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfReviewLineText(line) {
       const text = appendPdfLogicalTailToLineText(line && line.text || '', line && line.pdfLogicalTailText || '');
       const prefix = line && line.sceneNumberPrefix || '';
@@ -13617,6 +13860,7 @@
       return normalizePdfJapaneseInlineSpacing(merged).trim();
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function mergeDetachedPdfBodyLines(lines) {
       const source = (lines || []).filter(Boolean);
       if (source.length < 2) return source;
@@ -13636,6 +13880,7 @@
       return merged;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function detachedPdfDialogModifierMergedText(dialogLine, modifierLine) {
       const dialogText = pdfReviewLineText(dialogLine);
       const modifierText = pdfReviewLineText(modifierLine);
@@ -13652,6 +13897,7 @@
     // 번호와 장소가 두 줄로 갈린다(실측: 글자 간격 1.9 인데 둘 사이가 4.8). 갈리면 번호 줄은
     // 그것만으로 씬이 못 되고 장소 줄은 번호를 잃어, 번호로 씬을 세는 문서에서 씬이 하나도
     // 서지 않는다. 같은 컬럼에서 바로 아래 오는 것만 한 줄로 되돌린다.
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function detachedPdfSceneNumberMergedText(numberLine, headingLine) {
       const numberText = norm(pdfReviewLineText(numberLine));
       if (!/^[0-9０-９]{1,3}$/.test(numberText)) return '';
@@ -13667,6 +13913,7 @@
       return numberedSceneHeadingLineNumber(merged, { requireLocation: false }) === null ? '' : merged;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfSceneNumberLineSitsAboveHeading(numberLine, headingLine) {
       const a = numberLine && (numberLine.compactOverlayRect || numberLine.overlayRect);
       const b = headingLine && (headingLine.compactOverlayRect || headingLine.overlayRect);
@@ -13679,6 +13926,7 @@
       return gap >= 0 && gap <= glyph * 4;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfDetachedModifierLineOverlapsDialogHole(dialogLine, modifierLine) {
       if (!dialogLine || !modifierLine) return false;
       const dialogRect = dialogLine.compactOverlayRect || dialogLine.overlayRect || null;
@@ -13695,6 +13943,7 @@
       return xOverlaps && yOverlaps;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function mergePdfReviewLines(primary, secondary, text) {
       const rect = unionOverlayRects([
         primary && (primary.compactOverlayRect || primary.overlayRect),
@@ -13727,6 +13976,7 @@
       return items || [];
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizePdfJapaneseInlineSpacing(text) {
       const jpLeft = '[\\u3040-\\u30ff\\u3400-\\u9fff々〆?、。，．・…‥ー―！!「『（《〈【]';
       const jpRight = '[\\u3040-\\u30ff\\u3400-\\u9fff々〆?、。，．・…‥ー―！!」』）》〉】]';
@@ -14395,6 +14645,7 @@
       (match.items || []).forEach(item => usedSet.add(pdfTextItemKey(item)));
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfTextItemKey(item) {
       if (!item) return '';
       if (Number.isFinite(Number(item.index))) return String(item.index);
@@ -14454,6 +14705,7 @@
     }
 
 
+    // 쓰는 곳: 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfIgnorableAnnotationText(text) {
       const raw = normalizePdfCompactTextPreserveMarks(text);
       if (/^[0-9]{1,4}$/.test(raw)) return true;
@@ -14465,6 +14717,7 @@
         .flatMap(([pageNo, notes]) => combinePdfPageAnnotations(notes, pageNo, pdfPrintedPageNoValue(notes[0] && notes[0].printedPageNo)));
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function formatPdfAnnotationText(note) {
       const text = String(note && note.text || '').trim();
       const href = String(note && note.href || '').trim();
@@ -14558,6 +14811,7 @@
       return isStrongBodyStart(raw, profile) && !isCastSectionLine(raw);
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function buildSourceReviewItems(text, doc) {
       const items = [];
       const pages = sourceReviewPagesFromText(text);
@@ -14953,6 +15207,7 @@
       return rawLines;
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isBodyTextInsertLine(raw, profile) {
       const text = norm(raw);
       if (!text) return false;
@@ -14963,6 +15218,7 @@
       return false;
     }
 
+    // 쓰는 곳: 매칭 · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isBodyTextInsertTriggerText(text) {
       const source = norm(text);
       if (!source) return false;
@@ -15248,6 +15504,7 @@
       }));
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isBodyReviewItem(item) {
       return item && (item.type === 'dialog' || item.type === 'action' || item.type === 'scene' || item.type === 'end' || item.section === 'scene');
     }
@@ -15462,6 +15719,7 @@
       return new RegExp('^' + SCENE_MARKER_DOWN_CLASS + '\\s*[^。！？「」『』]{1,40}$').test(text);
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pushSourceReviewItem(items, type, pageNo, text, orderRef) {
       let clean = String(text || '').trim();
       if (type === 'scene') clean = normalizeSceneHeadingText(clean);
@@ -15473,6 +15731,7 @@
       return item;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogTextAfterOpenQuote(text, startOrOpenQuote) {
       const source = String(text || '').trim();
       const open = typeof startOrOpenQuote === 'string'
@@ -15491,6 +15750,7 @@
       return body;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogTextContainsCloseQuote(text, start) {
       const source = String(text || '');
       const close = String(start && start.closeQuote || '');
@@ -15500,6 +15760,7 @@
       return source.indexOf(close, Math.max(0, from)) >= 0;
     }
 
+    // 쓰는 곳: 클리핑 · 매칭 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function makeSourceReviewItem(type, pageNo, text, order) {
       const rawText = String(text || '').trim();
       const safeType = SOURCE_REVIEW_TYPES.some(([value]) => value === type) ? type : 'text';
@@ -15578,6 +15839,7 @@
       return item;
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cloneSourceReviewItem(item) {
       const cloned = makeSourceReviewItem(item && item.type, item && item.pageNo, sourceReviewItemText(item), item && item.order);
       if (!item) return cloned;
@@ -15672,6 +15934,7 @@
       }));
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function groupReviewItemsByPage(items) {
       const pages = new Map();
       (items || []).forEach((item) => {
@@ -15779,11 +16042,13 @@
       return [['all', t('filterAll')]].concat(ENTITY_TYPES.map(type => [type, typeLabel(type)]));
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sourceReviewMaterialKey(type, name) {
       const clean = normalizeEntityName(name, type) || norm(name);
       return [type || 'unknown', clean].join(':');
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cloneReviewManualMaterial(card) {
       return {
         id: card && card.id || stableId('manual', (card && card.type || '') + ':' + (card && card.name || '')),
@@ -16017,12 +16282,14 @@
       '#28666e'
     ];
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function characterColorValue(name) {
       const raw = norm(name) || 'unknown';
       const seed = parseInt(hashText(raw).slice(0, 8), 16) || 0;
       return CHARACTER_COLOR_PALETTE[seed % CHARACTER_COLOR_PALETTE.length];
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function characterColorStyle(name) {
       return `--speaker-color:${characterColorValue(name)};`;
     }
@@ -16201,6 +16468,7 @@
       return out;
     }
 
+    // 쓰는 곳: 기타 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayLineIdentity(line) {
       const rect = line && (line.overlayRect || line.compactOverlayRect) || {};
       return [
@@ -16294,6 +16562,7 @@
       draft.items = carrySourceReviewItemGeometry(buildSourceReviewItems(sourceReviewDraftRawText(draft), activeDocument()), previousItems);
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function syncSourceReviewDraftFromDom() {
       const draft = state.sourceReviewDraft;
       if (!draft) return;
@@ -16309,6 +16578,7 @@
       draft.items = carrySourceReviewItemGeometry(buildSourceReviewItems(sourceReviewDraftRawText(draft), activeDocument()), previousItems);
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function carrySourceReviewItemGeometry(items, previousItems) {
       const nextItems = items || [];
       const previous = previousItems || [];
@@ -16345,6 +16615,7 @@
       ].join('|');
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function copySourceReviewGeometry(target, source) {
       if (!target || !source) return;
       if (!target.overlayRect && source.overlayRect) target.overlayRect = Object.assign({}, source.overlayRect);
@@ -16377,6 +16648,7 @@
       });
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sourceReviewDraftRawText(draft) {
       return (draft && draft.pageTexts || []).slice().sort((a, b) => Number(a.pageNo) - Number(b.pageNo)).map(page => page.text || '').join('\n\f\n');
     }
@@ -16385,6 +16657,7 @@
       (items || []).forEach((item, index) => { item.order = index + 1; });
     }
 
+    // 쓰는 곳: 매칭 · 기타 · 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sourceReviewItemText(item) {
       if (!item) return '';
       if (item.type === 'character') return [item.titleLine || item.name || '', item.body || ''].filter(Boolean).join('\n').trim();
@@ -16399,6 +16672,7 @@
       return String(item.text || '').trim();
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function sourceReviewItemPageSpanText(item) {
       if (!item) return '';
       const raw = String(item.text || '').trim();
@@ -16647,12 +16921,14 @@
         || tags.includes('source:pdf-note');
     }
 
+    // 쓰는 곳: 기타 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPageArtifactBlock(block) {
       if (!block) return false;
       if (block.type === 'end_marker' || block.zone === 'page_metadata') return false;
       return isPdfPageArtifactText(block.rawText || block.text || '', block.pageNo || 1);
     }
 
+    // 쓰는 곳: 매칭 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogTextWithQuotes(item) {
       const dialog = String(item && item.dialog || '').trim();
       if (!dialog) return '';
@@ -16669,6 +16945,7 @@
       return pageEntries.map(([, items]) => items.map(sourceReviewItemText).filter(Boolean).join('\n')).filter(Boolean).join('\n\f\n');
     }
 
+    // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function saveSourceReviewDraftToDocument() {
       const draft = state.sourceReviewDraft;
       if (!draft) return null;
@@ -16758,16 +17035,19 @@
       return null;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownAnalysisBlocksForLineIndexes(doc, indexes) {
       const wanted = new Set((indexes || []).map(Number));
       return sortedDocumentBlocks(doc).filter(block => wanted.has(Number(block.markdownLineIndex)));
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownChipNodes(doc, chipId) {
       if (!chipId) return [];
       return (doc && doc.markdownBlocks || []).filter(node => node.id === chipId || node.chipId === chipId);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownNodeAnalysisBlocks(doc, node) {
       if (!node) return [];
       const nodes = node.type === 'feedback_slot'
@@ -16776,6 +17056,7 @@
       return markdownAnalysisBlocksForLineIndexes(doc, nodes.flatMap(item => item.sourceLineIndexes || []));
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function markdownNotesForNode(doc, node) {
       const ids = new Set(markdownNodeAnalysisBlocks(doc, node).map(block => block.id));
       return (state.project.revisionNotes || []).filter(note => note.targetType === 'block' && ids.has(note.targetId) && note.status !== 'done');
@@ -17760,16 +18041,19 @@
 
 
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayPageNoForBlock(block, pageNo) {
       const value = Number(pageNo || block && block.activeOverlayPageNo || block && block.pageNo || state.activeScriptPageNo || 1);
       return Number.isFinite(value) && value > 0 ? value : 1;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfPageSpanForBlock(block, pageNo) {
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
       return (block && block.pageSpans || []).find(span => Number(span && span.pageNo || 0) === targetPageNo) || null;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function primaryOverlayPageNoForBlock(block, pageNo) {
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
       const explicit = Number(block && (block.primaryPageNo || block.pageNo) || 0);
@@ -17780,6 +18064,7 @@
       return spanPages.length ? Math.min(...spanPages) : targetPageNo;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function continuedOverlayFromPageNo(block, pageNo) {
       if (!block) return 0;
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
@@ -17787,6 +18072,7 @@
       return targetPageNo > primaryPageNo ? primaryPageNo : 0;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function continuedOverlayLabelForBlock(block, pageNo) {
       const fromPageNo = continuedOverlayFromPageNo(block, pageNo);
       if (!fromPageNo) return '';
@@ -17795,6 +18081,7 @@
       return '##ACTION_CONTINUED_FROM_P' + fromPageNo;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function blockHasOverlayPage(block, pageNo) {
       if (!block) return false;
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
@@ -17802,6 +18089,7 @@
       return (block.pageSpans || []).some(span => Number(span && span.pageNo || 0) === targetPageNo);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function ensureOverlayPageSpan(target, pageNo, text) {
       if (!target) return null;
       const targetPageNo = overlayPageNoForBlock(target, pageNo);
@@ -17821,6 +18109,7 @@
       return span;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayRectForBlockPage(block, pageNo) {
       if (!block) return null;
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
@@ -17829,6 +18118,7 @@
       return block.overlayRect || null;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function setBlockOverlayRectForPage(block, pageNo, rect) {
       if (!block || !rect) return null;
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
@@ -17839,12 +18129,14 @@
       return nextRect;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayTextForBlockPage(block, pageNo) {
       const span = pdfPageSpanForBlock(block, pageNo);
       if (span && span.text) return span.text;
       return String(block && (block.rawText || block.text) || '').trim();
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfCoordinateTextVariantsForBlock(block, pageNo) {
       return uniqTextValues([
         overlayTextForBlockPage(block, pageNo),
@@ -17865,6 +18157,7 @@
       ]);
     }
 
+    // 쓰는 곳: 매칭 · PDF파싱 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function uniqTextValues(values) {
       const out = [];
       const seen = new Set();
@@ -17879,6 +18172,7 @@
       return out;
     }
 
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfDialogCoordinateParts(source) {
       if (!source) return '';
       const type = source.type || '';
@@ -17898,6 +18192,7 @@
     }
 
     // 수식자를 따옴표 **앞**에 두는 표기.
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfDialogHeadModifierCoordinateTexts(source) {
       return pdfDialogCoordinateTexts(source, (parts, modifier) =>
         `${parts.speaker}（${modifier}）${parts.open}${stripLeadingDialogModifierText(parts.dialog, modifier)}${parts.close}`);
@@ -17905,6 +18200,7 @@
 
     // 수식자 하나마다 좌표 매칭용 표기를 만든다. 두 표기가 조립 규칙만 다르고
     // 앞부분(파트 분해 · 가드 · 수식자 순회)이 같아서 그 부분만 여기 모은다.
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfDialogCoordinateTexts(source, build) {
       const parts = pdfDialogCoordinateParts(source);
       if (!parts) return [];
@@ -17912,6 +18208,7 @@
     }
 
     // 수식자를 따옴표 **안**에 넣는 표기.
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfDialogVisualCoordinateTexts(source) {
       return pdfDialogCoordinateTexts(source, (parts, modifier) => {
         if (dialogStartsWithModifierText(parts.dialog, modifier)) return `${parts.speaker}${parts.open}${parts.dialog}${parts.close}`;
@@ -17919,12 +18216,14 @@
       });
     }
 
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function dialogStartsWithModifierText(dialog, modifier) {
       return stripLeadingDialogModifierText(dialog, modifier) !== String(dialog || '');
     }
 
     // 대사 앞머리의 수식자 표기(전각·반각 괄호)를 떼어 낸다. **표기 목록은 여기 한 벌이고**
     // 「수식자로 시작하는가」 판정도 이 결과에서 파생한다.
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function stripLeadingDialogModifierText(dialog, modifier) {
       const source = String(dialog || '');
       if (!modifier) return source;
@@ -17935,6 +18234,7 @@
       return source;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayBlockForPage(block, pageNo) {
       if (!block) return null;
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
@@ -17957,6 +18257,7 @@
       });
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfOverlayBlocksForPage(doc, pageNo, pageBlocks) {
       const targetPageNo = overlayPageNoForBlock(null, pageNo);
       const sourceBlocks = doc ? sortedDocumentBlocks(doc).filter(isOverlayEligibleBlock) : (pageBlocks || []).filter(isOverlayEligibleBlock);
@@ -18126,6 +18427,7 @@
     // 구분되지 않았다. 렌더 경로는 전부 hasUsablePdfOverlayRect 로 먼저 걸러서 거기까지
     // 닿지도 않았고, 닿는 유일한 경로(currentOverlayRectForBlock)에서는 날조 좌표가
     // 흘러들 뿐이었다. 그래서 null 을 돌려준다 — 호출부는 그것을 처리한다.
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayRectForBlock(block, doc) {
       const pageNo = overlayPageNoForBlock(block);
       const saved = overlayRectForBlockPage(block, pageNo) || {};
@@ -18146,6 +18448,7 @@
       return clipOverlayRectToPdfBodyBounds(rect, doc || activeDocument(), pageNo);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function clipOverlayRectToPdfBodyBounds(rect, doc, pageNo) {
       const bounds = pdfBodyRangeForPage(doc, pageNo || state.activeScriptPageNo || 1);
       const source = normalizeOverlayRect(rect);
@@ -18161,6 +18464,7 @@
       return clipped;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isOverlayRectLikelyFooterArtifact(block, rect) {
       if (!block || !rect) return false;
       if (rect.manual) return false;
@@ -18168,6 +18472,7 @@
         || isOverlayRectPageMetadataFooterArtifact(block, rect);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isOverlayRectPageNumberArtifact(block, rect) {
       const top = Number(rect.top);
       const height = Number(rect.height);
@@ -18186,14 +18491,17 @@
       return false;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isOverlayRectPageMetadataFooterArtifact(block, rect) {
       return isPageMetadataBlock(block) && isOverlayRectFooterStartBand(rect);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPageMetadataBlock(block) {
       return Boolean(block && (block.zone === 'page_metadata' || block.type === 'pdf_note' || block.type === 'pdf_link'));
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isOverlayRectFooterStartBand(rect) {
       const top = Number(rect && rect.top);
       const height = Number(rect && rect.height);
@@ -18292,6 +18600,7 @@
       technical_note: 'NOTE'
     });
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayLabelForBlock(block, shape) {
       const known = OVERLAY_TYPE_LABELS[block && block.type];
       if (known) return known;
@@ -18303,6 +18612,7 @@
       return 'ACTION';
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasUsablePdfOverlayRect(block, pageNo) {
       const rect = overlayRectForBlockPage(block, pageNo);
       if (!rect) return false;
@@ -18310,6 +18620,7 @@
       return Number.isFinite(Number(rect.left)) && Number.isFinite(Number(rect.top));
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function hasCurrentRenderedPdfOverlayRect(block, pageNo) {
       const rect = overlayRectForBlockPage(block, pageNo);
       if (!rect) return false;
@@ -18317,6 +18628,7 @@
       return hasUsablePdfOverlayRect(block, pageNo) && isCurrentPdfCoordinateSource(rect.coordinateSource);
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isCurrentPdfCoordinateSource(source) {
       // v21 = margin-note stripping (blue-ink pre-filter + memo-band run cut) so wrapped
       // body sentences match contiguously in comment-version scripts. v20 rects are treated
@@ -18476,6 +18788,7 @@
     }
 
     // 문서의 draftPages 에서 논리 쪽 하나를 찾는다. **쪽 번호 대조 규칙은 여기 한 벌이다.**
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfLogicalPageForDocument(doc, pageNo) {
       const targetPageNo = Number(pageNo || 1);
       return (doc && doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo) || null;
@@ -19004,6 +19317,7 @@
     // slotIndex 는 glyphCount 를 넘어도 된다(아이템 뒤로 이어지는 자리).
     // n 번째 글자 칸의 시작과 길이. 아이템 좌표(topPct/heightPct)와 괘선 좌표(top/height)는
     // 필드 이름이 다르므로 **호출 전에 길이만 뽑아 넘긴다** — 커널에 좌표계 분기를 넣지 않는다.
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function glyphSlotSpan(length, index, total) {
       const count = Math.max(1, Number(total) || 0);
       const span = Number(length) || 0;
@@ -19012,6 +19326,7 @@
       return { start: unit * (Number(index) || 0), length: unit };
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfItemGlyphSlot(item, slotIndex, glyphCount) {
       const vertical = Boolean(item && item.verticalTextItem);
       const slot = glyphSlotSpan(vertical ? item && item.heightPct : item && item.widthPct, slotIndex, glyphCount);
@@ -19075,6 +19390,7 @@
       return out;
     }
 
+    // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     async function pdfTextItemsForPage(page, textContent, viewport, pdfjsLib, pageNo) {
       const items = pdfJsTextItemsFromContent(textContent, viewport, pdfjsLib, pageNo);
       const drawn = await pdfDrawnGlyphsForPage(page, pdfjsLib);
@@ -19182,6 +19498,7 @@
       return latin >= need && latin >= jp * 2;
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfVerticalRunGlyphCount(text) {
       const compact = String(text || '').normalize('NFC').replace(/[\s\u200b\u200c\u200d\ufeff]+/g, '');
       return compact ? charLen(compact) : 0;
@@ -19344,6 +19661,7 @@
       return '';
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfTextItemArtifact(item, pageNo) {
       if (!item) return true;
       if (item.artifactRole) return true;
@@ -19355,6 +19673,7 @@
     // 가로쓰기 판면을 전제하면 세로쓰기 본문을 먹는다: 세로쪽은 본문 열이 판면 아래까지
     // 흐르므로 「가운데 아래」에 본문 숫자가 온다. 이 코퍼스의 실제 쪽번호는 스무 쪽 모두
     // 아래끝 98% 로 일정했고, 그 위 구역에서 사라진 것은 전부 본문이었다(아래끝 69~90%).
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfPageNumberZone(top, bottom, centerX) {
       const edgeBand = Number(centerX) <= 14 || Number(centerX) >= 86;
       return Number(top) < 5.5 || Number(bottom) > 92
@@ -19362,6 +19681,7 @@
     }
 
     // 글자와 좌표를 함께 보고 쪽번호·머리말 부스러기인지 정한다. **본문 밖 글자 판정은 이 한 벌이다.**
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfCoordinateArtifactItem(item, pageNo) {
       if (!item) return true;
       const text = String(item.text || '').normalize('NFKC').trim();
@@ -19526,6 +19846,7 @@
     // titles, on-screen-text, emphasis). NOTES are only the out-of-body zones: the top
     // margin above the body top-line and anything below the cut-line, PLUS deep memo-band
     // columns that live inside the body but the start-band split separates.
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGuideLineSetsForPage(doc, pageNo, items) {
       const all = (items || []).filter(item => item && item.text);
       const range = pdfBodyRangeForPage(doc, pageNo);
@@ -19576,6 +19897,7 @@
     // regions, then group each region BOTH ways — as horizontal rows and as vertical
     // columns — and keep the orientation that explains the region with FEWER lines
     // (vertical writing collapses into few columns, horizontal into few rows).
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfNoteGuideLines(noteItems, pageNo) {
       const glyphH = 1.8;
       const source = (noteItems || []).filter(item => item && item.text && String(item.text).trim() && !item.pdfRuby);
@@ -19613,6 +19935,7 @@
     // voting (beside → horizontal, below → vertical). (Line-count comparison was fooled
     // by left-aligned rows chaining into pseudo-columns; pure voting was fooled by
     // multi-char row chunks whose nearest neighbour is the row below.)
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfNoteRegionIsVertical(items) {
       let wide = 0;
       let tall = 0;
@@ -19626,6 +19949,7 @@
       return pdfNoteRegionIsVerticalByNeighbourVote(items);
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfNoteRegionIsVerticalByNeighbourVote(items) {
       const pts = (items || []).slice(0, 80).map(item => ({
         x: pdfNoteGlyphX(item),
@@ -19655,12 +19979,14 @@
       return verticalVotes >= horizontalVotes;
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfNoteGlyphX(item) {
       return Number(item && (item.centerXPct != null ? item.centerXPct : item.leftPct)) || 0;
     }
 
     // Group one note region along a writing direction: vertical → X-clustered columns
     // split into contiguous Y-runs; horizontal → Y-clustered rows split into X-runs.
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfNoteRegionLines(items, pageNo, vertical, glyphH) {
       const mainOf = (item) => vertical ? pdfNoteGlyphX(item) : (Number(item.centerYPct) || 0);
       const crossStart = (item) => vertical ? (Number(item.topPct) || 0) : (Number(item.leftPct) || 0);
@@ -19706,6 +20032,7 @@
       return inferNoteOverlayRectFromLinesForText(overlayTextForBlockPage(block, pageNo), noteLines);
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function inferNoteOverlayRectFromLinesForText(targetText, noteLines) {
       const target = normalizePdfCoordinateMatchText(targetText);
       if (!target || target.length < 2) return null;
@@ -19763,6 +20090,7 @@
     // evidence (deep line starts + second-run starts) agree. Without a consistent band,
     // only huge single-column gaps (4+ glyphs) are split. Nothing is discarded — the
     // separated pieces come back as noteLines so annotations stay first-class content.
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function splitPdfGuideLinesForOverlayMatching(lines) {
       const sourceLines = (lines || []).filter(Boolean);
       if (sourceLines.length < 2) return { bodyLines: sourceLines, noteLines: [] };
@@ -19849,6 +20177,7 @@
       return { bodyLines, noteLines };
     }
 
+    // 쓰는 곳: 매칭 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfScriptBodyItemsForOverlayMatching(items, doc, pageNo) {
       return pdfBodyTextItemsForOverlayMatching(items, doc, pageNo)
         .filter(item => item && !item.pdfRuby && (item.pdfScriptBodyColorProtected || !isPdfJsBlueTextItem(item)));
@@ -19863,6 +20192,7 @@
       });
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function findOverlayBoxForBlockId(blockId) {
       // 값으로 바로 찾는다 — 전부 모아 고르면 블록 하나를 찾는 데 박스 수만큼 든다.
       return document.querySelector('[data-overlay-block="' + String(blockId).replace(/["\\]/g, '\\$&') + '"]');
@@ -19874,6 +20204,7 @@
       });
     }
 
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizeOverlayRect(rect) {
       const source = rect || {};
       const rawLeft = Math.max(0, Math.min(99, Number(source.left) || 0));
@@ -19910,6 +20241,7 @@
     // 그게 최소 폭 2% 를 강제하면서 세로 컬럼 조각(폭 0.4~1.5%)을 각각 부풀리고
     // 교차축으로 밀어 놓은 뒤 합쳤다. 컬럼 셋이면 좌우로 0.4% 씩 번졌다 —
     // 같은 파이프라인의 다른 자리가 0.05% 를 따지고 있다.
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function unionOverlayRects(rects) {
       const source = (rects || []).filter(rect => rect
         && Number.isFinite(Number(rect.left)) && Number.isFinite(Number(rect.top))
@@ -19940,10 +20272,12 @@
     // 자리가 어느 자로 재는지 읽어서는 알 수 없었고, 실제로 좌표용 자로 동일성을 재던 자리를
     // 아무도 못 봤다. 이름이 같으면 호출부만 읽어도 갈린 자를 찾을 수 있다.
     // 좌표용 자(normalizePdfCoordinateMatchText)는 이것의 상위집합이다 — 합치면 안 된다.
+    // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizePdfCompactTextPreserveMarks(value) {
       return String(value || '').normalize('NFKC').replace(/[\s\u200b\u200c\u200d\ufeff]+/g, '');
     }
 
+    // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function normalizePdfCoordinateMatchText(value) {
       const compact = normalizePdfCompactTextPreserveMarks(value).toLowerCase();
       if (/^off$/i.test(compact)) return '';
@@ -20004,6 +20338,7 @@
       return false;
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function applyOverlayRectToElement(box, rect, pageNo) {
       const targetPageNo = Number(pageNo || box && box.getAttribute('data-overlay-page-no') || state.activeScriptPageNo || 1);
       const boxBlock = box && (state.project.sourceBlocks || []).find(item => item.id === box.getAttribute('data-overlay-block'));
@@ -20179,6 +20514,7 @@
 
     // ---- Clean-mode feedback surface: note chips + inline composer over the PDF ----
     // 그려진 상자에서 자리를 읽는다. 단위는 퍼센트다. 상자 style 을 좌표로 바꾸는 유일본이다.
+    // 쓰는 곳: 렌더 · 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayRectFromBoxElement(box) {
       return {
         left: parseFloat(box.style.left) || 0,
@@ -20188,6 +20524,7 @@
       };
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfFeedbackBlockRect(blockId) {
       const box = findOverlayBoxForBlockId(blockId);
       return box ? overlayRectFromBoxElement(box) : null;
@@ -20198,6 +20535,7 @@
     // only when the widened rect still fits without touching an already placed one.
     // sizes = candidate {w,h} pairs in % units, tried in order (wide first when allowed).
     // occupied = % rects already claimed by other notes; mutated by the caller, not here.
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function placePdfFeedbackRect(anchor, sizes, occupied, band) {
       const PAD = 0.5, GAP = 0.7, EDGE = 0.4;
       const hitAt = (r) => occupied.find(o =>
@@ -20290,6 +20628,7 @@
 
     // Extent of the text body across all overlay columns, in % of the page. Notes
     // prefer the empty margins outside this band.
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfFeedbackContentBand() {
       let top = null, bottom = null;
       document.querySelectorAll('[data-overlay-block]').forEach((box) => {
@@ -20302,6 +20641,7 @@
       return { top, bottom };
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function ensurePdfFeedbackLinkLayer(layer) {
       let svg = layer.querySelector(':scope > svg.pdf-feedback-links');
       if (!svg) {
@@ -20316,6 +20656,7 @@
     // the facing edges; the S-curve bows through the margin between them.
     // `cache` (optional) carries pre-measured px metrics so drag frames touch zero
     // layout properties: { lw, lh, anchor:{x,y,w,h}, stackW, stackH, g }.
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function drawPdfFeedbackLink(layer, stack, blockId, type, cache) {
       let g = cache && cache.g;
       if (!g) {
@@ -20554,6 +20895,7 @@
     }
 
     // ---- Page-level floating notes: same capsule UI, anchored to the page itself (no leader line). ----
+    // 쓰는 곳: 렌더 · 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfFeedbackCurrentPageInfo() {
       const doc = activeDocument();
       if (!doc) return null;
@@ -20876,6 +21218,7 @@
       document.querySelectorAll(activeSel).forEach(el => el.classList.remove('compose-active'));
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function closePdfFeedbackComposer() {
       closeComposerLayer('pdfFeedbackComposer', '.pdf-feedback-composer', '.pdf-overlay-box.compose-active');
     }
@@ -20906,6 +21249,7 @@
       });
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function syncPdfOverlaySelectionToolbar() {
       const toolbar = $('pdfOverlaySelectionToolbar');
       if (!toolbar) return;
@@ -21036,6 +21380,7 @@
       document.addEventListener('pointerup', onUp, { once: true });
     }
 
+    // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function syncReviewItemOverlayRectFromBlock(block, pageNo, rect) {
       const targetPageNo = overlayPageNoForBlock(block, pageNo);
       const sourceRect = rect || overlayRectForBlockPage(block, targetPageNo);
@@ -21055,6 +21400,7 @@
 
     // 오버레이가 몇 개나 조용히 빠졌는지 낸다. 0 이면 칩 자체를 숨긴다 —
     // 평소에 안 보이다가 문제가 생겨야 나타나야 눈에 띈다.
+    // 쓰는 곳: 클리핑 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function renderPdfOverlayDropChip() {
       const chip = $('stripOverlayDrops');
       if (!chip) return;
@@ -21319,6 +21665,7 @@
       bindRevisionNoteDeleteButtons();
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function closeMaterialComposer() {
       closeComposerLayer('materialComposer', '.material-composer', '.material-card.compose-active');
     }
@@ -21577,6 +21924,7 @@
         () => JSON.stringify(settingsSnapshot(), null, 2), '設定データはコピー時に更新されます。');
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function settingsSnapshot() {
       const settings = ensureSettingsShape(state.settings || blankSettings());
       if (workspaceReady(state.project)) {
@@ -21829,6 +22177,7 @@
     }
 
     // ===== canvas shell: pan / zoom / rails / floating chrome =====
+    // 쓰는 곳: 렌더 · 리뷰UI · 유틸 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function canvasZoomFactor() {
       return (state.canvasView && state.canvasView.z) || 1;
     }
@@ -22179,6 +22528,7 @@
       setActiveTab('#blockTabs', 'data-tab', state.activeBlockTab);
     }
 
+    // 쓰는 곳: 내보내기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function buildStructuredText(project) {
       project = ensureProjectShape(project);
       const lines = [];
@@ -22581,6 +22931,7 @@
       };
     }
 
+    // 쓰는 곳: 내보내기 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function downloadBlob(text, filename, type) {
       const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
@@ -22596,6 +22947,7 @@
     const AUTO_SLOT_INTERVAL_MS = 5 * 60 * 1000;
     let lastAutoSlotAt = 0;
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function activeWorkId() {
       return state.project && state.project.workspace && state.project.workspace.workId || '';
     }
@@ -22622,6 +22974,7 @@
       return [summary.blocks, summary.notes, summary.entities, work && work.workspace && work.workspace.updatedAt || ''].join('|');
     }
 
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     async function getProjectSlotsRecord(workId) {
       if (!settingsAutosaveSupported() || !workId) return { workId: workId || '', slots: [] };
       const rec = await readSettingsStore(PROJECT_SLOTS_STORE, workId) || { workId, slots: [] };
@@ -22744,6 +23097,7 @@
     }
 
     let appToastTimer = 0;
+    // 쓰는 곳: 렌더 · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function toast(message) {
       const el = $('appToast');
       if (!el) return;
@@ -22891,6 +23245,7 @@
       $('editModal').classList.add('active');
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function closeModal() {
       const backdrop = $('editModal');
       const dialog = backdrop && backdrop.querySelector('.modal');
@@ -22899,6 +23254,7 @@
       if (backdrop) backdrop.classList.remove('active');
     }
 
+    // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function openAddBlockNote(blockId, noteType) {
       const block = state.project.sourceBlocks.find(b => b.id === blockId);
       if (!block) return;
