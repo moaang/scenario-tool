@@ -2762,12 +2762,20 @@
     const SCENE_MARKER_WIDE_HEAD_RE = new RegExp('^' + SCENE_MARKER_WIDE_CLASS + '\\s*\\S+');
     const SCENE_MARKER_TRIM_RE = new RegExp('^[' + SCENE_MARKER_CHARS + '・\\-]+');
 
+    // 「일본어 글자」로 셀 범위의 정본. 세 채점기가 이 수를 서로 비교하므로 한쪽만 넓히면
+    // 비교가 조용히 기운다. 문자 클래스에 끼워 넣을 소스 문자열만 공유하고 RegExp 는 쓰는
+    // 쪽이 각자 만든다 — /g 객체를 공유하면 lastIndex 가 호출 사이를 넘어간다.
+    const JP_GLYPH_RANGE = '\\u3040-\\u30ff\\u3400-\\u9fff';
+
     // 표지에 적히는 낱말 두 갈래의 정본. 한쪽은 원고가 어느 단계인지를,
     // 다른 쪽은 누가 만들었는지를 적는다 — 같은 줄에 오지만 분류가 다르다.
     const DRAFT_STATUS_WORDS = ['検討稿', '決定稿', '初稿', '改稿', '修正稿', '準備稿', '完成稿', 'コメント版', '文芸整理済'];
     const CREDIT_ROLE_WORDS = ['脚本', '原作', '監督', '文芸', '構成'];
     const DRAFT_STATUS_ALT = DRAFT_STATUS_WORDS.join('|');
     const CREDIT_ROLE_ALT = CREDIT_ROLE_WORDS.join('|');
+    // 원문이 등장인물 목록을 이야기하는지 부분 일치로만 보는 낱말들의 정본.
+    // 줄 전체를 목록 머리로 판정하는 규칙은 더 넓은 목록을 따로 쓴다 — 같은 것이 아니다.
+    const CAST_SECTION_MENTION_RE = /登場人物|登場キャラ|キャラクター|CAST|モブキャラクター/;
     // 줄 전체가 이 낱말 하나뿐 — 인물도 화자도 아니고 표지의 항목이다.
     const CREDIT_ROLE_RE = new RegExp(CREDIT_ROLE_ALT, 'i');
     const FRONT_MATTER_WORD_ONLY_RE = new RegExp('^(?:' + DRAFT_STATUS_ALT + '|' + CREDIT_ROLE_ALT + ')$', 'i');
@@ -2775,7 +2783,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v177';
+    const APP_VERSION = 'v178';
     const APP_BUILD_DATE = '2026-08-14';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -4028,12 +4036,18 @@
       return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
     }
 
+    // 본문 상·하한이 서는 트리거 문자열의 정본 한 벌. 아래 두 판정과 값을 쓰는 쪽
+    // (applyStablePdfJsBodyCutLineToPages)이 같은 문자열을 봐야 한다 — 한쪽만 바뀌면
+    // 범위가 조용히 꺼져 화면에서 본문이 통째로 빈다.
+    const PDF_BODY_CUT_LINE_TRIGGER = 'annotation_layout_stable';
+    const PDF_BODY_TOP_LINE_TRIGGER = 'layout_divider_stable';
+
     function isPdfBodyCutLineTrigger(trigger) {
-      return trigger === 'annotation_layout_stable';
+      return trigger === PDF_BODY_CUT_LINE_TRIGGER;
     }
 
     function isPdfBodyTopLineTrigger(trigger) {
-      return trigger === 'layout_divider_stable';
+      return trigger === PDF_BODY_TOP_LINE_TRIGGER;
     }
 
     // 범위는 자동 검출한 컷라인에서만 온다. 예전에는 디버그 모드에서 선을 끌어 정하는
@@ -4157,9 +4171,13 @@
     // (sceneNumberPrefix — 윈여백에 씨 번호를 찍는 조판이 있다).
     // **1층에서 아이템을 빼면 이 복구가 무력해진다** — 예전에 그렇게 씨 번호를 36줄 잃었다.
     function pdfLineClippedToBodyRange(line, range) {
-      if (!line || !pdfLineInsideBodyRange(line, range)) return null;
+      if (!line) return null;
       const items = line.items || [];
-      if (!items.length || !range || !range.enabled) return line;
+      // 아이템이 없는 줄만 줄 중심 좌표로 범위 안팎을 본다.
+      if (!items.length) return pdfLineInsideBodyRange(line, range) ? line : null;
+      if (!range || !range.enabled) return line;
+      // 아이템이 있는 줄의 「범위 안인가」 판정은 이 filter 한 벌이 겸한다 — 남는 아이템이
+      // 없으면 그 줄이 범위 밖이다. 같은 술어를 줄마다 두 번 돌리지 않는다.
       const clippedItems = items.filter(item => pdfTextItemInsideBodyRange(item, range));
       if (!clippedItems.length) return null;
       if (clippedItems.length === items.length) return line;
@@ -4196,6 +4214,7 @@
       return /^[0-9０-９]{1,3}$/.test(text) ? text : '';
     }
 
+    // 한 쪽의 본문 후보 줄 풀이 무엇인가. 클립·재클립·디버그 추출이 전부 이 한 벌에서 시작한다.
     function pdfBaseBodyLinesForPage(page) {
       if (!page) return [];
       return page.bodyBaseLines || page.lines || [];
@@ -4239,6 +4258,12 @@
         .replace(/'/g, '&#039;');
     }
     function norm(value) { return String(value || '').replace(/[\u3000\t]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+    // 이 블록의 본문을 한 줄로 이어 보여줄 것인가(displayPdfBlockText 적용 여부).
+    // 목록과 상세가 같은 블록을 각자 그리므로 판정은 이 한 벌뿐이다.
+    function shouldJoinPdfBlockText(block) {
+      return Boolean(block && (block.zone === 'body' || block.type === 'dialog' || block.type === 'action'));
+    }
+
     function displayPdfBlockText(value) {
       return String(value || '')
         .replace(/\r/g, '\n')
@@ -4392,8 +4417,8 @@
       shaped.documents = shaped.documents.map((doc, index) => {
         const normalized = Object.assign(makeSourceDocument(doc.id || ('doc-' + pad(index + 1, 3)), doc.title || ('untitled_' + pad(index + 1, 2)), doc.documentKind || 'episode_script'), doc || {});
         normalized.documentKind = normalizeDocumentKind(normalized.documentKind);
-        if (normalized.id === 'project-common' || normalized.documentKind === 'project_common') normalized.title = '作品共通';
-        normalized.parentId = normalized.id === 'project-common' || normalized.documentKind === 'project_common' ? 'root' : (normalized.parentId || 'root');
+        if (isProjectCommonDocument(normalized)) normalized.title = '作品共通';
+        normalized.parentId = isProjectCommonDocument(normalized) ? 'root' : (normalized.parentId || 'root');
         normalized.sortOrder = Number.isFinite(Number(normalized.sortOrder)) ? Number(normalized.sortOrder) : index;
         normalized.draftPages = normalized.draftPages || [];
         normalized.reviewItems = normalized.reviewItems || [];
@@ -4428,7 +4453,7 @@
         if (folder.parentId !== 'root' && !folderIds.has(folder.parentId)) folder.parentId = 'root';
       });
       shaped.documents.forEach((doc) => {
-        if (doc.id === 'project-common' || doc.documentKind === 'project_common') return;
+        if (isProjectCommonDocument(doc)) return;
         if (doc.parentId !== 'root' && !folderIds.has(doc.parentId)) doc.parentId = 'root';
       });
       if (!shaped.activeDocumentId || !shaped.documents.some(doc => doc.id === shaped.activeDocumentId)) shaped.activeDocumentId = shaped.documents[0].id;
@@ -4463,7 +4488,7 @@
         e.profile = Object.assign({}, e.profile || {});
         if (!e.sourceDocumentId) e.sourceDocumentId = inferEntityDocumentId(shaped, e) || shaped.activeDocumentId;
         if (!e.scope) e.scope = ((e.tags || []).includes('scope:project') || e.sourceDocumentId === 'project-common') ? 'project' : 'document';
-        e.tags = uniq((e.tags || []).filter(tag => tag !== 'scope:project' && tag !== 'scope:document').concat(e.scope === 'project' ? ['scope:project'] : ['scope:document']));
+        syncEntityScopeTags(e);
       });
       return shaped;
     }
@@ -4556,7 +4581,7 @@
         p.activeDocumentId = '';
       }
       let doc = p.documents.find(item => item.id === p.activeDocumentId);
-      if (doc && doc.documentKind !== 'project_common' && doc.id !== 'project-common') return doc;
+      if (doc && !isProjectCommonDocument(doc)) return doc;
       doc = editableDocuments(p)[0];
       if (doc) {
         p.activeDocumentId = doc.id;
@@ -4566,9 +4591,14 @@
       return doc;
     }
 
+    // 이 문서가 작품 공통 문서인가. id 와 documentKind 두 갈래를 함께 보는 판정은 이 한 벌뿐이다.
+    function isProjectCommonDocument(doc) {
+      return Boolean(doc && (doc.id === 'project-common' || doc.documentKind === 'project_common'));
+    }
+
     function commonDocument(project) {
       const p = project || state.project;
-      let doc = (p.documents || []).find(item => item.id === 'project-common' || item.documentKind === 'project_common');
+      let doc = (p.documents || []).find(item => isProjectCommonDocument(item));
       if (!doc) {
         doc = makeSourceDocument('project-common', '作品共通', 'project_common');
         p.documents = [doc].concat(p.documents || []);
@@ -4579,7 +4609,7 @@
     function editableDocuments(project) {
       const p = project || state.project;
       return (p.documents || [])
-        .filter(item => item.id !== 'project-common' && item.documentKind !== 'project_common')
+        .filter(item => !isProjectCommonDocument(item))
         .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || String(a.title || a.id).localeCompare(String(b.title || b.id)));
     }
 
@@ -4758,8 +4788,7 @@
     }
 
     function docTitleById(project, id) {
-      const p = project || state.project;
-      const doc = (p.documents || []).find(item => item.id === id);
+      const doc = conteExportDocumentById(project || state.project, id);
       return doc ? (doc.title || doc.id) : (id || '');
     }
 
@@ -4801,17 +4830,24 @@
       return entityVisibleInMaterialTab(entity, state.activeMiddleTab, project);
     }
 
+    // 자료 편집을 열어도 되는가 — 공통자료 탭이면 작품만 있으면 되고 그 밖에는 확정된 문서가
+    // 있어야 한다. 실제 차단과 버튼 비활성이 같이 쓰는 유일본이다.
     function materialWorkUnlocked() {
       if (!workspaceReady()) return false;
       if (state.activeMiddleTab === 'commonMaterials') return true;
       return documentWorkUnlocked();
     }
 
+    // entity.scope 를 scope: 태그로 옮겨 적는 유일본 — scope: 태그는 여기서만 만들어진다.
+    function syncEntityScopeTags(entity) {
+      entity.tags = uniq((entity.tags || []).filter(tag => tag !== 'scope:project' && tag !== 'scope:document').concat(entity.scope === 'project' ? ['scope:project'] : ['scope:document']));
+    }
+
     function setEntityScope(entity, scope, documentId) {
       if (!entity) return;
       entity.scope = scope === 'project' ? 'project' : 'document';
       entity.sourceDocumentId = entity.scope === 'project' ? 'project-common' : (documentId || activeDocument().id);
-      entity.tags = uniq((entity.tags || []).filter(tag => tag !== 'scope:project' && tag !== 'scope:document').concat(entity.scope === 'project' ? ['scope:project'] : ['scope:document']));
+      syncEntityScopeTags(entity);
     }
 
     function documentWorkUnlocked(doc) {
@@ -4896,8 +4932,7 @@
       const ready = workspaceReady();
       const doc = activeDocument();
       const hasEditableDoc = ready && doc && doc.documentKind !== 'project_common';
-      const docReady = hasEditableDoc && documentWorkUnlocked(doc);
-      const materialReady = ready && (state.activeMiddleTab === 'commonMaterials' || docReady);
+      const materialReady = materialWorkUnlocked();
       renderWorkSelect();
       document.querySelectorAll('[data-requires-project]').forEach((el) => {
         el.disabled = !ready;
@@ -4983,11 +5018,9 @@
       return orderedClaimsForEntity(entity.id).map(c => `<div class="annotation fact"><strong>${esc(claimLabel(c))}</strong> ${esc(c.text)} <span class="card-sub">${esc(authorityLabel(c.authority))} ・ ${esc(entityScopeLabel(c.scope || entity.scope))}</span></div>`).join('');
     }
 
+    // 노트 종류의 라벨. 종류 목록의 정본은 UI_LABEL_KEYS.note 한 벌뿐이고 여기는 그것을 푼다.
     function noteLabel(note) {
-      if (note.noteType === 'direct_rewrite') return t('noteDirectRewrite');
-      if (note.noteType === 'question') return t('noteQuestion');
-      if (note.noteType === 'fact') return t('noteFact');
-      return t('noteRetake');
+      return t(UI_LABEL_KEYS.note[note.noteType] || 'noteRetake');
     }
 
     function renderRevisionNoteAnnotation(note) {
@@ -5186,20 +5219,22 @@
       return claim;
     }
 
+    // 이 블록이 이 자료를 가리키는가 — 출처참조·화자·인물명·장소명·본문 이름의 OR 판정.
+    // 링크를 읽는 쪽과 링크를 쓰는 쪽이 같이 쓰는 유일본이다.
+    function blockMatchesEntity(block, entity) {
+      if ((entity.sourceRefs || []).includes(block.id)) return true;
+      if ((block.speakerNames || []).some(name => entity.type === 'character' && (entity.name === name || (entity.aliases || []).includes(name)))) return true;
+      if (block.speaker && entity.type === 'character' && (entity.name === block.speaker || (entity.aliases || []).includes(block.speaker))) return true;
+      if (block.characterName && entity.type === 'character' && (entity.name === block.characterName || (entity.aliases || []).includes(block.characterName))) return true;
+      if (block.locationName && entity.type === 'place' && entity.name === block.locationName) return true;
+      if (entityNameAppearsInText(entity, block.text || block.rawText || '')) return true;
+      return false;
+    }
+
     function entitiesForBlock(block) {
       if (!block) return [];
       const directIds = block.linkedEntityIds || [];
-      const observed = (state.project.entities || []).filter(e => {
-        if (directIds.includes(e.id)) return true;
-        if ((e.sourceRefs || []).includes(block.id)) return true;
-        if ((block.speakerNames || []).some(name => e.type === 'character' && (e.name === name || (e.aliases || []).includes(name)))) return true;
-        if (block.speaker && e.type === 'character' && (e.name === block.speaker || (e.aliases || []).includes(block.speaker))) return true;
-        if (block.characterName && e.type === 'character' && (e.name === block.characterName || (e.aliases || []).includes(block.characterName))) return true;
-        if (block.locationName && e.type === 'place' && e.name === block.locationName) return true;
-        if (entityNameAppearsInText(e, block.text || block.rawText || '')) return true;
-        return false;
-      });
-      return observed;
+      return (state.project.entities || []).filter(e => directIds.includes(e.id) || blockMatchesEntity(block, e));
     }
 
     function entityNameAppearsInText(entity, text) {
@@ -5229,6 +5264,9 @@
       { open: '＂', close: '＂', weight: 50 },
       { open: '"', close: '"', weight: 40 }
     ]);
+
+    // 대사 여는 부호 목록의 유일본 — 쌍 목록에서 뽑으므로 쌍을 더하면 이것을 보는 판정이 같이 따라온다.
+    const DEFAULT_DIALOG_OPEN_QUOTES = Object.freeze(DEFAULT_DIALOG_QUOTE_PAIRS.map(pair => pair.open));
 
     function createScenarioParserProfile(pagesOrText) {
       const pages = typeof pagesOrText === 'string' ? splitPages(pagesOrText) : (pagesOrText || []);
@@ -5467,7 +5505,7 @@
 
     function matchDialogSpeakerCueLine(raw) {
       const source = String(raw || '').trim();
-      if (!source || /[「『“〝＂"]/.test(source)) return null;
+      if (!source || DEFAULT_DIALOG_OPEN_QUOTES.some(openQuote => source.includes(openQuote))) return null;
       const match = source.match(/^(.{1,42}?)[（(]\s*([^）)]{1,32})\s*[）)]$/u);
       if (!match) return null;
       const modifierInfo = normalizeDialogModifier(match[2]);
@@ -5726,6 +5764,7 @@
         || pageHasActionNarrativeSignal(lines, profile);
     }
 
+    // 이 쪽이 표지·머리말 쪽인가. 파싱·리뷰 양쪽 경로가 전부 이 한 벌을 부른다.
     function looksLikeFrontMatterPage(lines, pageNo, profile) {
       const source = (lines || []).map(norm).filter(Boolean);
       const head = source.slice(0, 12);
@@ -5736,15 +5775,15 @@
       // 본문 시작 판정과 같은 자를 쓴다.
       if (scenarioPageLooksLikeBody(source, profile)) return false;
       if (head.some(isCastSectionLine)) return true;
-      const actionSignals = source.filter(line => isLikelyActionNarrativeLine(line, profile)).length;
       const frontWordRe = new RegExp(DRAFT_STATUS_ALT + '|' + CREDIT_ROLE_ALT + '|登場人物|キャラクター|CAST');
       const explicitFront = head.some(line => frontWordRe.test(line)
         || /第\s*[0-9０-９一二三四五六七八九十]+\s*話/.test(line));
-      if (actionSignals >= 2 && !explicitFront) return false;
+      if (pageHasActionNarrativeSignal(source, profile) && !explicitFront) return false;
       const frontSignals = head.filter((line, index) => frontScore(line, pageNo || 1, index, profile) >= 6).length;
       return frontSignals >= 2;
     }
 
+    // 이 쪽에 지문(액션 서술)이 둘 이상인가 — 본문 신호와 표지 판정이 같이 쓰는 유일본이다.
     function pageHasActionNarrativeSignal(lines, profile) {
       const actionLines = (lines || []).filter(line => isLikelyActionNarrativeLine(line, profile)).length;
       return actionLines >= 2;
@@ -5897,11 +5936,14 @@
       return Boolean(source && !parseDialog(source, profile) && lineHasDialogStartSignal(source, profile, options));
     }
 
+    // 이 줄이 본문 신호인가 — 끝표시만 뺀 블록 경계와 같은 자다. 판정 본체는 갖지 않고
+    // lineIsScriptBlockBoundary 한 벌에 갈래만 넘긴다.
     function lineIsScriptBodySignal(raw, profile) {
-      const source = String(raw || '').trim();
-      return Boolean(source && (lineHasDialogSignal(source, profile) || isSceneHeading(source, profile) || isStrongBodyStart(source, profile)));
+      return lineIsScriptBlockBoundary(raw, profile, { end: false });
     }
 
+    // 이 줄이 블록 경계인가(대사·끝표시·씬머리·강한 본문 시작·캐스트). 어느 갈래를 볼지는
+    // 옵션으로 정하고, 경계 판정 본체는 이 한 벌뿐이다.
     function lineIsScriptBlockBoundary(raw, profile, options) {
       const source = String(raw || '').trim();
       if (!source) return false;
@@ -6024,8 +6066,8 @@
 
     function prepareScenarioLogicalLines(lines, profile) {
       const inlineSplit = splitInlineDialogMarkerLines(lines, profile);
-      const openDialogSplit = splitEmbeddedOpenDialogStartLines(inlineSplit, profile);
-      return splitEmbeddedDialogLines(regroupWrappedProseLines(regroupMultilineDialogLines(openDialogSplit, profile), profile), profile);
+      const openDialogSplit = splitLinesWith(inlineSplit, profile, splitEmbeddedOpenDialogStartLine);
+      return splitLinesWith(regroupWrappedProseLines(regroupMultilineDialogLines(openDialogSplit, profile), profile), profile, splitEmbeddedDialogLine);
     }
 
     function splitInlineDialogMarkerLines(lines, profile) {
@@ -6063,21 +6105,11 @@
       return /^[×xX＊*]{1,8}$/.test(source);
     }
 
-    function splitEmbeddedDialogLines(lines, profile) {
+    // 줄 목록을 분할기로 쪼개 다시 한 줄씩 펴는 유일본 — 조각 정규화와 빈 조각 버리기가 여기 한 벌뿐이다.
+    function splitLinesWith(lines, profile, splitLine) {
       const output = [];
       (lines || []).forEach((line) => {
-        splitEmbeddedDialogLine(line, profile).forEach(part => {
-          const clean = norm(part);
-          if (clean) output.push(clean);
-        });
-      });
-      return output;
-    }
-
-    function splitEmbeddedOpenDialogStartLines(lines, profile) {
-      const output = [];
-      (lines || []).forEach((line) => {
-        splitEmbeddedOpenDialogStartLine(line, profile).forEach(part => {
+        splitLine(line, profile).forEach(part => {
           const clean = norm(part);
           if (clean) output.push(clean);
         });
@@ -6188,6 +6220,23 @@
       return Boolean(parsed && parsed.speaker);
     }
 
+    // 씨앗 줄 뒤로 대사 한 덩어리를 어디까지 이어 붙일지 정하는 유일본 — 빈 줄은 건너뛰고
+    // 블록 경계에서 끊고 대사가 완성되면 멈춘다. 화자 큐 경로와 열린 대사 경로가 같이 쓴다.
+    function collectDialogGroup(lines, cursor, group, profile, includeSpeakerCue) {
+      while (cursor < lines.length && group.length < 32) {
+        const next = String(lines[cursor] || '').trim();
+        if (!next) { cursor += 1; continue; }
+        if (lineIsScriptBlockBoundary(next, profile, { completeDialog: false, includeSpeakerCue, end: false, cast: false })) break;
+        group.push(next);
+        if (dialogGroupComplete(group, profile)) {
+          cursor += 1;
+          break;
+        }
+        cursor += 1;
+      }
+      return cursor;
+    }
+
     function regroupMultilineDialogLines(lines, profile) {
       const output = [];
       for (let index = 0; index < (lines || []).length; index += 1) {
@@ -6195,18 +6244,7 @@
         if (!raw) continue;
         if (matchDialogSpeakerCueLine(raw) && index + 1 < lines.length && startsWithDialogQuote(lines[index + 1], profile)) {
           const group = [raw + String(lines[index + 1] || '').trim()];
-          let cursor = index + 2;
-          while (cursor < lines.length && group.length < 32) {
-            const next = String(lines[cursor] || '').trim();
-            if (!next) { cursor += 1; continue; }
-            if (lineIsScriptBlockBoundary(next, profile, { completeDialog: false, includeSpeakerCue: true, end: false, cast: false })) break;
-            group.push(next);
-            if (dialogGroupComplete(group, profile)) {
-              cursor += 1;
-              break;
-            }
-            cursor += 1;
-          }
+          const cursor = collectDialogGroup(lines, index + 2, group, profile, true);
           if (pushCompleteDialogGroup(output, group, profile)) {
             index = cursor - 1;
             continue;
@@ -6214,18 +6252,7 @@
         }
         if (lineHasOpenDialogStartSignal(raw, profile)) {
           const group = [raw];
-          let cursor = index + 1;
-          while (cursor < lines.length && group.length < 32) {
-            const next = String(lines[cursor] || '').trim();
-            if (!next) { cursor += 1; continue; }
-            if (lineIsScriptBlockBoundary(next, profile, { completeDialog: false, end: false, cast: false })) break;
-            group.push(next);
-            if (dialogGroupComplete(group, profile)) {
-              cursor += 1;
-              break;
-            }
-            cursor += 1;
-          }
+          const cursor = collectDialogGroup(lines, index + 1, group, profile, false);
           if (pushCompleteDialogGroup(output, group, profile)) {
             index = cursor - 1;
             continue;
@@ -6236,25 +6263,25 @@
       return output;
     }
 
-    function dialogGroupComplete(group, profile) {
+    // 대사 한 덩어리가 완성됐는가, 완성됐다면 내보낼 조각은 무엇인가를 함께 내는 유일본 —
+    // 루프의 중단 조건과 실제 출력이 같은 판정을 쓰도록 이 한 벌만 둔다(미완이면 null).
+    function dialogGroupCompleteParts(group, profile) {
       const joined = (group || []).join('\n');
-      if (parseDialog(joined, profile)) return true;
+      if (parseDialog(joined, profile)) return [joined];
       const split = splitEmbeddedDialogLine(joined, profile);
-      return split.length > 1 && split.some(part => parseDialog(part, profile));
+      if (split.length > 1 && split.some(part => parseDialog(part, profile))) return split;
+      return null;
+    }
+
+    function dialogGroupComplete(group, profile) {
+      return Boolean(dialogGroupCompleteParts(group, profile));
     }
 
     function pushCompleteDialogGroup(output, group, profile) {
-      const joined = (group || []).join('\n');
-      if (parseDialog(joined, profile)) {
-        output.push(joined);
-        return true;
-      }
-      const split = splitEmbeddedDialogLine(joined, profile);
-      if (split.length > 1 && split.some(part => parseDialog(part, profile))) {
-        split.forEach(part => output.push(part));
-        return true;
-      }
-      return false;
+      const parts = dialogGroupCompleteParts(group, profile);
+      if (!parts) return false;
+      parts.forEach(part => output.push(part));
+      return true;
     }
 
     function regroupWrappedProseLines(lines, profile) {
@@ -6743,6 +6770,7 @@
       return SCENE_TIME_WORDS.includes(norm(value));
     }
 
+    // 시간 표기를 조각으로 가르는 정본(중점·슬래시·공백이 구분자) — 판정·제거·추출이 같이 쓴다.
     function sceneTimeParts(value) {
       return norm(value).split(/[・／/\s]+/).map(part => part.trim()).filter(Boolean);
     }
@@ -6763,7 +6791,7 @@
       let clean = norm(value)
         .replace(/[（(]\s*([^）)\n]{1,40})(?:[）)]|$)/g, (match, inner) => isSceneTimeExpression(inner) ? '' : match)
         .trim();
-      const parts = clean.split(/[・／/\s]+/).map(part => part.trim()).filter(Boolean);
+      const parts = sceneTimeParts(clean);
       while (parts.length && isSceneTimeWord(parts[parts.length - 1])) parts.pop();
       return parts.length ? parts.join('・') : clean;
     }
@@ -6914,16 +6942,7 @@
         if (frontCharacterRunIndexes.has(index)) {
           const names = extractCastNames(text);
           if (names.length) {
-            const profile = parseCharacterProfileFromCastText(text, names[0]);
-            block.zone = 'cast_list';
-            block.type = 'cast_entry';
-            block.characterName = profile.name || names[0];
-            block.characterGender = block.characterGender || profile.gender || '';
-            block.characterAge = block.characterAge || profile.age || '';
-            block.characterProfile = Object.assign({}, block.characterProfile || {}, profile);
-            block.assignableToCut = false;
-            block.meta.confidence = Math.max(block.meta.confidence || 0, 0.90);
-            block.meta.evidence = uniq((block.meta.evidence || []).concat(['front cast']));
+            applyFrontCastEntry(block, text, names, 0.90);
             frontCastCount += 1;
             return;
           }
@@ -6931,21 +6950,26 @@
         if (beforeFirstScene && seenCastSection && Number(block.pageNo || 0) === castSectionPage && frontCastCount < 48 && isFrontCastLine(text, index, block.pageNo)) {
           const names = extractCastNames(text);
           if (names.length) {
-            const profile = parseCharacterProfileFromCastText(text, names[0]);
-            block.zone = 'cast_list';
-            block.type = 'cast_entry';
-            block.characterName = profile.name || names[0];
-            block.characterGender = block.characterGender || profile.gender || '';
-            block.characterAge = block.characterAge || profile.age || '';
-            block.characterProfile = Object.assign({}, block.characterProfile || {}, profile);
-            block.assignableToCut = false;
-            block.meta.confidence = Math.max(block.meta.confidence || 0, 0.66);
-            block.meta.evidence = uniq((block.meta.evidence || []).concat(['front cast']));
+            applyFrontCastEntry(block, text, names, 0.66);
             frontCastCount += 1;
           }
         }
         if (block.type === 'scene_heading' || block.type === 'dialog' || block.zone === 'body') beforeFirstScene = false;
       });
+    }
+
+    // 앞머리 캐스트 줄 하나를 cast_entry 블록으로 확정하는 유일본 — 자리마다 다른 것은 신뢰도뿐이다.
+    function applyFrontCastEntry(block, text, names, confidence) {
+      const profile = parseCharacterProfileFromCastText(text, names[0]);
+      block.zone = 'cast_list';
+      block.type = 'cast_entry';
+      block.characterName = profile.name || names[0];
+      block.characterGender = block.characterGender || profile.gender || '';
+      block.characterAge = block.characterAge || profile.age || '';
+      block.characterProfile = Object.assign({}, block.characterProfile || {}, profile);
+      block.assignableToCut = false;
+      block.meta.confidence = Math.max(block.meta.confidence || 0, confidence);
+      block.meta.evidence = uniq((block.meta.evidence || []).concat(['front cast']));
     }
 
     function detectFrontCharacterRunIndexes(blocks) {
@@ -7165,11 +7189,12 @@
             scores: block.meta && block.meta.scores || {}
           }
         };
-        expandSceneHeadingActionTailBlock(shaped).forEach(next => normalized.push(next));
+        normalized.push(shaped);
       });
-      return normalized;
+      return expandSceneHeadingActionTailBlocks(normalized);
     }
 
+    // 씬머리에 붙은 지문을 떼어 블록을 펴는 유일한 확장 지점 — 임포트 정리와 프로젝트 정형이 같이 부른다.
     function expandSceneHeadingActionTailBlocks(blocks) {
       const expanded = [];
       (blocks || []).forEach((block) => {
@@ -7257,12 +7282,7 @@
       (project.sourceBlocks || []).forEach((block) => {
         const ids = [];
         (project.entities || []).forEach((entity) => {
-          if ((entity.sourceRefs || []).includes(block.id)) ids.push(entity.id);
-          if ((block.speakerNames || []).some(name => entity.type === 'character' && (entity.name === name || (entity.aliases || []).includes(name)))) ids.push(entity.id);
-          if (block.speaker && entity.type === 'character' && (entity.name === block.speaker || (entity.aliases || []).includes(block.speaker))) ids.push(entity.id);
-          if (block.characterName && entity.type === 'character' && (entity.name === block.characterName || (entity.aliases || []).includes(block.characterName))) ids.push(entity.id);
-          if (block.locationName && entity.type === 'place' && entity.name === block.locationName) ids.push(entity.id);
-          if (entityNameAppearsInText(entity, block.text || block.rawText || '')) ids.push(entity.id);
+          if (blockMatchesEntity(block, entity)) ids.push(entity.id);
         });
         block.linkedEntityIds = uniq(ids);
       });
@@ -7950,7 +7970,7 @@
         ? knownStableTopLinePct
         : pdfJsStableBodyTopLineFromCandidates((pages || []).map(page => page && page.bodyTopLineCandidatePct), (pages || []).length);
       (pages || []).forEach((page) => {
-        const sourceLines = page.bodyBaseLines || page.lines || [];
+        const sourceLines = pdfBaseBodyLinesForPage(page);
         const pageNo = Number(page && (page.pageNo || page.sourcePageIndex) || 1);
         const pageTopLine = pdfJsPageBodyTopLinePct(page && page.bodyTopLineCandidatePct, stableTopLine);
         // 본문 범위의 권위는 pdfBodyRangeForPage 한 곳이다. 예전에는 여기서 즉석 리터럴로 범위를
@@ -7958,9 +7978,9 @@
         // 모든 줄이 클립에 탈락해 page.lines 와 본문 텍스트가 통째로 비었다.
         // 값·트리거를 먼저 확정하고 리뷰·매칭·렌더가 이미 쓰는 그 함수를 부른다.
         page.bodyCutLinePct = stableCut;
-        page.bodyCutLineTrigger = stableCut == null ? '' : 'annotation_layout_stable';
+        page.bodyCutLineTrigger = stableCut == null ? '' : PDF_BODY_CUT_LINE_TRIGGER;
         page.bodyTopLinePct = pageTopLine;
-        page.bodyTopLineTrigger = pageTopLine == null ? '' : 'layout_divider_stable';
+        page.bodyTopLineTrigger = pageTopLine == null ? '' : PDF_BODY_TOP_LINE_TRIGGER;
         const bodyRange = pdfBodyRangeForPage({ draftPages: [page] }, pageNo);
         // Colour-flagged lines were shunted to colorLines by the EARLY raw-parse heuristic
         // (isPdfJsOverlayLineColorNote — content-score based, no position awareness) before
@@ -8170,7 +8190,7 @@
             : (!extraText && tailKeys.values().next().value ? 'rejected' : '');
         if (tailStatus) line.pdfLogicalTailStatus = tailStatus;
         else delete line.pdfLogicalTailStatus;
-        const rect = normalizeCompactOverlayRect(rawRect, 0.24, 0.75);
+        const rect = normalizeCompactOverlayRect(rawRect, ...PDF_GUIDE_RECT_MIN);
         const pitch = pdfVerticalLinePitchPct(line, rect, currentGlyphs);
         const bottomPad = pdfVerticalLogicalTailBottomPadPct(pitch, extraGlyphs);
         const targetHeight = Number(rect.height || 0) + pitch * extraGlyphs + bottomPad;
@@ -8178,7 +8198,7 @@
         const next = normalizeCompactOverlayRect(Object.assign({}, rect, {
           height: Math.min(100 - Number(rect.top || 0), targetHeight),
           vertical: true
-        }), 0.24, 0.75);
+        }), ...PDF_GUIDE_RECT_MIN);
         line.compactOverlayRect = next;
         line.overlayRect = next;
         line.pdfLogicalTailText = extraText;
@@ -8227,9 +8247,8 @@
           const height = Number(item && item.heightPct) || 0;
           return count >= 2 && height > 0 ? height / count : 0;
         })
-        .filter(value => Number.isFinite(value) && value > 0)
-        .sort((a, b) => a - b);
-      if (pitches.length) return Math.max(0.6, pitches[Math.floor(pitches.length / 2)]);
+        .filter(value => Number.isFinite(value) && value > 0);
+      if (pitches.length) return Math.max(0.6, pdfMedian(pitches));
       return Math.max(0.6, Number(rect && rect.height || 0) / Math.max(1, Number(glyphCount) || 1));
     }
 
@@ -8325,16 +8344,8 @@
         .filter(value => Number.isFinite(value) && value >= 45 && value <= 96)
         .sort((a, b) => a - b);
       if (values.length < 2) return null;
-      const clusters = [];
-      values.forEach((value) => {
-        let cluster = clusters.find(entry => Math.abs(entry.center - value) <= 2.4);
-        if (!cluster) {
-          cluster = { values: [], center: value };
-          clusters.push(cluster);
-        }
-        cluster.values.push(value);
-        cluster.center = cluster.values.reduce((sum, next) => sum + next, 0) / cluster.values.length;
-      });
+      const clusters = pdfJsLinePositionClusters(values.map(value => ({ value })), 'value', 2.4)
+        .map(cluster => ({ center: cluster.center, values: cluster.entries.map(entry => entry.value) }));
       clusters.sort((a, b) => b.values.length - a.values.length || pdfNumberRange(a.values) - pdfNumberRange(b.values) || b.center - a.center);
       const required = pdfRequiredBodyCutCandidateCount(pageCount);
       if (!clusters[0] || clusters[0].values.length < required) return null;
@@ -8357,8 +8368,7 @@
 
     function pdfJsBodyCutLineFromColorLines(lines) {
       const rects = (lines || [])
-        .map(line => line && (line.compactOverlayRect || line.overlayRect))
-        .map(rect => rect ? normalizeOverlayRect(rect) : null)
+        .map(line => pdfOverlayLineRectForBodyCheck(line))
         .filter(Boolean);
       if (!rects.length) return null;
       const clusters = pdfJsVerticalRectClusters(rects)
@@ -8378,8 +8388,7 @@
     function pdfJsBodyCutLineFromDetachedLowerLines(lines, pageNo) {
       const entries = (lines || [])
         .map((line, index) => {
-          const rect = line && (line.compactOverlayRect || line.overlayRect);
-          const normalized = rect ? normalizeOverlayRect(rect) : null;
+          const normalized = pdfOverlayLineRectForBodyCheck(line);
           if (!normalized) return null;
           const top = Number(normalized.top || 0);
           const height = Number(normalized.height || 0);
@@ -8466,6 +8475,8 @@
       return Math.round(median * 100) / 100;
     }
 
+    // 값이 허용치 안이면 같은 무리로 묶고 중심을 그 평균으로 갱신하는 묶기 정본 —
+    // 줄을 좌표로 묶는 쪽과 본문 하한선 후보값을 묶는 쪽이 허용치만 달리해 같이 쓴다.
     function pdfJsLinePositionClusters(entries, field, tolerance) {
       const clusters = [];
       (entries || []).slice().sort((a, b) => Number(a[field]) - Number(b[field])).forEach((entry) => {
@@ -8698,6 +8709,7 @@
       };
     }
 
+    // 본문 판정에 쓸 오버레이 라인 사각형을 고른다(compact 우선) — 이 규칙의 유일한 사본이다.
     function pdfOverlayLineRectForBodyCheck(line) {
       const rect = line && (line.compactOverlayRect || line.overlayRect);
       return rect ? normalizeOverlayRect(rect) : null;
@@ -9284,6 +9296,8 @@
     // 여러 글자 아이템이 페이지 글자의 이 몫은 돼야 그 모양을 페이지의 축으로 받아들인다.
     const PDF_GLYPH_SHAPE_MIN_SHARE = 0.5;
 
+    // 값 목록의 중앙값(길이가 짝수면 위쪽, 빈 목록은 0)을 내는 정본 — 간격·피치 계산이 이것을 쓴다.
+    // 중앙값(짝수 길이면 위쪽 중앙)을 정하는 유일한 사본이다 — 빈 배열은 0.
     function pdfMedian(values) {
       const sorted = (values || []).slice().sort((a, b) => a - b);
       return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
@@ -9657,9 +9671,7 @@
         const diff = values[index] - values[index - 1];
         if (diff > 0.1) diffs.push(diff);
       }
-      if (!diffs.length) return 0;
-      diffs.sort((a, b) => a - b);
-      return diffs[Math.floor(diffs.length / 2)];
+      return pdfMedian(diffs);
     }
 
     // Each fragment's own .items order can be unreliable here (vertical lines are re-ordered by
@@ -9780,12 +9792,25 @@
     function pdfJsTextItemVisualGroupKey(item) {
       if (isPdfJsAnnotationColorTextItem(item)) return item.pdfAnnotationVisualGroupKey || 'annotation:blue_comment';
       const key = String(item && item.visualGroupKey || item && item.colorKey || '').trim();
-      if (!key || key === 'color:gray:0') return '';
+      if (!key) return '';
       if (isPdfJsBlueColorKey(key)) return key;
       return isPdfJsBodyNeutralColorKey(key) ? '' : key;
     }
 
+    // 색 키 하나에 답이 정해지고 문서 안에서 종류가 한 줌이라 판정을 적어 둔다.
+    // 가장 흔한 먹색 키를 문자열 비교로 먼저 걸러내던 자리가 있었고, 그 몫을 이 표가 대신한다.
+    const pdfJsBodyNeutralColorKeyCache = new Map();
+
+    // 이 색 키가 '중립 본문색'(먹·짙은 무채색)인지 정한다 — 그 임계 세 개를 가진 유일한 사본이다.
     function isPdfJsBodyNeutralColorKey(key) {
+      const raw = String(key || '');
+      if (pdfJsBodyNeutralColorKeyCache.has(raw)) return pdfJsBodyNeutralColorKeyCache.get(raw);
+      const result = computeIsPdfJsBodyNeutralColorKey(raw);
+      pdfJsBodyNeutralColorKeyCache.set(raw, result);
+      return result;
+    }
+
+    function computeIsPdfJsBodyNeutralColorKey(key) {
       const color = pdfJsColorKeyToPdfColor(key);
       if (!color) return false;
       const values = color.values || [];
@@ -9979,15 +10004,19 @@
       const [factor, minPad, maxPad] = item.verticalRunExpanded
         ? (item.verticalRunMeasured ? [0.8, 0.9, 1.9] : [0.68, 0.55, 2.2])
         : [0.8, 0.6, 1.9];
-      if (item.verticalRunExpanded) return pdfVerticalPadPct(pitch, factor, minPad, maxPad);
       // Lone glyph (× / 決 / a single stacked kana / a trailing bracket). Content glyphs fill their cell
       // and their ink descends ~0.6 below the advance box, so they need the pad (verified: ×××× ink sat
       // 0.9% below its box). But high-sitting punctuation — 」』）…。 — draws in the TOP of its cell
       // (measured: a trailing 」 ink ended 1.5% ABOVE its advance-box bottom), so padding it only bloats
       // the box downward into empty space. Exempt pure-punctuation fragments.
-      if (isPdfVerticalPunctuationFragment(item.text || item.str || '')) return 0;
+      // 이 면제는 낱글자에만 걸린다 — 확장된 런은 예전부터 면제를 안 받고 바로 아래 반환으로 갔다.
+      if (!item.verticalRunExpanded && isPdfVerticalPunctuationFragment(item.text || item.str || '')) return 0;
+      // 위 삼중쌍(계수·하한·상한)을 적용해 하단 패딩을 낸다 — 이 함수의 유일한 반환 지점이다.
       return pdfVerticalPadPct(pitch, factor, minPad, maxPad);
     }
+
+    // 가이드 줄에서 만든 세로 사각형에 거는 최소 [폭, 높이] 퍼센트 — 이 하한의 유일한 사본이다.
+    const PDF_GUIDE_RECT_MIN = [0.24, 0.75];
 
     function normalizeCompactOverlayRect(rect, minWidth, minHeight) {
       const source = rect || {};
@@ -10508,6 +10537,7 @@
       collectPdfObjectRefs(kidsMatch ? kidsMatch[1] : '').forEach(childId => collectPdfPageObjectIdsInTreeOrder(childId, objectMap, out, seen));
     }
 
+    // 쪽 객체의 /Contents 가 가리키는 콘텐츠 스트림 객체 ID 를 그림 순서대로 낸다 — 이 추적의 유일한 사본이다.
     function pdfPageContentStreamRefsInOrder(pageBody, objectMap) {
       const match = String(pageBody || '').match(/\/Contents\s*(\[[\s\S]*?\]|\d+\s+\d+\s+R)/);
       if (!match) return [];
@@ -10535,26 +10565,9 @@
       Object.keys(objectMap).forEach((objectId) => {
         const body = objectMap[objectId] || '';
         if (!/\/Type\s*\/Page\b/.test(body) || /\/Type\s*\/Pages\b/.test(body)) return;
-        collectPdfContentsRefs(body, objectMap, ids, Object.create(null));
+        pdfPageContentStreamRefsInOrder(body, objectMap).forEach(contentId => ids.add(contentId));
       });
       return ids;
-    }
-
-    function collectPdfContentsRefs(body, objectMap, ids, seen) {
-      const match = String(body || '').match(/\/Contents\s*(\[[\s\S]*?\]|\d+\s+\d+\s+R)/);
-      if (!match) return;
-      collectPdfObjectRefs(match[1]).forEach((objectId) => collectPdfContentRef(objectId, objectMap, ids, seen));
-    }
-
-    function collectPdfContentRef(objectId, objectMap, ids, seen) {
-      if (!objectId || seen[objectId]) return;
-      seen[objectId] = true;
-      const body = objectMap[objectId] || '';
-      if (/stream[\r\n]/.test(body)) {
-        ids.add(String(objectId));
-        return;
-      }
-      collectPdfObjectRefs(body).forEach(nextId => collectPdfContentRef(nextId, objectMap, ids, seen));
     }
 
     function collectPdfObjectRefs(value) {
@@ -10584,10 +10597,13 @@
       return -1;
     }
 
-    function buildPdfUnicodeMap(streams) {
+    // cmap 프로필의 map 을 스트림 순서대로 접어 문서 한 벌의 유니코드 표로 만든다(뒤 스트림이 이긴다).
+    // CMap 텍스트 파싱 자체는 buildPdfCmapProfiles 한 곳에서만 하고 여기는 접기만 한다.
+    function buildPdfUnicodeMap(profiles) {
       const map = Object.create(null);
-      (streams || []).forEach((stream) => {
-        const streamMap = buildPdfUnicodeMapFromCMapText(stream);
+      (profiles || []).forEach((profile) => {
+        const streamMap = profile && profile.map;
+        if (!streamMap) return;
         Object.keys(streamMap).forEach((key) => { map[key] = streamMap[key]; });
       });
       return map;
@@ -10623,6 +10639,11 @@
       return map;
     }
 
+    // CID 폴백 ordering 을 알아보는 패턴 — 문서 전체와 폰트 객체가 같은 자를 쓰도록 유일한 사본으로 둔다.
+    // 두 질문(문서에 폴백이 있나 / 이 폰트가 무슨 폴백인가)이 다를 뿐 판별 기준은 하나다. g 플래그가 없어 공유해도 lastIndex 가 없다.
+    const PDF_CID_ORDERING_JAPAN1_RE = /Adobe[-_]Japan1|Ordering\s*\(\s*Japan1\s*\)|Japan1/i;
+    const PDF_CID_ORDERING_KOREA1_RE = /Adobe[-_]Korea1|Ordering\s*\(\s*Korea1\s*\)|Korea1/i;
+
     function buildPdfDecodeContext(streams, pdfSource) {
       const source = String(pdfSource || '');
       const safeStreams = streams || [];
@@ -10630,10 +10651,10 @@
       const fontInfo = buildPdfFontInfoMap(source);
       const cmapProfiles = buildPdfCmapProfiles(safeStreams);
       const context = {
-        cmap: buildPdfUnicodeMap(safeStreams),
+        cmap: buildPdfUnicodeMap(cmapProfiles),
         fontCmaps: buildPdfFontCmapMap(fontInfo, cmapProfiles),
-        hasJapan1Fallback: /Adobe[-_]Japan1|Ordering\s*\(\s*Japan1\s*\)|Japan1/i.test(source + '\n' + streamSource),
-        hasKorea1Fallback: /Adobe[-_]Korea1|Ordering\s*\(\s*Korea1\s*\)|Korea1/i.test(source + '\n' + streamSource),
+        hasJapan1Fallback: PDF_CID_ORDERING_JAPAN1_RE.test(source + '\n' + streamSource),
+        hasKorea1Fallback: PDF_CID_ORDERING_KOREA1_RE.test(source + '\n' + streamSource),
         fontFallbacks: buildPdfFontFallbackMap(source),
         fontInfo
       };
@@ -10672,6 +10693,7 @@
       return fontInfo;
     }
 
+    // 스트림마다 CMap 을 파싱해 map + 판별용 통계(키 수·일본어·ascii)를 낸다 — 문서 내 CMap 파싱의 유일한 사본이다.
     function buildPdfCmapProfiles(streams) {
       const entries = streams && streams.__entries || [];
       return (streams || []).map((stream, streamIndex) => {
@@ -10752,8 +10774,8 @@
       if (!objectId || seen[objectId]) return '';
       seen[objectId] = true;
       const body = objectMap[objectId] || '';
-      if (/Ordering\s*\(\s*Japan1\s*\)|Adobe[-_]Japan1|Japan1/i.test(body)) return 'japan1';
-      if (/Ordering\s*\(\s*Korea1\s*\)|Adobe[-_]Korea1|Korea1/i.test(body)) return 'korea1';
+      if (PDF_CID_ORDERING_JAPAN1_RE.test(body)) return 'japan1';
+      if (PDF_CID_ORDERING_KOREA1_RE.test(body)) return 'korea1';
       const descendant = body.match(/\/DescendantFonts\s*\[\s*(\d+)\s+\d+\s+R/);
       return descendant ? pdfFontObjectFallback(objectMap, descendant[1], seen) : '';
     }
@@ -11197,8 +11219,8 @@
     function isPdfColumnCollisionRow(line) {
       const raw = String(line || '');
       const length = charLen(raw);
-      const sceneMarks = (raw.match(new RegExp(SCENE_MARKER_CLASS, 'g')) || []).length;
-      const quoteMarks = (raw.match(/[「」『』]/g) || []).length;
+      const sceneMarks = countTextMatches(raw, new RegExp(SCENE_MARKER_CLASS, 'g'));
+      const quoteMarks = countTextMatches(raw, /[「」『』]/g);
       if (length >= 8 && sceneMarks >= 4) return true;
       if (length > 24 && sceneMarks >= 2) return true;
       if (length > 24 && quoteMarks >= 3) return true;
@@ -11303,8 +11325,8 @@
       const geometryText = geometryLines.join('\n');
       const contentText = contentOrderLines.join('\n');
       const geometryShortRatio = geometryLines.filter(line => charLen(line) <= 2).length / Math.max(1, geometryLines.length);
-      const contentJapanese = (contentText.match(/[\u3040-\u30ff\u3400-\u9fff]/g) || []).length;
-      const geometryJapanese = (geometryText.match(/[\u3040-\u30ff\u3400-\u9fff]/g) || []).length;
+      const contentJapanese = countJapaneseGlyphs(contentText);
+      const geometryJapanese = countJapaneseGlyphs(geometryText);
       const contentMarkers = pdfRecognizableLineMarkerScore(contentText);
       const geometryMarkers = pdfRecognizableLineMarkerScore(geometryText);
       const contentScore = pdfGroupedTextScore(contentOrderLines);
@@ -11315,7 +11337,7 @@
       if (contentSyntaxScore >= geometrySyntaxScore + 16 && contentJapanese >= geometryJapanese * 0.75) return true;
       if (/[0-9０-９]{4}\s*年\s*[0-9０-９]{1,2}\s*月\s*[0-9０-９]{1,2}\s*日/.test(contentText) && !/[0-9０-９]{4}\s*年\s*[0-9０-９]{1,2}\s*月\s*[0-9０-９]{1,2}\s*日/.test(geometryText)) return true;
       if (contentScore >= geometryScore + 18 && contentJapanese >= geometryJapanese * 0.75) return true;
-      if (/登場人物|登場キャラ|キャラクター|CAST|モブキャラクター/.test(contentText) && !/登場人物|登場キャラ|キャラクター|CAST|モブキャラクター/.test(geometryText)) return true;
+      if (CAST_SECTION_MENTION_RE.test(contentText) && !CAST_SECTION_MENTION_RE.test(geometryText)) return true;
       if (geometryShortRatio > 0.55 && contentMarkers >= geometryMarkers && contentJapanese >= geometryJapanese * 0.8) return true;
       return false;
     }
@@ -11324,14 +11346,14 @@
       const raw = String(text || '');
       let score = 0;
       const patterns = [
-        /登場人物|登場キャラ|キャラクター|CAST|モブキャラクター/g,
+        new RegExp(CAST_SECTION_MENTION_RE.source, 'g'),
         /第\s*[0-9０-９一二三四五六七八九十]+\s*話|[0-9０-９]+\s*話/g,
         new RegExp(DRAFT_STATUS_ALT + '|コンテ', 'g'),
         new RegExp(CREDIT_ROLE_ALT, 'g'),
-        new RegExp(SCENE_MARKER_CLASS + '\\s*[\\u3040-\\u30ff\\u3400-\\u9fffァ-ヴ]', 'g'),
+        new RegExp(SCENE_MARKER_CLASS + '\\s*[' + JP_GLYPH_RANGE + 'ァ-ヴ]', 'g'),
         /「[^」]{2,}」|『[^』]{2,}』/g
       ];
-      patterns.forEach((pattern) => { score += (raw.match(pattern) || []).length; });
+      patterns.forEach((pattern) => { score += countTextMatches(raw, pattern); });
       return score;
     }
 
@@ -11753,16 +11775,22 @@
       return SCENE_MARKER_LEAD_RE.test(String(text || '').trim());
     }
 
+    // 패턴이 텍스트에 몇 번 나오는지 센다 — 이 세기의 유일한 사본이다(빈 값·무매치는 0).
     function countTextMatches(text, pattern) {
       return (String(text || '').match(pattern) || []).length;
     }
 
+    // 텍스트에 일본어 글자가 몇 자 들어 있는지 센다 — JP_GLYPH_RANGE 를 세는 유일한 사본이다.
+    function countJapaneseGlyphs(text) {
+      return countTextMatches(text, new RegExp('[' + JP_GLYPH_RANGE + ']', 'g'));
+    }
+
     function pdfGroupedTextScore(lines) {
       const joined = (lines || []).join('\n');
-      const japanese = (joined.match(/[\u3040-\u30ff\u3400-\u9fff]/g) || []).length;
+      const japanese = countJapaneseGlyphs(joined);
       const singleCharLines = (lines || []).filter(line => charLen(line) <= 1).length;
-      const dialog = (joined.match(/[「」『』]/g) || []).length;
-      const sceneHeads = (joined.match(new RegExp(SCENE_MARKER_CLASS, 'g')) || []).length;
+      const dialog = countTextMatches(joined, /[「」『』]/g);
+      const sceneHeads = countTextMatches(joined, new RegExp(SCENE_MARKER_CLASS, 'g'));
       return japanese + dialog * 3 + sceneHeads * 2 - singleCharLines * 8 - Math.max(0, (lines || []).length - 180) * 0.2;
     }
 
@@ -11901,10 +11929,10 @@
       const raw = String(text || '').normalize('NFKC');
       return {
         length: Array.from(raw).length,
-        japanese: (raw.match(/[\u3040-\u30ff\u3400-\u9fff]/g) || []).length,
-        latin: (raw.match(/[A-Za-z]/g) || []).length,
-        digits: (raw.match(/[0-9]/g) || []).length,
-        punctuation: (raw.match(/[()[\]{}<>:：;；,，.．/_-]/g) || []).length
+        japanese: countJapaneseGlyphs(raw),
+        latin: countTextMatches(raw, /[A-Za-z]/g),
+        digits: countTextMatches(raw, /[0-9]/g),
+        punctuation: countTextMatches(raw, /[()[\]{}<>:：;；,，.．/_-]/g)
       };
     }
 
@@ -11946,10 +11974,17 @@
         || lineHasDialogStartSignal(raw, null, { includeSpeakerCue: true });
     }
 
+    // URL·도메인 꼴 문자열인지 판정한다 — 이 판정의 유일한 사본이다. 트림은 부르는 쪽 몫이다
+    // (여기서 앞뒤를 깎으면 앞머리 https 판정이 달라진다).
+    function isPdfUrlLikeText(text) {
+      const raw = String(text || '');
+      return /^https?:\/\//i.test(raw) || /www\.|\.com|\.jp|\.html/i.test(raw);
+    }
+
     function isPdfDetachedNoteText(text) {
       const raw = String(text || '').trim();
       if (/^※/.test(raw)) return true;
-      if (/^https?:\/\//i.test(raw) || /www\.|\.com|\.jp|\.html/i.test(raw)) return true;
+      if (isPdfUrlLikeText(raw)) return true;
       if (/^[A-Za-z0-9._:/-]{6,}$/.test(raw) && /[./:-]/.test(raw)) return true;
       if (/^[↑→>]/.test(raw)) return true;
       return isPdfInlineNoiseText(raw);
@@ -12156,7 +12191,7 @@
     }
 
     function extractProjectMeta(blocks) {
-      const meta = { title: '', episode: '', language: 'ja-ko-mixed' };
+      const meta = { title: '', episode: '' };
       for (const b of blocks) {
         if (!meta.title && b.type === 'front_title') meta.title = b.text;
         if (!meta.episode && b.type === 'front_episode') meta.episode = b.text;
@@ -12190,6 +12225,8 @@
       return ({ inferred: 0, draft: 1, soft: 2, hard: 3 })[authority] || 0;
     }
 
+    // 엔티티의 status·authority·tags 를 내려가지 않게 올린다 — 이 승격 규칙의 유일한 사본이다.
+    // 안 넘긴 항목은 건드리지 않는다.
     function promoteEntity(entity, status, authority, tags) {
       if (!entity) return null;
       if (status) {
@@ -12198,12 +12235,6 @@
       }
       if (authority && authorityRank(authority) > authorityRank(entity.authority || 'inferred')) entity.authority = authority;
       if (tags && tags.length) entity.tags = uniq((entity.tags || []).concat(tags));
-      return entity;
-    }
-
-    function addEntityTag(entity, tag) {
-      if (!entity || !tag) return entity;
-      entity.tags = uniq((entity.tags || []).concat(tag));
       return entity;
     }
 
@@ -12225,10 +12256,7 @@
           setEntityScope(entity, block && block.sourceDocumentId === 'project-common' ? 'project' : (entity.scope || 'document'), block && block.sourceDocumentId || project.activeDocumentId);
         }
       }
-      if (status && entity.status !== status) {
-        if (status === 'confirmed' || entity.status === 'candidate' || !entity.status) entity.status = status;
-        else if (status === 'observed' && entity.status !== 'confirmed') entity.status = 'observed';
-      }
+      promoteEntity(entity, status);
       return entity;
     }
 
@@ -12376,7 +12404,10 @@
     // 조직 접미사만 맞은 낱말을 걸러낸다. 접미사를 떼고 남는 고유부가 2자는 돼야 이름이다 —
     // 結局·本庁·官庁·6課·放課(放課後의 앞머리)·コラボ(ラボ 접미사) 가 전부 고유부 1자였다.
     // 株式会社는 조직의 형태를 가리키는 말이라 그 자체로는 이름이 아니다.
-    const ORG_NAME_SUFFIX_RE = /(?:研究センター|研究所|評議会|会社|省|庁|局|課|社|ラボ)$/u;
+    // 조직 접미사 목록의 정본. 아래 검사와 extractEntities 의 추출 정규식이 같은 이 한 벌을 쓴다 —
+    // 갈라지면 정규식은 잡는데 검사는 무조건 통과시키는 어긋남이 생긴다.
+    const ORG_NAME_SUFFIX_ALT = '研究センター|研究所|評議会|会社|省|庁|局|課|社|ラボ';
+    const ORG_NAME_SUFFIX_RE = new RegExp('(?:' + ORG_NAME_SUFFIX_ALT + ')$', 'u');
     const ORG_FORM_WORDS = ['株式会社', '有限会社', '合同会社', '民間軍事会社'];
     function isPlausibleOrganizationName(name) {
       const clean = norm(name);
@@ -12389,7 +12420,7 @@
     function extractEntities(project) {
       const orgSpecific = workTermAlternation(WORK_TERMS.organizations);
       const orgRegex = new RegExp('(' + (orgSpecific ? orgSpecific + '|' : '')
-        + '民間軍事会社|[一-龠々ァ-ヴーA-Za-z0-9・]+(?:省|庁|局|課|社|会社|評議会|研究所|研究センター|ラボ))', 'g');
+        + '民間軍事会社|[一-龠々ァ-ヴーA-Za-z0-9・]+(?:' + ORG_NAME_SUFFIX_ALT + '))', 'g');
       const techTerms = GENERIC_TECH_TERMS.concat(WORK_TERMS.technology);
       const dialogSpeakers = uniq((project.sourceBlocks || []).flatMap(b => dialogSpeakerNamesForBlock(b)).filter(Boolean));
       let previousSceneLocation = '';
@@ -12428,13 +12459,13 @@
           const fromScene = b.type === 'scene_heading';
           const entity = upsertEntity(project, b.locationName, 'place', b.id, fromScene ? 0.94 : 0.72, fromScene ? 'confirmed' : 'candidate');
           if (fromScene) promoteEntity(entity, 'confirmed', 'draft', ['source:scene']);
-          if (entity && b.timeOfDay) addEntityTag(entity, 'time:' + b.timeOfDay);
+          if (entity && b.timeOfDay) promoteEntity(entity, '', '', ['time:' + b.timeOfDay]);
         }
         if (b.type === 'scene_heading') {
           extractPlaceCandidates(b.text || '', previousSceneLocation).forEach((place, index) => {
             const entity = upsertEntity(project, place, 'place', b.id, index === 0 ? 0.94 : 0.86, 'confirmed');
             promoteEntity(entity, 'confirmed', 'draft', ['source:scene']);
-            if (entity && b.timeOfDay) addEntityTag(entity, 'time:' + b.timeOfDay);
+            if (entity && b.timeOfDay) promoteEntity(entity, '', '', ['time:' + b.timeOfDay]);
           });
           if (b.locationName) previousSceneLocation = b.locationName;
         }
@@ -12617,9 +12648,12 @@
       return clean;
     }
 
+    // 인물 목록 줄에서 머리말을 떼는 규칙의 유일한 사본. 머리말 표기가 늘면 여기만 고친다.
+    const CAST_SECTION_HEAD_RE = /^(?:登場人物|〇登場人物|○登場人物|■登場人物|《登場人物》|\[\s*登場人物\s*\]|登場キャラ|キャラクター|人物|モブキャラクター)\s*/;
+
     function extractCastMetas(text) {
       const raw = norm(text)
-        .replace(/^(?:登場人物|〇登場人物|○登場人物|■登場人物|《登場人物》|\[\s*登場人物\s*\]|登場キャラ|キャラクター|人物|モブキャラクター)\s*/, '')
+        .replace(CAST_SECTION_HEAD_RE, '')
         .replace(SCENE_MARKER_TRIM_RE, '')
         .replace(/^[：:]/, '')
         .trim();
@@ -12682,7 +12716,7 @@
     function extractCastNames(text) {
       let raw = String(text || '').replace(/[\u3000\t]+/g, ' ').trim();
       raw = raw
-        .replace(/^(?:登場人物|〇登場人物|○登場人物|■登場人物|《登場人物》|\[\s*登場人物\s*\]|登場キャラ|キャラクター|人物|モブキャラクター)\s*/, '')
+        .replace(CAST_SECTION_HEAD_RE, '')
         .replace(/^[：:]/, '')
         .trim();
       if (!raw) return [];
@@ -13141,7 +13175,7 @@
 
     function switchActiveDocument(documentId) {
       const targetDoc = documentById(documentId);
-      if (!targetDoc || targetDoc.documentKind === 'project_common' || targetDoc.id === 'project-common') return;
+      if (!targetDoc || isProjectCommonDocument(targetDoc)) return;
       saveActiveInputToDocument();
       state.project.activeDocumentId = documentId;
       state.activeScriptPageNo = 1;
@@ -13382,18 +13416,29 @@
       openSourceReviewModal(doc);
     }
 
-    function groupBlocksByPage(blocks) {
+    // 목록을 쪽으로 묶어 쪽 오름차순 [pageNo, 항목들] 배열을 낸다 — 이 묶기·정렬의 유일한 사본이다.
+    // 무엇을 쪽 번호로 볼지(코어션·널 가드)는 부르는 쪽이 getPageNo 로 정한다.
+    function groupByPageNo(list, getPageNo) {
       const pages = new Map();
-      (blocks || []).forEach((block) => {
-        const pageNo = block.pageNo || 1;
+      (list || []).forEach((entry) => {
+        const pageNo = getPageNo(entry);
         if (!pages.has(pageNo)) pages.set(pageNo, []);
-        pages.get(pageNo).push(block);
+        pages.get(pageNo).push(entry);
       });
       return Array.from(pages.entries()).sort((a, b) => Number(a[0]) - Number(b[0]));
     }
 
+    // 미리보기에 들어갈 블록을 쪽·순서로 세운다. **정렬 규칙은 이 한 벌이고**
+    // 패널과 디버그 컨텍스트가 같은 목록을 본다.
+    function scriptPreviewBlocksInOrder() {
+      return activeDocumentBlocks()
+        .filter(isScriptPreviewBlock)
+        .slice()
+        .sort((a, b) => (a.pageNo || 0) - (b.pageNo || 0) || (a.globalOrder || a.order || 0) - (b.globalOrder || b.order || 0));
+    }
+
     function scriptPreviewPageEntries(doc, blocks) {
-      const grouped = new Map(groupBlocksByPage(blocks).map(([pageNo, pageBlocks]) => [Number(pageNo) || 1, pageBlocks]));
+      const grouped = new Map(groupByPageNo(blocks, block => block.pageNo || 1).map(([pageNo, pageBlocks]) => [Number(pageNo) || 1, pageBlocks]));
       const pageNos = new Set(Array.from(grouped.keys()));
       if (doc && doc.draftSourceType === 'pdf') {
         (blocks || []).forEach((block) => {
@@ -13449,7 +13494,7 @@
 
     function isPdfLinkAnnotation(note) {
       const text = String(note && (note.href || note.text) || '');
-      return Boolean(note && note.role === 'pdf_link') || /^https?:\/\//i.test(text) || /www\.|\.com|\.jp|\.html/i.test(text);
+      return Boolean(note && note.role === 'pdf_link') || isPdfUrlLikeText(text);
     }
 
     function isPdfColorNoteAnnotation(note) {
@@ -13528,10 +13573,12 @@
     }
 
     function buildSourceReviewItemsForDocument(text, doc, options) {
-      const pdfBodyText = doc && doc.draftSourceType === 'pdf' ? pdfScriptBodyReviewTextFromDraftPages(doc) : '';
-      const sourceText = doc && doc.draftSourceType === 'pdf' ? cleanPdfGarbledTextLines(pdfBodyText || text) : text;
+      // PDF 문서인가의 판정 한 벌 — 아래 네 갈래가 전부 이 값을 본다.
+      const isPdf = Boolean(doc && doc.draftSourceType === 'pdf');
+      const pdfBodyText = isPdf ? pdfScriptBodyReviewTextFromDraftPages(doc) : '';
+      const sourceText = isPdf ? cleanPdfGarbledTextLines(pdfBodyText || text) : text;
       const reviewItems = foldTrailingPunctuationAfterQuotedDialogItems(buildSourceReviewItems(sourceText, doc));
-      if (doc && doc.draftSourceType === 'pdf') {
+      if (isPdf) {
         attachSourceReviewPageSpans(reviewItems, sourceReviewPagesFromText(sourceText));
         normalizePdfInlineSpacingForReviewItems(reviewItems);
       }
@@ -13539,7 +13586,7 @@
       // appended after it and stayed rect-less (their rects then came from render-time
       // fallbacks that matched note text into the body stream, producing giant wrong boxes).
       appendPdfMetadataReviewItems(reviewItems, doc, options || sourceReviewOptionsForDoc(doc));
-      if (doc && doc.draftSourceType === 'pdf') {
+      if (isPdf) {
         attachPdfOverlayRectsToReviewItems(reviewItems, doc.draftPages || []);
       }
       return reviewItems;
@@ -13688,6 +13735,11 @@
 
 
 
+    // pageSpans 가 없는 아이템을 무엇으로 대신하는지 — 이 대체값의 유일한 사본이다.
+    function fallbackPageSpanForItem(item) {
+      return { pageNo: item.pageNo || 1, text: sourceReviewItemText(item), overlayRect: null };
+    }
+
     function attachSourceReviewPageSpans(items, pages) {
       const sourcePages = (pages || []).map((page) => {
         const lines = page && page.lines || [];
@@ -13704,11 +13756,7 @@
       (items || []).forEach((item) => {
         if (!item || isSourceReviewPageArtifactItem(item) || isSourceReviewPdfNoteItem(item)) return;
         const spans = sourceReviewPageSpansForItem(item, sourcePages);
-        item.pageSpans = spans.length ? spans : [{
-          pageNo: item.pageNo || 1,
-          text: sourceReviewItemText(item),
-          overlayRect: null
-        }];
+        item.pageSpans = spans.length ? spans : [fallbackPageSpanForItem(item)];
       });
       return items || [];
     }
@@ -13787,7 +13835,7 @@
       (items || []).forEach((item) => {
         if (!item || item.overlayRect && item.overlayRect.manual) return;
         const noteItem = isSourceReviewPdfNoteItem(item) || item.type === 'note';
-        const spans = item.pageSpans && item.pageSpans.length ? item.pageSpans : [{ pageNo: item.pageNo || 1, text: sourceReviewItemText(item), overlayRect: null }];
+        const spans = item.pageSpans && item.pageSpans.length ? item.pageSpans : [fallbackPageSpanForItem(item)];
         let firstMatchedRect = null;
         spans.forEach((span) => {
           if (!span || span.overlayRect && span.overlayRect.manual) return;
@@ -13882,7 +13930,7 @@
     function pdfGuideLineTextItemForOverlayMatching(line, text, rect, index) {
       const rawRect = rect || line && (line.compactOverlayRect || line.overlayRect) || null;
       if (!rawRect) return null;
-      const sourceRect = normalizeCompactOverlayRect(rawRect, 0.24, 0.75);
+      const sourceRect = normalizeCompactOverlayRect(rawRect, ...PDF_GUIDE_RECT_MIN);
       const sourceText = String(text || line && line.text || '').trim();
       if (!sourceText || !sourceRect || !Number.isFinite(Number(sourceRect.left)) || !Number.isFinite(Number(sourceRect.top))) return null;
       const pageNo = Number(line && line.pageNo || 0);
@@ -14312,7 +14360,7 @@
         rects.push(Object.assign({}, rect, { vertical: true }));
       });
       if (!rects.length) return null;
-      if (rects.length === 1) return normalizeCompactOverlayRect(rects[0], 0.24, 0.75);
+      if (rects.length === 1) return normalizeCompactOverlayRect(rects[0], ...PDF_GUIDE_RECT_MIN);
       const left = Math.min(...rects.map(rect => Number(rect.left) || 0));
       const top = Math.min(...rects.map(rect => Number(rect.top) || 0));
       const right = Math.max(...rects.map(rect => (Number(rect.left) || 0) + (Number(rect.width) || 0)));
@@ -14325,7 +14373,7 @@
         vertical: true,
         inferred: rects.some(rect => rect.inferred),
         manual: rects.some(rect => rect.manual)
-      }, 0.24, 0.75);
+      }, ...PDF_GUIDE_RECT_MIN);
     }
 
     function isSuspiciousPdfMatchRect(rect, target, items) {
@@ -14413,14 +14461,7 @@
     }
 
     function combinePdfAnnotationsByPage(annotations) {
-      const groups = new Map();
-      (annotations || []).forEach((note) => {
-        const pageNo = Number(note && note.pageNo || 1);
-        if (!groups.has(pageNo)) groups.set(pageNo, []);
-        groups.get(pageNo).push(note);
-      });
-      return Array.from(groups.entries())
-        .sort((a, b) => Number(a[0]) - Number(b[0]))
+      return groupByPageNo(annotations, note => Number(note && note.pageNo || 1))
         .flatMap(([pageNo, notes]) => combinePdfPageAnnotations(notes, pageNo, pdfPrintedPageNoValue(notes[0] && notes[0].printedPageNo)));
     }
 
@@ -14772,7 +14813,7 @@
           endIndex = index;
           continue;
         }
-        if (sourceReviewOpenDialogContinuationBoundary(next, profile)) break;
+        if (lineIsScriptBlockBoundary(next, profile, { cast: true })) break;
         dialogLines.push(next);
         endIndex = index;
         if (parseDialog(dialogLines.join('\n'), profile)) break;
@@ -14781,11 +14822,6 @@
         text: dialogLines.join('\n').trim(),
         endIndex
       };
-    }
-
-    function sourceReviewOpenDialogContinuationBoundary(line, profile) {
-      const raw = String(line || '').trim();
-      return lineIsScriptBlockBoundary(raw, profile, { cast: true });
     }
 
     function mergeSourceReviewActionPageContinuations(items, pages, profile, doc) {
@@ -14913,7 +14949,7 @@
 
     function sourceReviewLinesForPage(page, logicalLines, reviewFrontOpen, profile) {
       const rawLines = (page && page.lines || []).map(line => norm(line)).filter(Boolean);
-      if (!reviewFrontOpen || !rawLines.length || !isSourceReviewFrontMatterPage(page, profile)) return logicalLines || [];
+      if (!reviewFrontOpen || !rawLines.length || !looksLikeFrontMatterPage(rawLines, page.pageNo || 1, profile)) return logicalLines || [];
       return rawLines;
     }
 
@@ -14951,12 +14987,6 @@
       if (/^(?:EP(?:ISODE)?\.?\s*)?[0-9０-９]+[：:.\s-]+.{1,80}$/i.test(text)) return true;
       if (/^[A-Z0-9][A-Z0-9\s:;.,'!?&+\-]{2,80}$/i.test(text) && /[A-Za-z]/.test(text)) return true;
       return false;
-    }
-
-    function isSourceReviewFrontMatterPage(page, profile) {
-      const rawLines = (page && page.lines || []).map(line => norm(line)).filter(Boolean);
-      if (!rawLines.length) return false;
-      return looksLikeFrontMatterPage(rawLines, page && page.pageNo || 1, profile);
     }
 
     function detectFrontCharacterLineRuns(lines, pageNo) {
@@ -15098,16 +15128,21 @@
         appendPlainSourceReviewItems(out, text, pageNo, orderRef, sectionType === 'SCENE' || pageHasActionNarrativeSignal(String(text || '').split(/\n/), profile) ? 'action' : 'text', profile);
       }
       if (dialog || headingType === 'DIALOG') {
-        const dialogText = dialog || text || looseText;
-        const cleanDialog = dialogText.trim();
-        const wrapped = dialogQuotePairs(profile).some(pair => cleanDialog.startsWith(pair.open) && cleanDialog.endsWith(pair.close)) ? cleanDialog : `「${cleanDialog}」`;
-        const speaker = cha && mode ? cha + '（' + mode + '）' : cha;
-        pushSourceReviewItem(out, 'dialog', pageNo, speaker ? speaker + wrapped : wrapped, orderRef);
+        pushSourceReviewItem(out, 'dialog', pageNo, sourceReviewDialogItemText(dialog || text || looseText, cha, mode, profile), orderRef);
       }
       if (action || headingType === 'ACTION') {
         appendPlainSourceReviewItems(out, action || text || looseText, pageNo, orderRef, 'action', profile);
       }
       return markSourceReviewSection(out, sectionType);
+    }
+
+    // 리뷰 대사 항목의 표시 문자열을 어떻게 조립하는가(따옴표 감싸기 + 화자（표기） 접두).
+    // 마크다운 리더와 태그 리더가 같은 형식을 내야 하므로 조립은 이 한 벌뿐이다.
+    function sourceReviewDialogItemText(text, speakerName, mode, profile) {
+      const clean = String(text || '').trim();
+      const wrapped = dialogQuotePairs(profile).some(pair => clean.startsWith(pair.open) && clean.endsWith(pair.close)) ? clean : `「${clean}」`;
+      const speaker = speakerName && mode ? speakerName + '（' + mode + '）' : speakerName;
+      return speaker ? speaker + wrapped : wrapped;
     }
 
     function markSourceReviewSection(items, sectionType) {
@@ -15332,7 +15367,7 @@
     function formatSourceReviewMarkdownItem(item) {
       if (item.type === 'dialog') {
         const lines = [
-          '##DIALOG',
+          reviewMarkdownBlockToken(item),
           '#CHA',
           item.speaker || ''
         ];
@@ -15346,24 +15381,24 @@
         return lines.join('\n').trim();
       }
       if (item.type === 'action') {
-        return ['##ACTION', '#ACTION', item.text || ''].join('\n').trim();
+        return [reviewMarkdownBlockToken(item), '#ACTION', item.text || ''].join('\n').trim();
       }
       if (item.type === 'end') {
-        return ['##END', '#END', item.text || ''].join('\n').trim();
+        return [reviewMarkdownBlockToken(item), '#END', item.text || ''].join('\n').trim();
       }
       if (item.type === 'scene') {
-        return ['##SCENE', '#SCENE', item.text || ''].join('\n').trim();
+        return [reviewMarkdownBlockToken(item), '#SCENE', item.text || ''].join('\n').trim();
       }
       if (item.type === 'character') {
-        return ['##CAST', '#CAST', sourceReviewItemText(item)].join('\n').trim();
+        return [reviewMarkdownBlockToken(item), '#CAST', sourceReviewItemText(item)].join('\n').trim();
       }
       if (item.type === 'note') {
-        return ['##NOTE', '#NOTE', sourceReviewItemText(item)].join('\n').trim();
+        return [reviewMarkdownBlockToken(item), '#NOTE', sourceReviewItemText(item)].join('\n').trim();
       }
       if (item.type === 'link') {
-        return ['##LINK', '#LINK', sourceReviewItemText(item)].join('\n').trim();
+        return [reviewMarkdownBlockToken(item), '#LINK', sourceReviewItemText(item)].join('\n').trim();
       }
-      return ['##TEXT', '#TEXT', sourceReviewItemText(item)].join('\n').trim();
+      return [reviewMarkdownBlockToken(item), '#TEXT', sourceReviewItemText(item)].join('\n').trim();
     }
 
     function buildTaggedSourceReviewItems(pageText, pageNo, orderRef, profile) {
@@ -15387,9 +15422,7 @@
           return;
         }
         if (key === 'DIALOG') {
-          const dialogText = dialogQuotePairs(profile).some(pair => value.startsWith(pair.open) && value.endsWith(pair.close)) ? value : `「${value}」`;
-          const speaker = pendingSpeaker && pendingMode ? pendingSpeaker + '（' + pendingMode + '）' : pendingSpeaker;
-          pushSourceReviewItem(items, 'dialog', pageNo, speaker ? speaker + dialogText : dialogText, orderRef);
+          pushSourceReviewItem(items, 'dialog', pageNo, sourceReviewDialogItemText(value, pendingSpeaker, pendingMode, profile), orderRef);
           pendingSpeaker = '';
           pendingMode = '';
           return;
@@ -16116,6 +16149,7 @@
       return raw === 'annotation:blue_comment' || isPdfJsBlueColorKey(raw);
     }
 
+    // 검토 초안이 걸린 문서를 찾는다(초안이 없거나 못 찾으면 활성 문서). **조회는 여기 한 벌이다.**
     function sourceReviewDraftDocument() {
       const draft = state.sourceReviewDraft;
       const docId = draft && draft.documentId || '';
@@ -16140,7 +16174,8 @@
           });
         });
       });
-      return uniq(keys.filter(key => key && key !== 'color:gray:0'));
+      // 중립 본문색은 pdfJsTextItemVisualGroupKey 가 이미 빈 문자열로 접어 위 push 에서 걸러진다 — 여기서 다시 보지 않는다.
+      return uniq(keys);
     }
 
     function sourceReviewPdfLinesForSpan(page, text) {
@@ -16186,6 +16221,7 @@
       </div>`;
     }
 
+    // 검토 항목 종류 → 블록 토큰 표. **표는 이 한 벌이라** 마크다운 출력과 토큰 표시가 같이 움직인다.
     function reviewMarkdownBlockToken(item) {
       if (!item) return '##TEXT';
       if (item.type === 'dialog') return '##DIALOG';
@@ -16215,7 +16251,7 @@
       document.querySelectorAll('[data-source-review-panel]').forEach(btn => btn.addEventListener('click', () => {
         const draft = state.sourceReviewDraft;
         if (!draft) return;
-        const doc = (state.project.documents || []).find(item => item.id === draft.documentId) || activeDocument();
+        const doc = sourceReviewDraftDocument();
         if ((draft.activePanel || 'script') === 'script' && !isPdfSourceReviewReadOnly(draft, doc)) syncSourceReviewDraftFromDom();
         draft.activePanel = btn.getAttribute('data-source-review-panel') || 'script';
         renderSourceReviewModalBody();
@@ -16234,7 +16270,7 @@
       const draft = state.sourceReviewDraft;
       if (!draft || !key) return;
       draft.reviewOptions = Object.assign({}, draft.reviewOptions || {}, { [key]: Boolean(checked) });
-      const doc = (state.project.documents || []).find(item => item.id === draft.documentId) || activeDocument();
+      const doc = sourceReviewDraftDocument();
       if (doc) doc.pdfReviewOptions = Object.assign({}, doc.pdfReviewOptions || {}, draft.reviewOptions);
       const text = draft.rawText || doc && (doc.rawImportedText || doc.originalText) || sourceReviewDraftRawText(draft);
       draft.items = buildSourceReviewItemsForDocument(text, doc, draft.reviewOptions);
@@ -16245,7 +16281,7 @@
     function updateSourceReviewDraftPageText(el) {
       const draft = state.sourceReviewDraft;
       if (!draft) return;
-      const doc = (state.project.documents || []).find(item => item.id === draft.documentId) || activeDocument();
+      const doc = sourceReviewDraftDocument();
       if (isPdfSourceReviewReadOnly(draft, doc)) return;
       const previousItems = draft.items || [];
       const pageNo = Number(el.getAttribute('data-review-page-text')) || 1;
@@ -16261,7 +16297,7 @@
     function syncSourceReviewDraftFromDom() {
       const draft = state.sourceReviewDraft;
       if (!draft) return;
-      const doc = (state.project.documents || []).find(item => item.id === draft.documentId) || activeDocument();
+      const doc = sourceReviewDraftDocument();
       if (isPdfSourceReviewReadOnly(draft, doc)) return;
       const pageTextEls = Array.from(document.querySelectorAll('[data-review-page-text]'));
       if (!pageTextEls.length) return;
@@ -16637,7 +16673,7 @@
       const draft = state.sourceReviewDraft;
       if (!draft) return null;
       syncSourceReviewDraftFromDom();
-      const doc = (state.project.documents || []).find(item => item.id === draft.documentId) || activeDocument();
+      const doc = sourceReviewDraftDocument();
       if (doc.sourceConfirmed || (doc.versions || []).length) {
         saveActiveDocumentVersionSnapshot(doc, { silent: true });
         doc.skipPreAnalyzeVersionSnapshot = true;
@@ -16648,7 +16684,11 @@
       doc.pdfReviewOptions = Object.assign({}, doc.pdfReviewOptions || {}, draft.reviewOptions || {});
       doc.pdfExtractionSignals = Object.assign({}, doc.pdfExtractionSignals || {}, draft.pdfSignals || {});
       doc.reviewItems = (draft.items || []).map(cloneSourceReviewItem);
-      doc.reviewBlocks = normalizeImportedBlocks(sourceReviewItemsToBlocks(doc.reviewItems, doc));
+      // 리뷰 항목 → 블록 변환은 이 한 번이 정본이다. 안에서 문서 전문으로 파서 프로파일을
+      // 다시 세우므로 한 번이 비싸고, 확정 경로가 같은 인자로 또 불렀다. 확정은 이 결과를
+      // 받아 쓴다. normalizeImportedBlocks 는 새 배열·새 객체를 내므로 원본은 그대로 남는다.
+      const reviewBlocks = sourceReviewItemsToBlocks(doc.reviewItems, doc);
+      doc.reviewBlocks = normalizeImportedBlocks(reviewBlocks);
       doc.reviewMaterialFilter = draft.activeMaterialFilter || 'all';
       doc.reviewMaterialManualCards = (draft.manualMaterialCards || []).map(cloneReviewManualMaterial);
       doc.reviewMaterialExcludedKeys = (draft.materialExcludedKeys || []).slice();
@@ -16660,7 +16700,7 @@
         $('sourceInput').classList.add('hidden');
       }
       markProjectChanged('save_source_review_draft');
-      return { doc, text, draft };
+      return { doc, text, draft, reviewBlocks };
     }
 
     async function confirmSourceReviewDraft() {
@@ -16669,11 +16709,10 @@
       const draft = saved.draft;
       closeModal();
       const parsed = {
-        blocks: sourceReviewItemsToBlocks(saved.doc.reviewItems || draft.items || [], saved.doc),
+        blocks: saved.reviewBlocks || [],
         quality: { sourceType: draft.sourceType || saved.doc.draftSourceType || 'txt', warnings: [] },
         parserName: 'source_review_confirmed'
       };
-      saved.doc.reviewBlocks = normalizeImportedBlocks(parsed.blocks || []);
       await analyzeScenario({
         text: saved.text,
         parsed,
@@ -16706,6 +16745,7 @@
     function markdownDocumentLineForIndex(doc, lineIndex) {
       const node = markdownDocumentNodeForLine(doc, lineIndex);
       if (!node) return null;
+      // heading 은 node 자신이 그 줄이다(line === node) — 편집 반영이 한 번의 대입으로 끝나는 근거.
       if (node.type === 'heading') return { node, line: node, item: null };
       if (node.type === 'paragraph') {
         const line = (node.lines || []).find(item => item.sourceLineIndex === Number(lineIndex));
@@ -16878,10 +16918,7 @@
       if (before === after) return false;
       found.line.runs = runs;
       found.line.text = text;
-      if (found.node.type === 'heading') {
-        found.node.runs = runs;
-        found.node.text = text;
-      } else if (found.node.type === 'paragraph') {
+      if (found.node.type === 'paragraph') {
         found.node.text = found.node.lines.map((line, index) => line.text + (index < found.node.lines.length - 1 ? (line.hardBreak ? '\n' : ' ') : '')).join('');
       } else if (found.node.type === 'list') {
         found.node.text = found.node.items.map(item => item.text).join('\n');
@@ -17216,10 +17253,7 @@
         el.innerHTML = `<div class="note"><strong>${esc(t('tabScript'))}:</strong> ${esc(t('sourceReviewStageBody'))}</div>`;
         return;
       }
-      const blocks = activeDocumentBlocks()
-        .filter(isScriptPreviewBlock)
-        .slice()
-        .sort((a, b) => (a.pageNo || 0) - (b.pageNo || 0) || (a.globalOrder || a.order || 0) - (b.globalOrder || b.order || 0));
+      const blocks = scriptPreviewBlocksInOrder();
       if (!blocks.length) { el.innerHTML = `<div class="empty">${esc(t('noSourceBlocks'))}</div>`; return; }
       if (doc.draftSourceType === 'md') { renderMarkdownReader(el, doc, blocks); return; }
       // DOCX has clean, already-classified text and no page geometry — flow it as a continuous
@@ -17452,10 +17486,7 @@
     }
 
     function pageDebugPreviewContext(doc) {
-      const blocks = activeDocumentBlocks()
-        .filter(isScriptPreviewBlock)
-        .slice()
-        .sort((a, b) => (a.pageNo || 0) - (b.pageNo || 0) || (a.globalOrder || a.order || 0) - (b.globalOrder || b.order || 0));
+      const blocks = scriptPreviewBlocksInOrder();
       const pageEntries = scriptPreviewPageEntries(doc, blocks);
       const renderablePageNos = new Set(pageEntries.map(([pageNo]) => Number(pageNo)));
       return { blocks, pageEntries, renderablePageNos };
@@ -17889,13 +17920,11 @@
     }
 
     function dialogStartsWithModifierText(dialog, modifier) {
-      if (!dialog || !modifier) return false;
-      if (dialog.startsWith('（' + modifier + '）') || dialog.startsWith('(' + modifier + ')')) {
-        return true;
-      }
-      return false;
+      return stripLeadingDialogModifierText(dialog, modifier) !== String(dialog || '');
     }
 
+    // 대사 앞머리의 수식자 표기(전각·반각 괄호)를 떼어 낸다. **표기 목록은 여기 한 벌이고**
+    // 「수식자로 시작하는가」 판정도 이 결과에서 파생한다.
     function stripLeadingDialogModifierText(dialog, modifier) {
       const source = String(dialog || '');
       if (!modifier) return source;
@@ -17930,8 +17959,7 @@
 
     function pdfOverlayBlocksForPage(doc, pageNo, pageBlocks) {
       const targetPageNo = overlayPageNoForBlock(null, pageNo);
-      const overlayEligible = (block) => isScriptPreviewBlock(block) || isPdfNoteOverlayBlock(block);
-      const sourceBlocks = doc ? sortedDocumentBlocks(doc).filter(overlayEligible) : (pageBlocks || []).filter(overlayEligible);
+      const sourceBlocks = doc ? sortedDocumentBlocks(doc).filter(isOverlayEligibleBlock) : (pageBlocks || []).filter(isOverlayEligibleBlock);
       const byId = new Map();
       sourceBlocks.forEach((block) => {
         const overlayBlock = pdfOverlayBlockForPage(block, targetPageNo);
@@ -17945,7 +17973,7 @@
       const targetPageNo = overlayPageNoForBlock(null, pageNo);
       const hydrated = hydratePdfOverlayRectsForPageFromReviewItems(doc, targetPageNo);
       if (!doc || doc.draftSourceType !== 'pdf' || !pageHasMissingPdfOverlayRects(doc, targetPageNo)) return hydrated;
-      const page = (doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
+      const page = pdfLogicalPageForDocument(doc, targetPageNo);
       const items = pdfDraftPageTextItemsForOverlayRepair(page);
       if (!items.length) return hydrated;
       return hydrated + computePdfOverlayRectsForPage(doc, targetPageNo, items, { force: false, coordinateSource: 'rendered-pdfjs-v21' });
@@ -18447,6 +18475,7 @@
       return ['left', 'top', 'width', 'height'].every(key => Math.abs((Number(a[key]) || 0) - (Number(b[key]) || 0)) <= 0.04);
     }
 
+    // 문서의 draftPages 에서 논리 쪽 하나를 찾는다. **쪽 번호 대조 규칙은 여기 한 벌이다.**
     function pdfLogicalPageForDocument(doc, pageNo) {
       const targetPageNo = Number(pageNo || 1);
       return (doc && doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo) || null;
@@ -18456,8 +18485,7 @@
       const target = surface || $('pdfPageSurface');
       const fallbackPreview = $('pdfTextFallbackPreview');
       if (fallbackPreview) fallbackPreview.remove();
-      const textLayer = $('pdfFallbackTextLayer');
-      if (textLayer) textLayer.remove();
+      clearPdfFallbackTextLayer();
       const canvas = $('pdfPageCanvas');
       if (canvas) canvas.classList.remove('pdf-hidden');
       if (target) target.classList.remove('pdf-logical-fallback-preview');
@@ -18500,6 +18528,7 @@
       layer.innerHTML = glyphs;
     }
 
+    // 폴백 텍스트 레이어를 걷어낸다. **DOM 에서 지우는 자리는 여기 한 곳이다.**
     function clearPdfFallbackTextLayer() {
       const layer = $('pdfFallbackTextLayer');
       if (layer) layer.remove();
@@ -18563,7 +18592,7 @@
 
     function pdfAnnotationsForRenderedPdfPage(doc, pageNo) {
       const targetPageNo = Number(pageNo || 1);
-      const page = (doc && doc.draftPages || []).find(item => Number(item && (item.pageNo || item.sourcePageIndex) || 1) === targetPageNo);
+      const page = pdfLogicalPageForDocument(doc, targetPageNo);
       if (page && Array.isArray(page.annotations) && page.annotations.length) return page.annotations;
       return (doc && doc.pdfAnnotations || []).filter(note => Number(note && note.pageNo || 1) === targetPageNo);
     }
@@ -18648,8 +18677,7 @@
       // 자체 파서는 그 쪽번호를 이미 읽어 두었으므로(printedPageNo) 그 값과 같은 글자를 아래
       // 여백에서 찾아 잇는다. 표시 전용이라 본문 텍스트·블록에는 영향이 없다.
       const printedPageNoText = (() => {
-        const target = (doc && doc.draftPages || [])
-          .find(entry => Number(entry && (entry.pageNo || entry.sourcePageIndex) || 1) === Number(pageNo || 1));
+        const target = pdfLogicalPageForDocument(doc, pageNo);
         const value = target && target.printedPageNo;
         return value == null ? '' : String(value).trim();
       })();
@@ -19146,8 +19174,8 @@
       const compact = normalizePdfCompactTextPreserveMarks(value);
       if (!compact) return false;
       if (isPdfVerticalPunctuationFragment(compact)) return false;
-      const latin = (compact.match(/[A-Za-z0-9#&:;.,'!?+\-\/()[\]{}]/g) || []).length;
-      const jp = (compact.match(/[\u3040-\u30ff\u3400-\u9fff々〆?]/g) || []).length;
+      const latin = countTextMatches(compact, /[A-Za-z0-9#&:;.,'!?+\-\/()[\]{}]/g);
+      const jp = countTextMatches(compact, /[\u3040-\u30ff\u3400-\u9fff々〆?]/g);
       // 몇 글자부터 「눕힌 런」으로 볼지는 부르는 쪽이 정한다 — 표시용과 높이 확장용의 문턱이
       // 다르다(아래 확장 자리의 주석 참고). 기본은 종전대로 셋이다.
       const need = Number(minLatin) > 0 ? Number(minLatin) : 3;
@@ -19312,14 +19340,14 @@
       // PDF 가 Artifact 로 표시한 것은 본문이 아니라 페이지 장식이라고 문서 스스로 말한 것이다.
       // 좌표 존 추측보다 강한 신호라 먼저 본다(샘플 7개 중 5개가 태그드였다).
       if (item && item.markArtifact) return 'page_number';
-      if (isPdfPageArtifactTextItem(item, pageNo) || isPdfCoordinateArtifactItem(item, pageNo)) return 'page_number';
+      if (isPdfCoordinateArtifactItem(item, pageNo)) return 'page_number';
       return '';
     }
 
     function isPdfTextItemArtifact(item, pageNo) {
       if (!item) return true;
       if (item.artifactRole) return true;
-      return isPdfPageArtifactTextItem(item, pageNo) || isPdfCoordinateArtifactItem(item, pageNo);
+      return isPdfCoordinateArtifactItem(item, pageNo);
     }
 
     // 쪽번호·머리말이 설 자리인가. **판정은 여기 한 곳이다** — 예전에는 두 함수가 각자
@@ -19333,12 +19361,7 @@
         || edgeBand && Number(top) > 82 && Number(bottom) > 86;
     }
 
-    function isPdfPageArtifactTextItem(item, pageNo) {
-      if (!item || !isPdfPageArtifactText(item.text, pageNo)) return false;
-      const top = Number(item.topPct || 0);
-      return isPdfPageNumberZone(top, top + Number(item.heightPct || 0), Number(item.centerXPct || 0));
-    }
-
+    // 글자와 좌표를 함께 보고 쪽번호·머리말 부스러기인지 정한다. **본문 밖 글자 판정은 이 한 벌이다.**
     function isPdfCoordinateArtifactItem(item, pageNo) {
       if (!item) return true;
       const text = String(item.text || '').normalize('NFKC').trim();
@@ -19410,7 +19433,7 @@
       const targetPageNo = Number(pageNo || 1);
       return (state.project.sourceBlocks || []).filter(block => {
         if (!block || block.sourceDocumentId !== doc.id || !blockHasOverlayPage(block, targetPageNo)) return false;
-        if (!isScriptPreviewBlock(block) && !isPdfNoteOverlayBlock(block)) return false;
+        if (!isOverlayEligibleBlock(block)) return false;
         return !hasCurrentRenderedPdfOverlayRect(block, targetPageNo);
       }).map(block => {
         const rect = overlayRectForBlockPage(block, targetPageNo) || {};
@@ -19433,7 +19456,7 @@
       const bodyMatcher = createPdfItemTextMatcher(pools.body, new Set());
       const blocks = (state.project.sourceBlocks || [])
         .filter(block => block.sourceDocumentId === doc.id && blockHasOverlayPage(block, pageNo) && !isPageArtifactBlock(block))
-        .filter(block => isScriptPreviewBlock(block) || isPdfNoteOverlayBlock(block))
+        .filter(isOverlayEligibleBlock)
         .filter(block => force || !hasCurrentRenderedPdfOverlayRect(block, pageNo));
       let changed = 0;
       blocks.forEach((block) => {
@@ -19468,6 +19491,12 @@
 
     function isPdfNoteOverlayBlock(block) {
       return Boolean(block && block.type === 'pdf_note');
+    }
+
+    // 오버레이 상자를 가질 수 있는 블록인가. **판정은 이 한 벌이라** 그리는 집합·빠진 것 감시·
+    // 재계산하는 집합이 같은 목록으로 남는다.
+    function isOverlayEligibleBlock(block) {
+      return isScriptPreviewBlock(block) || isPdfNoteOverlayBlock(block);
     }
 
     function pdfTextItemsCoordinateSource(items) {
@@ -20149,7 +20178,7 @@
     }
 
     // ---- Clean-mode feedback surface: note chips + inline composer over the PDF ----
-    // 그려진 상자에서 자리를 읽는다. 단위는 퍼센트다.
+    // 그려진 상자에서 자리를 읽는다. 단위는 퍼센트다. 상자 style 을 좌표로 바꾸는 유일본이다.
     function overlayRectFromBoxElement(box) {
       return {
         left: parseFloat(box.style.left) || 0,
@@ -20242,9 +20271,15 @@
       });
     }
 
+    // 메모 종류를 캡슐과 연결선이 함께 쓰는 CSS 클래스 이름으로 바꾼다. 모르는 종류는 빈 문자열이다.
+    // 세 자리(캡슐 HTML, 드래그 중 연결선, 배치 후 연결선)가 같이 쓰는 유일본이다.
+    function noteTypeClass(noteType) {
+      return noteType === 'fact' ? 'fact' : noteType === 'direct_rewrite' ? 'direct_rewrite' : '';
+    }
+
     function pdfFeedbackNoteStackHtml(notes) {
       return notes.map(n => {
-        const type = n.noteType === 'fact' ? 'fact' : n.noteType === 'direct_rewrite' ? 'direct_rewrite' : '';
+        const type = noteTypeClass(n.noteType);
         return `<div class="pdf-feedback-note ${type}" data-note-id="${esc(n.id)}">
           <div class="pdf-feedback-note-head"><span class="pdf-feedback-note-badge">${esc(noteLabel(n))}</span>
           <button type="button" class="pdf-feedback-note-del" data-delete-revision-note="${esc(n.id)}" title="${esc(t('deleteNote'))}">×</button></div>
@@ -20258,9 +20293,9 @@
     function pdfFeedbackContentBand() {
       let top = null, bottom = null;
       document.querySelectorAll('[data-overlay-block]').forEach((box) => {
-        const t0 = parseFloat(box.style.top) || 0;
-        const b0 = t0 + (parseFloat(box.style.height) || 0);
-        if (top === null || t0 < top) top = t0;
+        const r = overlayRectFromBoxElement(box);
+        const b0 = r.top + r.height;
+        if (top === null || r.top < top) top = r.top;
         if (bottom === null || b0 > bottom) bottom = b0;
       });
       if (top === null) return null;
@@ -20346,7 +20381,7 @@
       const stackW = stack.offsetWidth, stackH = stack.offsetHeight;
       const wPct = stackW / lw * 100, hPct = stackH / lh * 100;
       const type = (notesFor('block', blockId)[0] || {}).noteType;
-      const linkType = type === 'fact' ? 'fact' : type === 'direct_rewrite' ? 'direct_rewrite' : '';
+      const linkType = noteTypeClass(type);
       const cache = { lw, lh, stackW, stackH, g: null, anchor: null };
       const a = pdfFeedbackBlockRect(blockId);
       if (a) cache.anchor = { x: a.left / 100 * lw, y: a.top / 100 * lh, w: a.width / 100 * lw, h: a.height / 100 * lh };
@@ -20451,7 +20486,7 @@
           height: (stack.offsetHeight / layerH) * 100
         });
         const firstType = entry.notes[0] && entry.notes[0].noteType;
-        entry.linkType = firstType === 'fact' ? 'fact' : firstType === 'direct_rewrite' ? 'direct_rewrite' : '';
+        entry.linkType = noteTypeClass(firstType);
         entry.stack = stack;
       };
       // Hand-placed stacks first: their spot is the user's choice, everyone else
@@ -20830,17 +20865,25 @@
       setTimeout(() => { document.addEventListener('pointerdown', onDocDown, true); ta.focus(); }, 0);
     }
 
-    function closePdfFeedbackComposer() {
-      state.pdfFeedbackComposer = null;
-      document.querySelectorAll('.pdf-feedback-composer').forEach(el => {
+    // 열려 있는 작성 상자를 닫는다: 상태를 비우고, 바깥 클릭 감시를 떼고, 상자를 지우고,
+    // 열려 있다고 표시된 카드의 표시를 지운다. PDF 피드백과 자료 작성 상자의 유일본이다.
+    function closeComposerLayer(stateKey, composerSel, activeSel) {
+      state[stateKey] = null;
+      document.querySelectorAll(composerSel).forEach(el => {
         if (el._outside) document.removeEventListener('pointerdown', el._outside, true);
         el.remove();
       });
-      document.querySelectorAll('.pdf-overlay-box.compose-active').forEach(b => b.classList.remove('compose-active'));
+      document.querySelectorAll(activeSel).forEach(el => el.classList.remove('compose-active'));
+    }
+
+    function closePdfFeedbackComposer() {
+      closeComposerLayer('pdfFeedbackComposer', '.pdf-feedback-composer', '.pdf-overlay-box.compose-active');
     }
 
 
 
+    // 이 상자를 선택 상태로 만든다: state, selected 클래스, 선택 툴바를 한 번에 맞춘다.
+    // 클릭 선택과 드래그 편집이 함께 쓰는 유일본이다.
     function selectPdfOverlayBox(box) {
       if (!box) return;
       state.selectedBlockId = box.getAttribute('data-overlay-block');
@@ -20978,23 +21021,17 @@
           applyOverlayRectToElement(box, startRect, overlayPageNo);
           box.classList.add('blocked');
           window.setTimeout(() => box.classList.remove('blocked'), 380);
-          state.selectedBlockId = block.id;
-          document.querySelectorAll('[data-overlay-block]').forEach(item => item.classList.toggle('selected', item === box));
-          syncPdfOverlaySelectionToolbar();
+          selectPdfOverlayBox(box);
           return;
         }
         setBlockOverlayRectForPage(block, overlayPageNo, nextRect);
         syncReviewItemOverlayRectFromBlock(block, overlayPageNo, nextRect);
-        state.selectedBlockId = block.id;
-        document.querySelectorAll('[data-overlay-block]').forEach(item => item.classList.toggle('selected', item === box));
         box.classList.toggle('vertical', nextRect.vertical || nextRect.height > nextRect.width * OVERLAY_VERTICAL_ASPECT);
+        selectPdfOverlayBox(box);
         updatePdfRangeExtractionFromSelection(false);
-        syncPdfOverlaySelectionToolbar();
         markProjectChanged(mode === 'resize' ? 'resize_body_overlay_box' : 'move_body_overlay_box');
       };
-      state.selectedBlockId = block.id;
-      document.querySelectorAll('[data-overlay-block]').forEach(item => item.classList.toggle('selected', item === box));
-      syncPdfOverlaySelectionToolbar();
+      selectPdfOverlayBox(box);
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp, { once: true });
     }
@@ -21121,7 +21158,7 @@
             <div class="card-title mono">${esc(b.id)} <span class="card-sub">p.${esc(b.pageNo)} #${esc(b.globalOrder)}</span></div>
             <div class="chips">${chipType}${chipZone}${speaker}${dialogMode}${profileChips}${scenePart}${location}${time}${conf}</div>
           </div>
-          <div class="block-text">${esc((b.zone === 'body' || b.type === 'dialog' || b.type === 'action') ? displayPdfBlockText(b.text) : b.text)}</div>
+          <div class="block-text">${esc(shouldJoinPdfBlockText(b) ? displayPdfBlockText(b.text) : b.text)}</div>
           <div class="linked-entity-row">${linkedChips || `<span class="card-sub">${esc(t('linkedMaterialsNone'))}</span>`}</div>
           ${noteHtml ? `<div class="card-body annotation-list">${noteHtml}</div>` : ''}
           <div class="card-foot">
@@ -21283,12 +21320,7 @@
     }
 
     function closeMaterialComposer() {
-      state.materialComposer = null;
-      document.querySelectorAll('.material-composer').forEach((el) => {
-        if (el._outside) document.removeEventListener('pointerdown', el._outside, true);
-        el.remove();
-      });
-      document.querySelectorAll('.material-card.compose-active').forEach(el => el.classList.remove('compose-active'));
+      closeComposerLayer('materialComposer', '.material-composer', '.material-card.compose-active');
     }
 
     function openMaterialComposer(entityId, opts) {
@@ -21510,7 +21542,7 @@
           ${block.timeOfDay ? `<span class="chip">${esc(block.timeOfDay)}</span>` : ''}
         </div>
         <div class="note mono">p.${esc(block.pageNo)} #${esc(block.globalOrder)} ・ ${esc(block.sourceDocumentId || '')}</div>
-        <div class="block-text">${esc((block.zone === 'body' || block.type === 'dialog' || block.type === 'action') ? displayPdfBlockText(block.text || block.rawText || '') : (block.text || block.rawText || ''))}</div>
+        <div class="block-text">${esc(shouldJoinPdfBlockText(block) ? displayPdfBlockText(block.text || block.rawText || '') : (block.text || block.rawText || ''))}</div>
         <div class="chips">${linkedChips || `<span class="card-sub">${esc(t('linkedMaterialsNone'))}</span>`}</div>
         <div class="row"><button id="selectBlockFromModalBtn" class="small">${esc(t('selectInList'))}</button><button id="closeBlockRefBtn" class="small">${esc(t('close'))}</button></div>
       `;
@@ -21525,17 +21557,24 @@
       $('editModal').classList.add('active');
     }
 
-    function renderJson(force) {
-      const el = $('jsonOutput');
+    // 늦게 채우는 출력 상자 하나를 그린다. dirty 인데 force 가 아니면 안내문만 두고 build 를
+    // 부르지 않는다(settingsSnapshot 이 state.settings 를 만지므로 이 게으름이 동작의 일부다).
+    // JSON 상자와 공유 텍스트 상자가 함께 쓰는 유일본이다.
+    function renderLazyOutputBox(elId, dirtyKey, force, build, placeholder) {
+      const el = $(elId);
       if (!el) return '';
-      if (!force && state.jsonOutputDirty) {
-        if (!el.value) el.value = '設定データはコピー時に更新されます。';
+      if (!force && state[dirtyKey]) {
+        if (!el.value) el.value = placeholder;
         return el.value;
       }
-      const snapshot = settingsSnapshot();
-      el.value = JSON.stringify(snapshot, null, 2);
-      state.jsonOutputDirty = false;
+      el.value = build();
+      state[dirtyKey] = false;
       return el.value;
+    }
+
+    function renderJson(force) {
+      return renderLazyOutputBox('jsonOutput', 'jsonOutputDirty', force,
+        () => JSON.stringify(settingsSnapshot(), null, 2), '設定データはコピー時に更新されます。');
     }
 
     function settingsSnapshot() {
@@ -21553,8 +21592,8 @@
     // Heavy fields that are fully re-derivable from the cached source PDF / original text.
     // Stripping them at the storage boundary keeps autosave, restore slots and JSON export
     // light (a project balloons to ~100MB/work otherwise — mostly triplicated draftPages).
-    const STORAGE_HEAVY_DOC_FIELDS = new Set(['draftPages', 'reviewItems', 'reviewBlocks', 'pageMetadata']);
-    const STORAGE_HEAVY_VERSION_FIELDS = new Set(['draftPages', 'reviewItems', 'reviewBlocks', 'pageMetadata']);
+    // 저장 경계에서 떼어낼 필드. 문서와 버전이 같은 목록을 쓰는 유일본이다.
+    const STORAGE_HEAVY_FIELDS = new Set(['draftPages', 'reviewItems', 'reviewBlocks', 'pageMetadata']);
     // shallow-copy omitting heavy keys — never JSON.stringify a full work (can exceed limits)
     function compactObjectOmitting(obj, heavySet) {
       const out = {};
@@ -21562,8 +21601,8 @@
       return out;
     }
     function compactDocumentForStorage(doc) {
-      const out = compactObjectOmitting(doc, STORAGE_HEAVY_DOC_FIELDS);
-      if (Array.isArray(doc.versions)) out.versions = doc.versions.map(v => compactObjectOmitting(v, STORAGE_HEAVY_VERSION_FIELDS));
+      const out = compactObjectOmitting(doc, STORAGE_HEAVY_FIELDS);
+      if (Array.isArray(doc.versions)) out.versions = doc.versions.map(v => compactObjectOmitting(v, STORAGE_HEAVY_FIELDS));
       return out;
     }
     function compactWorkForStorage(work) {
@@ -21588,6 +21627,8 @@
     const SETTINGS_AUTOSAVE_DB_VERSION = 3;
     const SETTINGS_AUTOSAVE_STORE = 'snapshots';
     const SETTINGS_PDF_STORE = 'pdfFiles';
+    // 복원 슬롯 저장소 이름. 만드는 자리와 읽고 쓰는 자리가 함께 보는 유일본이다.
+    const PROJECT_SLOTS_STORE = 'projectSlots';
     const SETTINGS_AUTOSAVE_KEY = 'last-settings';
     let settingsAutosaveTimer = 0;
 
@@ -21602,7 +21643,7 @@
           const db = req.result;
           if (!db.objectStoreNames.contains(SETTINGS_AUTOSAVE_STORE)) db.createObjectStore(SETTINGS_AUTOSAVE_STORE);
           if (!db.objectStoreNames.contains(SETTINGS_PDF_STORE)) db.createObjectStore(SETTINGS_PDF_STORE);
-          if (!db.objectStoreNames.contains('projectSlots')) db.createObjectStore('projectSlots');
+          if (!db.objectStoreNames.contains(PROJECT_SLOTS_STORE)) db.createObjectStore(PROJECT_SLOTS_STORE);
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -21766,15 +21807,8 @@
     }
 
     function renderShareOutput(force) {
-      const el = $('shareOutput');
-      if (!el) return '';
-      if (!force && state.shareOutputDirty) {
-        if (!el.value) el.value = '構造化テキストはコピー/出力時に更新されます。';
-        return el.value;
-      }
-      el.value = buildStructuredText(state.project);
-      state.shareOutputDirty = false;
-      return el.value;
+      return renderLazyOutputBox('shareOutput', 'shareOutputDirty', force,
+        () => buildStructuredText(state.project), '構造化テキストはコピー/出力時に更新されます。');
     }
 
     function syncAll(updatePrompt) {
@@ -21826,9 +21860,17 @@
       if (zoomOverride) schedulePdfDensityRerender();
     }
 
+    // 캔버스 배율의 상·하한 값. 휠 줌·핀치 줌·저장된 배율 검사가 같이 쓰는 유일본이다.
+    const CANVAS_ZOOM_MIN = 0.35;
+    const CANVAS_ZOOM_MAX = 2.5;
+
+    function clampCanvasZoom(z) {
+      return Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, z));
+    }
+
     function zoomCanvasBy(k, cx, cy) {
       const v = state.canvasView;
-      const nz = Math.min(2.5, Math.max(0.35, v.z * k));
+      const nz = clampCanvasZoom(v.z * k);
       if (nz === v.z) return;
       const px = typeof cx === 'number' ? cx : window.innerWidth / 2;
       const py = typeof cy === 'number' ? cy : window.innerHeight / 2;
@@ -21960,7 +22002,7 @@
       const pinchMove = (v) => {
         if (!pinch) return;
         const view = state.canvasView;
-        const nz = Math.min(2.5, Math.max(0.35, pinch.startZ * (v.d / pinch.startDist))); // same clamp as zoomCanvasBy
+        const nz = clampCanvasZoom(pinch.startZ * (v.d / pinch.startDist));
         view.x = v.mx - pinch.anchorX * nz;
         view.y = v.my - pinch.anchorY * nz;
         view.z = nz;
@@ -22097,7 +22139,7 @@
 
     function initCanvasShell() {
       let z = parseFloat(localStorage.getItem('scenarioCanvasZoom') || '1');
-      if (!isFinite(z) || z < 0.35 || z > 2.5) z = 1;
+      if (!isFinite(z) || z < CANVAS_ZOOM_MIN || z > CANVAS_ZOOM_MAX) z = 1;
       state.canvasView.z = z;
       document.body.dataset.panelLeft = localStorage.getItem('scenarioCanvasPanel_left') === '1' ? 'open' : 'closed';
       document.body.dataset.panelRight = localStorage.getItem('scenarioCanvasPanel_right') === '1' ? 'open' : 'closed';
@@ -22123,13 +22165,18 @@
       renderMaterialTypeTabs();
     }
 
+    // 탭 묶음에서 어느 버튼에 active 를 줄지 정하는 유일본 — 컨테이너와 값을 담은 속성만 다르다.
+    function setActiveTab(containerSelector, attrName, activeValue) {
+      document.querySelectorAll(containerSelector + ' .tab').forEach(btn => btn.classList.toggle('active', btn.getAttribute(attrName) === activeValue));
+    }
+
     function renderMaterialTypeTabs() {
       const filter = $('entityFilter') ? $('entityFilter').value : 'organization';
-      document.querySelectorAll('#materialTypeTabs .tab').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-material-filter') === filter));
+      setActiveTab('#materialTypeTabs', 'data-material-filter', filter);
     }
 
     function updateTabButtons() {
-      document.querySelectorAll('#blockTabs .tab').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-tab') === state.activeBlockTab));
+      setActiveTab('#blockTabs', 'data-tab', state.activeBlockTab);
     }
 
     function buildStructuredText(project) {
@@ -22221,6 +22268,7 @@
       return parts.join('_') + '.json';
     }
 
+    // id 로 문서를 찾는 유일본 — 제목 표시(docTitleById)와 콘티 내보내기가 같이 쓴다.
     function conteExportDocumentById(project, id) {
       return (project && project.documents || []).find(doc => doc.id === id) || null;
     }
@@ -22335,40 +22383,40 @@
         .sort((a, b) => a - b);
     }
 
-    function conteMergeCharacter(map, name, patch) {
+    // 이름으로 묶어 한 항목에 합친다: 별칭은 쌓고, 스칼라는 먼저 들어온 값이 이기고,
+    // 세는 값은 더하고, confidence 는 큰 쪽을 남긴다. shape 가 항목의 필드 구성을 정하며
+    // 그 차례가 곧 내보내는 JSON 의 키 차례다. 등장인물과 장소가 함께 쓰는 유일본이다.
+    function conteMergeNamed(map, name, patch, shape) {
       const clean = norm(name);
       if (!clean) return null;
       const key = clean;
       if (!map.has(key)) {
-        map.set(key, {
-          name: clean,
-          aliases: [],
-          gender: '',
-          age: '',
-          sourceDocumentId: '',
-          scope: '',
-          status: '',
-          authority: '',
-          sourceRefs: [],
-          pages: [],
-          dialogCount: 0,
-          confidence: 0
-        });
+        const seed = { name: clean, aliases: [] };
+        shape.scalars.forEach((field) => { seed[field] = ''; });
+        seed.sourceRefs = [];
+        seed.pages = [];
+        shape.lists.forEach((field) => { seed[field] = []; });
+        seed[shape.counter] = 0;
+        seed.confidence = 0;
+        map.set(key, seed);
       }
       const item = map.get(key);
       patch = patch || {};
       item.aliases = uniq((item.aliases || []).concat(patch.aliases || []).filter(alias => alias && alias !== item.name));
-      if (!item.gender && patch.gender) item.gender = patch.gender;
-      if (!item.age && patch.age) item.age = patch.age;
-      if (!item.sourceDocumentId && patch.sourceDocumentId) item.sourceDocumentId = patch.sourceDocumentId;
-      if (!item.scope && patch.scope) item.scope = patch.scope;
-      if (!item.status && patch.status) item.status = patch.status;
-      if (!item.authority && patch.authority) item.authority = patch.authority;
+      shape.scalars.forEach((field) => { if (!item[field] && patch[field]) item[field] = patch[field]; });
       item.sourceRefs = conteMergeSourceRefs(item.sourceRefs, patch.sourceRefs || []);
       item.pages = conteMergePages(item.pages, patch.pages || []);
-      item.dialogCount += Number(patch.dialogCount || 0);
+      shape.lists.forEach((field) => { item[field] = uniq((item[field] || []).concat(patch[field] || []).filter(Boolean)); });
+      item[shape.counter] += Number(patch[shape.counter] || 0);
       item.confidence = Math.max(Number(item.confidence) || 0, Number(patch.confidence) || 0);
       return item;
+    }
+
+    const CONTE_CHARACTER_SHAPE = { scalars: ['gender', 'age', 'sourceDocumentId', 'scope', 'status', 'authority'], lists: [], counter: 'dialogCount' };
+    const CONTE_PLACE_SHAPE = { scalars: ['sourceDocumentId', 'scope', 'status', 'authority'], lists: ['timeOfDayCandidates'], counter: 'sceneCount' };
+
+    function conteMergeCharacter(map, name, patch) {
+      return conteMergeNamed(map, name, patch, CONTE_CHARACTER_SHAPE);
     }
 
     function conteExportCharacters(project, blocks) {
@@ -22424,37 +22472,7 @@
     }
 
     function conteMergePlace(map, name, patch) {
-      const clean = norm(name);
-      if (!clean) return null;
-      const key = clean;
-      if (!map.has(key)) {
-        map.set(key, {
-          name: clean,
-          aliases: [],
-          sourceDocumentId: '',
-          scope: '',
-          status: '',
-          authority: '',
-          sourceRefs: [],
-          pages: [],
-          timeOfDayCandidates: [],
-          sceneCount: 0,
-          confidence: 0
-        });
-      }
-      const item = map.get(key);
-      patch = patch || {};
-      item.aliases = uniq((item.aliases || []).concat(patch.aliases || []).filter(alias => alias && alias !== item.name));
-      if (!item.sourceDocumentId && patch.sourceDocumentId) item.sourceDocumentId = patch.sourceDocumentId;
-      if (!item.scope && patch.scope) item.scope = patch.scope;
-      if (!item.status && patch.status) item.status = patch.status;
-      if (!item.authority && patch.authority) item.authority = patch.authority;
-      item.sourceRefs = conteMergeSourceRefs(item.sourceRefs, patch.sourceRefs || []);
-      item.pages = conteMergePages(item.pages, patch.pages || []);
-      item.timeOfDayCandidates = uniq((item.timeOfDayCandidates || []).concat(patch.timeOfDayCandidates || []).filter(Boolean));
-      item.sceneCount += Number(patch.sceneCount || 0);
-      item.confidence = Math.max(Number(item.confidence) || 0, Number(patch.confidence) || 0);
-      return item;
+      return conteMergeNamed(map, name, patch, CONTE_PLACE_SHAPE);
     }
 
     function conteExportPlaces(project, blocks) {
@@ -22574,7 +22592,6 @@
     }
 
     // ===== Restore-point slots (IndexedDB, per work) — replaces folder-based file save =====
-    const PROJECT_SLOTS_STORE = 'projectSlots';
     const MAX_PROJECT_SLOTS = 5;
     const AUTO_SLOT_INTERVAL_MS = 5 * 60 * 1000;
     let lastAutoSlotAt = 0;
