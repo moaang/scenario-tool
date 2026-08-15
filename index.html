@@ -2080,11 +2080,6 @@
     .srt-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .source-review-content { display: grid; gap: 10px; padding: 12px 14px; }
     .srt-hint { color: var(--muted); font-size: 10.5px; font-weight: 600; line-height: 1.45; }
-    .source-review-options {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
     .source-review-mode-tabs {
       display: inline-flex;
       gap: 2px;
@@ -2210,24 +2205,6 @@
       font-weight: 1000;
       line-height: 1.25;
       word-break: break-word;
-    }
-    .source-review-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      min-height: 24px;
-      padding: 3px 7px;
-      border: 1px solid #c6d4da;
-      border-radius: 7px;
-      background: #f3f8fb;
-      color: #1b4558;
-      font-size: 11px;
-      font-weight: 900;
-    }
-    .source-review-toggle input {
-      width: auto;
-      min-height: 0;
-      margin: 0;
     }
     .source-review-pages { display: grid; gap: 10px; }
     .source-review-page {
@@ -2800,7 +2777,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v185';
+    const APP_VERSION = 'v186';
     const APP_BUILD_DATE = '2026-08-15';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -2826,6 +2803,7 @@
       nonPersonNames: [],       // 인물명이 아닌 고유명(작품명·지명 등)
       actionSignals: [],        // 지문 판정을 돕는 인물명·소도구
       frontTitles: [],          // 표지/전付에 나오는 제목·부제
+      nonSpeakerHeads: [],      // 「…」 앞에 서지만 화자가 아닌 사물명(병기·기체 따위의 고유명)
     };
     // 작품을 가리지 않는 일반 SF/제작 용어는 코드에 남는다.
     const GENERIC_TECH_TERMS = ['AI', 'ドローン', 'ハッカー', 'ハッカールーム', 'ネットワーク', 'セーフハウス', 'サイボーグ'];
@@ -2948,9 +2926,6 @@
         confirmReviewDraft: '反映',
         sourceReviewTarget: '対象文書',
         directInput: '直接入力',
-        separateColorNotes: '色/注釈を ##NOTE に分離',
-        separateLinks: 'ハイパーリンクを ##LINK に分離',
-        reviewOptionRebuild: '切替時はPDF原抽出を基準に検討ブロックを作り直します',
         noRecognizedGroup: '認識されたまとまりなし',
         sceneGroup: 'シーンまとまり',
         noTags: 'タグなし',
@@ -3238,9 +3213,6 @@
         confirmReviewDraft: '반영',
         sourceReviewTarget: '대상 하위문서',
         directInput: '직접 입력',
-        separateColorNotes: '색/주석을 ##NOTE로 분리',
-        separateLinks: '하이퍼링크를 ##LINK로 분리',
-        reviewOptionRebuild: '전환 시 PDF 원추출 기준으로 검토 블록을 다시 만듦',
         noRecognizedGroup: '인식된 묶음 없음',
         sceneGroup: '신 묶음',
         noTags: '태그 없음',
@@ -3527,9 +3499,6 @@
         confirmReviewDraft: 'Apply',
         sourceReviewTarget: 'Target document',
         directInput: 'Direct input',
-        separateColorNotes: 'Separate colored notes as ##NOTE',
-        separateLinks: 'Separate hyperlinks as ##LINK',
-        reviewOptionRebuild: 'When toggled, review blocks are rebuilt from the original PDF extraction',
         noRecognizedGroup: 'No recognized groups',
         sceneGroup: 'Scene group',
         noTags: 'No tags',
@@ -3841,14 +3810,12 @@
       }
     }
 
-    function setUiLanguage(value, options) {
+    function setUiLanguage(value) {
       activeUiLanguage = normalizeUiLanguage(value);
       state.uiLanguage = activeUiLanguage;
       localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, activeUiLanguage);
       renderStaticI18n();
-      // 이 분기는 options.render === false 가 넘어올 때만 syncAll 을 건너뛰는데,
-      // options 를 넘기는 호출부가 없다 — 유일한 호출은 languageSelect 의 change 로 인자를 하나만 준다.
-      if (!options || options.render !== false) syncAll(false);
+      syncAll(false);
     }
 
     const state = {
@@ -4377,9 +4344,6 @@
       Object.keys(state.pdfOverlayComputeKeys).forEach((key) => {
         if (key.startsWith(doc.id + '#')) delete state.pdfOverlayComputeKeys[key];
       });
-      // 이 필드는 여기서 찍히기만 하고 읽는 코드가 없다 — 프리뷰 복원 판정에 쓰려던
-      // 배선이 아직 없다(파일 전체에서 읽는 자리 0곳).
-      doc.hasSessionPdfPreview = true;
     }
 
     // Japanese scripts use CID-keyed vertical fonts; without the matching CMap resources pdf.js
@@ -5773,7 +5737,12 @@
     function isInvalidDialogHeadShape(head) {
       const raw = norm(head);
       if (!raw) return true;
-      if (/^(?:テロップ|字幕|文字|記事|見出し|題字|画面|モニター|看板|通帳|壁|血痕|支援思考戦車)$/.test(raw)) return true;
+      // 글자가 적히는 것·무언가 표시되는 것 — 작품을 가리지 않는 일반명사만 둔다.
+      if (/^(?:テロップ|字幕|文字|記事|見出し|題字|画面|モニター|看板|通帳|壁|血痕)$/.test(raw)) return true;
+      // 작품 전용 사물명은 여기서 읽는다. 저장소가 공개라 그런 낟말을 코드에 못 둔다.
+      // 빈 목록이면 workTermAlternation 이 null 을 내서 이 검사를 통째로 건너뛴다.
+      const workHeads = workTermAlternation(WORK_TERMS.nonSpeakerHeads);
+      if (workHeads && new RegExp('^(?:' + workHeads + ')$').test(raw)) return true;
       if (/(?:フキダシ|吹き出し|吹出し|吹出)$/.test(raw)) return true;
       if (/[、，。！？!?「」『』]/.test(raw)) return true;
       if (/(?:が|は|を|に|へ|で|と|から|まで|には|では|も|の|しながら|見つつ|弄りながら)$/.test(raw)) return true;
@@ -6979,7 +6948,7 @@
     // 장소 낱말 — 여러 글자 항목. 「・」 하나만으로 장소라 하지 않는다 — 인명에도 중점이 든다
     // (이 파일은 다른 곳에서 「・」를 화자 목록 구분자로 쓴다). 「同・」는 앞 장면과 같은 장소를
     // 가리키는 표기라 남긴다.
-    const LOCATION_SIGNAL_MULTI_RE = /(同・|〜|～|画面|（\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*）|\(\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*\)|本部|広場|広間|幕内|部屋|病室|会場|ロビー|観客席|ステージ|屋上|窓辺|廊下|階段|道路|街道|地区|学校|教室|公園|車内|車外|船内|馬車内|馬車の中|病院|ホテル|オフィス|ラボ|ホール|倉庫|宮殿|基地|外観|内観|横転現場)/;
+    const LOCATION_SIGNAL_MULTI_RE = /(同・|〜|～|画面|（\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*）|\(\s*(朝|昼|夕|夜|深夜|同時刻|翌朝|早朝)\s*\)|本部|広場|広間|幕内|部屋|病室|会場|ロビー|観客席|ステージ|屋上|窓辺|廊下|階段|道路|街道|地区|学校|教室|公園|車内|車外|船内|馬車内|馬車の中|病院|ホテル|オフィス|ラボ|ホール|倉庫|宮殿|基地|外観|内観)/;
     // 한 글자 장소 낱말 — 목록을 두 벌로 만들지 않으려고 여기서만 따로 센다. 이 글자들은 성이나
     // 이름 안에 그대로 들어가므로 **이름 줄 판정에서는 쓰지 않는다**(castLineHasLocationSignal).
     const LOCATION_SIGNAL_SINGLE_RE = /(室|港|街|町|村|市|区|店|駅|庭|空|海|森|山|川|橋|城)/;
@@ -9249,24 +9218,17 @@
       return item.pdfAnnotationTrigger === 'color' || item.pdfAnnotationRole === 'blue_comment';
     }
 
-    // 이 함수가 남기는 매치 기록(items.pdfLogicalAnnotationMatches 와 반환값)은 읽는 곳이 없다 —
-    // 쓰기만 네 곳이고 호출부 둘은 반환을 버린다. 아이템에 찍는 주석 표시(pdfAnnotationRole 등)만
-    // 실제로 소비된다. 진단으로 보여 줄 소비자가 빠졌다 — 지우지 말 것.
+    // 돌려주는 matches 는 호출부 둘이 버리지만, 그것을 만드는 과정에서 아이템에
+    // 주석 표시(pdfAnnotationRole 등)를 찍는다 — 소비되는 것은 그 표시 쪽이다.
     // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function annotatePdfJsTextItemsFromLogicalAnnotations(items, annotations) {
       const source = Array.isArray(items) ? items : [];
       clearPdfJsLogicalAnnotationMarks(source);
       if (!source.length) return [];
       const targets = pdfLogicalAnnotationMatchTargets(annotations);
-      if (!targets.length) {
-        source.pdfLogicalAnnotationMatches = [];
-        return [];
-      }
+      if (!targets.length) return [];
       const stream = pdfTextItemMatchStream(source);
-      if (!stream.text) {
-        source.pdfLogicalAnnotationMatches = [];
-        return [];
-      }
+      if (!stream.text) return [];
       const matches = [];
       const markedItems = new Set();
       targets.forEach((target) => {
@@ -9290,7 +9252,6 @@
           from = end;
         }
       });
-      source.pdfLogicalAnnotationMatches = matches;
       return matches;
     }
 
@@ -9304,7 +9265,6 @@
         delete item.pdfAnnotationMatchText;
         delete item.pdfAnnotationVisualGroupKey;
       });
-      if (Array.isArray(items)) items.pdfLogicalAnnotationMatches = [];
     }
 
     // 쓰는 곳: PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -16690,7 +16650,6 @@
       const pageEntries = sourceReviewPageEntries(draft);
       const activePanel = draft.activePanel || 'script';
       const pdfReadOnly = isPdfSourceReviewReadOnly(draft, doc);
-      const options = renderSourceReviewOptionControls(draft, pdfReadOnly);
       $('modalBody').innerHTML = `
         <div class="source-review-editor">
           <div class="source-review-toolbar">
@@ -16699,7 +16658,6 @@
                 <button type="button" class="tab ${activePanel === 'script' ? 'active' : ''}" data-source-review-panel="script">${esc(t('sourceReviewScriptTab'))}</button>
                 <button type="button" class="tab ${activePanel === 'materials' ? 'active' : ''}" data-source-review-panel="materials">${esc(t('sourceReviewMaterialsTab'))}</button>
               </div>
-              ${options}
             </div>
             <div class="row srt-actions">
               <button id="saveSourceReviewDraftBtn" class="small">${esc(t('saveReviewDraft'))}</button>
@@ -16719,25 +16677,6 @@
 
     function isPdfSourceReviewReadOnly(draft, doc) {
       return (draft && draft.sourceType || doc && doc.draftSourceType || '') === 'pdf';
-    }
-
-    // 이 아래 토글 둘은 pdfSignals 의 주석·링크 수가 0 보다 클 때만 그려지는데, 그 수를
-    // 채우는 경로는 PDF 임포트뿐이고(pdfExtractionSignals · pdfAnnotationsForDoc) PDF 는
-    // readOnly 라 바로 위에서 반환된다 — 둘을 함께 만족시키는 호출부가 없다.
-    // 그래서 updateSourceReviewOption 도 안 불린다.
-    function renderSourceReviewOptionControls(draft, readOnly) {
-      if (readOnly) return '';
-      const signals = draft && draft.pdfSignals || {};
-      const options = draft && draft.reviewOptions || {};
-      const controls = [];
-      if ((signals.annotationCount || signals.colorNoteCount || 0) > 0) {
-        controls.push(`<label class="source-review-toggle"><input type="checkbox" data-source-review-option="separateColorNotes" ${options.separateColorNotes ? 'checked' : ''} />${esc(t('separateColorNotes'))} (${esc(signals.annotationCount || signals.colorNoteCount || 0)})</label>`);
-      }
-      if ((signals.linkCount || 0) > 0) {
-        controls.push(`<label class="source-review-toggle"><input type="checkbox" data-source-review-option="separateLinks" ${options.separateLinks ? 'checked' : ''} />${esc(t('separateLinks'))} (${esc(signals.linkCount || 0)})</label>`);
-      }
-      if (!controls.length) return '';
-      return `<div class="source-review-options">${controls.join('')}<span class="card-sub">${esc(t('reviewOptionRebuild'))}</span></div>`;
     }
 
     function sourceReviewPageEntries(draft) {
@@ -17376,22 +17315,7 @@
         updateSourceReviewDraftPageText(el);
         refreshSourceReviewBlockColumns();
       }));
-      document.querySelectorAll('[data-source-review-option]').forEach(el => el.addEventListener('change', () => {
-        updateSourceReviewOption(el.getAttribute('data-source-review-option'), el.checked);
-      }));
       bindSourceReviewMaterialPanel();
-    }
-
-    function updateSourceReviewOption(key, checked) {
-      const draft = state.sourceReviewDraft;
-      if (!draft || !key) return;
-      draft.reviewOptions = Object.assign({}, draft.reviewOptions || {}, { [key]: Boolean(checked) });
-      const doc = sourceReviewDraftDocument();
-      if (doc) doc.pdfReviewOptions = Object.assign({}, doc.pdfReviewOptions || {}, draft.reviewOptions);
-      const text = draft.rawText || doc && (doc.rawImportedText || doc.originalText) || sourceReviewDraftRawText(draft);
-      draft.items = buildSourceReviewItemsForDocument(text, doc, draft.reviewOptions);
-      draft.pageTexts = sourceReviewMarkdownPagesFromItems(draft.items);
-      renderSourceReviewModalBody();
     }
 
     // 호출자는 초안이 활성 문서의 것임을 보장한다 — 여는 두 호출부가 모두 활성 문서를 넘기고,
@@ -17953,11 +17877,9 @@
       return Boolean(chipId && (doc.markdownBlocks || []).some(node => node.type === 'feedback_slot' && node.targetNodeId === chipId));
     }
 
-    // 둘째 인자는 줄 <span> 에 속성을 더 붙이라고 뚫어 둔 자리인데 넘기는 호출부가 없다
-    // (markdownNoteNodeHtml 의 세 곳 모두 line 하나만 준다) — 항상 빈 문자열로 접힌다.
-    function markdownEditableLineHtml(line, attrs) {
+    function markdownEditableLineHtml(line) {
       const index = Number(line && line.sourceLineIndex);
-      return `<span class="markdown-editable-line" contenteditable="true" spellcheck="false" data-md-line-index="${esc(index)}" ${attrs || ''}>${markdownInlineRunsHtml(line && line.runs, line && line.text || '')}</span>`;
+      return `<span class="markdown-editable-line" contenteditable="true" spellcheck="false" data-md-line-index="${esc(index)}">${markdownInlineRunsHtml(line && line.runs, line && line.text || '')}</span>`;
     }
 
     function markdownNodeNotesHtml(doc, node) {
@@ -18885,25 +18807,10 @@
     // small instead of re-rendering every page and re-emitting a full coordinate dump per page.
     function buildLightAllPagesPageSummary(doc, pageNo) {
       const page = pdfLogicalPageForDocument(doc, pageNo);
-      const pageBlocks = sortedDocumentBlocks(doc)
-        .filter(block => blockHasOverlayPage(block, pageNo) || Number(block.pageNo || 0) === Number(pageNo))
-        .filter(isScriptPreviewBlock);
-      // 이 세 집계는 지금 아무 데도 안 나간다 — 유일한 소비자 buildAllPagesDebugText 가
-      // pageNo·text 만 찍고 블록은 문서에서 다시 뽑는다. 찍는 자리를 만들기 전까지는 출력에 안 나온다.
-      const blockTypeCounts = {};
-      let lowConfidenceBlockCount = 0;
-      pageBlocks.forEach((block) => {
-        const type = block && block.type || 'unknown';
-        blockTypeCounts[type] = (blockTypeCounts[type] || 0) + 1;
-        if (Number(block && block.meta && block.meta.confidence) < 0.6) lowConfidenceBlockCount += 1;
-      });
       return {
         pageNo,
         textSource: page && page.textSource || '',
-        text: page && page.text || '',
-        blockCount: pageBlocks.length,
-        blockTypeCounts,
-        lowConfidenceBlockCount
+        text: page && page.text || ''
       };
     }
 
