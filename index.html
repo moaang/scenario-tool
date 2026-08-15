@@ -2778,7 +2778,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v192';
+    const APP_VERSION = 'v193';
     const APP_BUILD_DATE = '2026-08-16';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -11556,6 +11556,32 @@
       return groups;
     }
 
+    // extractPdfTextItems 의 토큰화 정규식 — 입력과 무관한 고정 패턴이라 쪽마다 새로 짓지
+    // 않고 모듈 한 번만 짓는다(예전에는 쪽마다, 즉 문서당 쪽수만큼 다시 컴파일했다).
+    // 전역(g) 플래그라 lastIndex 가 호출 사이에 남으므로, 쓰는 쪽은 매번 0으로 되돌려야
+    // 한다 — 안 그러면 다음 쪽이 이전 쪽이 멈춘 자리부터 읽혀 본문이 통째로 빠진다.
+    const PDF_TEXT_ITEM_NUMBER = '[-+]?\\d*\\.?\\d+';
+    const PDF_TEXT_ITEM_STRING = '(?:\\[[^\\]]*\\]|<[0-9A-Fa-f\\s]+>|\\((?:\\\\.|[^\\\\)])*\\))';
+    const PDF_TEXT_ITEM_TEXTOP = '(?:' + PDF_TEXT_ITEM_STRING + '\\s*(?:TJ|Tj|\\x27)|' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_STRING + '\\s*")';
+    const PDF_TEXT_ITEM_PATTERN = new RegExp(
+      PDF_TEXT_ITEM_TEXTOP +
+      '|(?:' + PDF_TEXT_ITEM_NUMBER + '\\s+){5}' + PDF_TEXT_ITEM_NUMBER + '\\s+Tm' +
+      '|(?:' + PDF_TEXT_ITEM_NUMBER + '\\s+){5}' + PDF_TEXT_ITEM_NUMBER + '\\s+cm' +
+      '|\\/[A-Za-z0-9._-]+\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+Tf' +
+      '|' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+T[dD]' +
+      '|' + PDF_TEXT_ITEM_NUMBER + '\\s+TL' +
+      '|\\bT\\*' +
+      '|(?:^|\\s)BT\\b' +
+      '|' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+(?:rg|RG)' +
+      '|' + PDF_TEXT_ITEM_NUMBER + '\\s+(?:g|G)' +
+      '|' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+' + PDF_TEXT_ITEM_NUMBER + '\\s+(?:k|K)' +
+      '|\\/[A-Za-z0-9._-]+\\s+(?:cs|CS)' +
+      '|(?:' + PDF_TEXT_ITEM_NUMBER + '\\s+){1,4}(?:scn|sc|SCN|SC)' +
+      '|' + PDF_TEXT_ITEM_NUMBER + '\\s+Tr' +
+      '|\\b[qQ]\\b',
+      'g'
+    );
+
     function extractPdfTextItems(stream, cmap, maxItems, pageSize) {
       const cleanStream = stripPdfInlineImages(stream);
       const items = [];
@@ -11572,27 +11598,8 @@
       let strokeColorSpace = 'gray';
       let textRenderingMode = 0;
       const graphicsStack = [];
-      const number = '[-+]?\\d*\\.?\\d+';
-      const pdfString = '(?:\\[[^\\]]*\\]|<[0-9A-Fa-f\\s]+>|\\((?:\\\\.|[^\\\\)])*\\))';
-      const textOp = '(?:' + pdfString + '\\s*(?:TJ|Tj|\\x27)|' + number + '\\s+' + number + '\\s+' + pdfString + '\\s*")';
-      const pattern = new RegExp(
-        textOp +
-        '|(?:' + number + '\\s+){5}' + number + '\\s+Tm' +
-        '|(?:' + number + '\\s+){5}' + number + '\\s+cm' +
-        '|\\/[A-Za-z0-9._-]+\\s+' + number + '\\s+Tf' +
-        '|' + number + '\\s+' + number + '\\s+T[dD]' +
-        '|' + number + '\\s+TL' +
-        '|\\bT\\*' +
-        '|(?:^|\\s)BT\\b' +
-        '|' + number + '\\s+' + number + '\\s+' + number + '\\s+(?:rg|RG)' +
-        '|' + number + '\\s+(?:g|G)' +
-        '|' + number + '\\s+' + number + '\\s+' + number + '\\s+' + number + '\\s+(?:k|K)' +
-        '|\\/[A-Za-z0-9._-]+\\s+(?:cs|CS)' +
-        '|(?:' + number + '\\s+){1,4}(?:scn|sc|SCN|SC)' +
-        '|' + number + '\\s+Tr' +
-        '|\\b[qQ]\\b',
-        'g'
-      );
+      const pattern = PDF_TEXT_ITEM_PATTERN;
+      pattern.lastIndex = 0;
       let match;
       while ((match = pattern.exec(cleanStream)) && items.length < maxItems) {
         const op = match[0].trim();
