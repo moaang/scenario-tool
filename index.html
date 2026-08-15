@@ -2777,7 +2777,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v186';
+    const APP_VERSION = 'v187';
     const APP_BUILD_DATE = '2026-08-15';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -8374,8 +8374,9 @@
         page.bodyTopLineTrigger = pageTopLine == null ? '' : PDF_BODY_TOP_LINE_TRIGGER;
         const bodyRange = pdfBodyRangeForPage({ draftPages: [page] }, pageNo);
         // Colour-flagged lines were shunted to colorLines by the EARLY raw-parse heuristic
-        // (isPdfJsOverlayLineColorNote — content-score based, no position awareness) before
-        // the stable body range was even known. A line that sits INSIDE the now-known stable
+        // (isPdfJsOverlayLineColorNote) before the stable body range was even known.
+        // 그 판정의 위치 근거는 같은 쪽 줄에서 뽑은 세로 밴드 하나뿐이다.
+        // A line that sits INSIDE the now-known stable
         // range is genuine body content printed in another ink (position over colour — the
         // same rule already applied to the overlay guide/matching layer) — reclaim it into
         // the body pool so it (a) becomes real body text/blocks and (b) lets
@@ -12168,7 +12169,7 @@
       return kept;
     }
 
-    // 지운 글자를 그대로 적는다 — 「몇 개 지웠다」만으로는 행번호를 지웠는지 표지의 날짜를
+    // 지운 항목 앞 12 개의 글자를 적는다 — 「몇 개 지웠다」만으로는 행번호를 지웠는지 표지의 날짜를
     // 지웠는지 구별할 수 없다.
     // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function notePdfLineGuideNumberRemoval(removed, pageNo, kind) {
@@ -20257,7 +20258,7 @@
     // 되찾은 글자는 그것을 잃은 아이템의 **뒤에** 한 글자씩 이어 붙인다.
     // 앞 아이템이 이미 옳은 자리에 있으므로 그 연장이면 족하다.
     // 근거 불명 — 한 글자짜리 복사본이 원본의 verticalRunExpanded/verticalRunMeasured 를 그대로
-    // 들고 가는 이유는 못 찾았다. 그 두 플래그는 pdfVerticalBottomPadPct 에서 하단 패딩의
+    // 들고 가는 이유는 못 찾았다. 그 두 플래그는 pdfVerticalRunBottomPadPct 에서 하단 패딩의
     // 계수 삼중쌍을 고르고 구두점 면제를 건너뛰게 한다. 자리는 이미 확장된 원본 박스를 나눈
     // 것이라 확장 쪽 계수가 맞다고 볼 수도 있고, verticalGlyphCount 만 1 로 덮은 것을 보면
     // 빠뜨린 것으로 볼 수도 있다 — 코드로는 안 갈린다.
@@ -21585,6 +21586,11 @@
       return box ? overlayRectFromBoxElement(box) : null;
     }
 
+    // 연결선 앵커 사각형을 레이어 픽셀로 바꾸는 유일본이다. lw/lh 는 레이어의 픽셀 크기다.
+    function pdfFeedbackAnchorPx(rect, lw, lh) {
+      return { x: rect.left / 100 * lw, y: rect.top / 100 * lh, w: rect.width / 100 * lw, h: rect.height / 100 * lh };
+    }
+
     // Find a non-overlapping spot for a note/composer rect near its anchor column.
     // Vertical notes belong ABOVE/BELOW the column (below preferred); they may widen
     // only when the widened rect still fits without touching an already placed one.
@@ -21742,7 +21748,7 @@
       if (!ar) {
         const a = pdfFeedbackBlockRect(blockId);
         if (!a) { g.remove(); return; }
-        ar = { x: a.left / 100 * lw, y: a.top / 100 * lh, w: a.width / 100 * lw, h: a.height / 100 * lh };
+        ar = pdfFeedbackAnchorPx(a, lw, lh);
       }
       const sr = {
         x: (parseFloat(stack.style.left) || 0) / 100 * lw,
@@ -21791,7 +21797,7 @@
       const linkType = noteTypeClass(type);
       const cache = { lw, lh, stackW, stackH, g: null, anchor: null };
       const a = pdfFeedbackBlockRect(blockId);
-      if (a) cache.anchor = { x: a.left / 100 * lw, y: a.top / 100 * lh, w: a.width / 100 * lw, h: a.height / 100 * lh };
+      if (a) cache.anchor = pdfFeedbackAnchorPx(a, lw, lh);
       const svg = ensurePdfFeedbackLinkLayer(layer);
       cache.g = svg.querySelector(`[data-link-for="${blockId}"]`) || null;
       let moved = false;
