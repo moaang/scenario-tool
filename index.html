@@ -2800,7 +2800,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v184';
+    const APP_VERSION = 'v185';
     const APP_BUILD_DATE = '2026-08-15';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -2926,6 +2926,7 @@
         saveStatusWaiting: '自動保存待ち',
         saveStatusSaved: '自動保存済み: {time}',
         saveStatusFailed: '自動保存に失敗しました',
+        autosaveRestoreFailed: '自動保存の復元に失敗しました: {message}',
         projectGate: '先に作品を追加すると文書作業を開始できます。',
         workDocuments: '作品文書',
         addDocument: '+ 文書を追加',
@@ -2933,6 +2934,7 @@
         confirmDeleteDocument: '"{title}" を削除しますか？この文書のブロックと文書別素材も削除されます。',
         confirmDeleteFolder: '"{title}" フォルダと中の文書を削除しますか？',
         folderDeleteBlockedToast: '中の文書を削除できないため、フォルダは残しました',
+        lastDocumentDeleteBlockedToast: '文書が1つしかないため削除できません',
         documentTitle: '文書タイトル',
         documentKind: '文書区分',
         documentEmptyNote: '文書を追加して本文/PDF/DOCX/TXTを読み込みます。作品共通は自動集計用なのでここでは選択しません。',
@@ -3119,6 +3121,10 @@
         workTitleLabel: '作品名',
         workAddNote: '設定ファイル内に新しい作品を追加します。本文/PDF/DOCX/TXTは作品内で文書を追加してから読み込みます。',
         workTitleRequired: '作品名を入力してください。',
+        copyFailed: 'コピーに失敗しました',
+        textRequired: '内容を入力してください。',
+        entityNameRequired: '名前を入力してください。',
+        settingDuplicate: '同じ内容の設定ブロックがすでにあります。',
         noNotesYet: 'まだ注釈なし',
         openButton: '開く',
         doneButton: '完了',
@@ -3210,6 +3216,7 @@
         saveStatusWaiting: '자동 저장 대기',
         saveStatusSaved: '자동 저장됨: {time}',
         saveStatusFailed: '자동 저장 실패',
+        autosaveRestoreFailed: '자동 저장 복원 실패: {message}',
         projectGate: '먼저 작품을 추가하면 문서 작업을 시작할 수 있음.',
         workDocuments: '작품 문서',
         addDocument: '+ 문서 추가',
@@ -3217,6 +3224,7 @@
         confirmDeleteDocument: '"{title}" 문서를 삭제할까요? 블록과 문서별 소재도 함께 삭제됩니다.',
         confirmDeleteFolder: '"{title}" 폴더와 포함된 문서를 삭제할까요?',
         folderDeleteBlockedToast: '안의 문서를 지우지 못해 폴더를 남겼습니다',
+        lastDocumentDeleteBlockedToast: '문서가 하나뿐이라 삭제할 수 없습니다',
         documentTitle: '문서 타이틀',
         documentKind: '문서 구분',
         documentEmptyNote: '문서를 추가해서 본문/PDF/DOCX/TXT를 불러온다. 작품 공용은 자동 집계용이라 여기서 선택하지 않음.',
@@ -3403,6 +3411,10 @@
         workTitleLabel: '작품명',
         workAddNote: '설정 파일 안에 새 작품을 추가한다. 본문/PDF/DOCX/TXT는 작품 안에서 문서를 추가한 뒤 불러온다.',
         workTitleRequired: '작품명을 입력해야 함.',
+        copyFailed: '복사에 실패했습니다',
+        textRequired: '내용을 입력해야 함.',
+        entityNameRequired: '이름을 입력해야 함.',
+        settingDuplicate: '같은 내용의 설정 블록이 이미 있음.',
         noNotesYet: '아직 주석 없음',
         openButton: '열기',
         doneButton: '완료',
@@ -3493,6 +3505,7 @@
         saveStatusWaiting: 'Waiting for autosave',
         saveStatusSaved: 'Autosaved: {time}',
         saveStatusFailed: 'Autosave failed',
+        autosaveRestoreFailed: 'Autosave restore failed: {message}',
         projectGate: 'Add a work first to start document work.',
         workDocuments: 'Work Documents',
         addDocument: '+ Add Document',
@@ -3500,6 +3513,7 @@
         confirmDeleteDocument: '"{title}" delete this document? Blocks and document-scoped materials will also be deleted.',
         confirmDeleteFolder: '"{title}" delete this folder and contained documents?',
         folderDeleteBlockedToast: 'Folder kept: its documents could not be deleted',
+        lastDocumentDeleteBlockedToast: 'Cannot delete: this is the only document',
         documentTitle: 'Document Title',
         documentKind: 'Document Type',
         documentEmptyNote: 'Add a document and load body text/PDF/DOCX/TXT. Work-common is for automatic aggregation and is not selected here.',
@@ -3686,6 +3700,10 @@
         workTitleLabel: 'Work Title',
         workAddNote: 'Add a new work inside the settings file. Load body text/PDF/DOCX/TXT after adding a document inside the work.',
         workTitleRequired: 'Work title is required.',
+        copyFailed: 'Copy failed',
+        textRequired: 'Content is required.',
+        entityNameRequired: 'Name is required.',
+        settingDuplicate: 'A setting block with the same content already exists.',
         noNotesYet: 'No notes yet',
         openButton: 'Open',
         doneButton: 'Done',
@@ -4242,6 +4260,7 @@
       return result;
     }
 
+    // 호출자는 clippedItems 로 items 원소의 참조를 그대로 넘겨야 한다 — 생존 판정이 참조 동일성이라 복제본을 넘기면 전부 '버려진 것'으로 뒤집힌다.
     function pdfClippedTopMarginDigitRun(items, clippedItems, range) {
       if (!range || !range.enabled) return '';
       const kept = new Set(clippedItems || []);
@@ -4396,11 +4415,15 @@
     async function loadPdfJsLibrary() {
       if (window.pdfjsLib) return window.pdfjsLib;
       if (window.__scenarioPdfJsLoading) return window.__scenarioPdfJsLoading;
+      // 거절한 프로미스를 캐시에 남기면 그 세션의 뒤 호출이 전부 재시도 없이 같은 거절을 받아
+      // 네트워크가 돌아와도 폴백 파서에 고정된다. 거절 직전에 캐시를 비워 다음 호출이 다시 받아온다
+      // — 거절 자체는 그대로 흘려보낸다(임포트 폴백과 프리뷰가 지금처럼 기록한다).
       window.__scenarioPdfJsLoading = new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = PDF_JS_CDN + 'build/pdf.min.js';
         script.onload = () => {
           if (!window.pdfjsLib) {
+            window.__scenarioPdfJsLoading = null;
             reject(new Error('PDF.js load failed'));
             return;
           }
@@ -4408,7 +4431,10 @@
           probePdfJsCmapReachable();
           resolve(window.pdfjsLib);
         };
-        script.onerror = () => reject(new Error('PDF.js script load failed'));
+        script.onerror = () => {
+          window.__scenarioPdfJsLoading = null;
+          reject(new Error('PDF.js script load failed'));
+        };
         document.head.appendChild(script);
       });
       return window.__scenarioPdfJsLoading;
@@ -5320,7 +5346,11 @@
       const clean = norm(text);
       if (!clean) return null;
       const claim = addClaim(state.project, entity, 'confirmed_fact', clean, 'hard', sourceBlockId ? [sourceBlockId] : ['manual']);
-      if (claim) entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
+      // claim id 가 자료 id + 본문이라, 같은 자료에 같은 글을 다시 넣으면 addClaim 이 null 을 낸다.
+      // 그 글은 이미 그 자료의 설정블록으로 떠 있어 잃는 것이 없다 — 다만 일어나지 않은 추가를
+      // 감사기록에 남기지 않는다. 사용자가 한 행위 자체는 호출부가 자기 이름으로 기록한다.
+      if (!claim) return null;
+      entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
       state.project.audit.push({ at: nowIso(), action: 'add_confirmed_fact', entityId });
       markProjectChanged('add_confirmed_fact');
       return claim;
@@ -7087,7 +7117,7 @@
     }
 
     function trailingSceneTimeExpression(value) {
-      const parts = norm(value).split(/[・／/\s]+/).map(part => part.trim());
+      const parts = sceneTimeParts(value);
       const picked = [];
       while (parts.length && isSceneTimeWord(parts[parts.length - 1])) picked.unshift(parts.pop());
       return picked.join('・');
@@ -7202,6 +7232,7 @@
       return { locationName, timeOfDay, scenePart };
     }
 
+    // 호출자는 직전 씬의 장소를 previousLocation 으로 보장한다 — 빈 값이면 「同」 승계가 죽어 승계 표기가 그대로 장소명이 된다.
     function resolveRelativeLocationName(name, previousLocation) {
       const clean = norm(name);
       const previous = norm(previousLocation);
@@ -8169,7 +8200,11 @@
       }
       try {
       const pages = [];
-      const maxPages = Math.min(pdf.numPages || 0, PDF_MAX_PAGES_TO_PARSE);
+      const totalPageCount = Number(pdf.numPages) || 0;
+      const maxPages = Math.min(totalPageCount, PDF_MAX_PAGES_TO_PARSE);
+      // 상한에 걸리면 뒷부분이 통째로 빠진 채 정상 결과처럼 반환된다 — 조용히 넘기지 않는다(자체 파서의 같은 상한도 pageBudgetExceeded 로 남긴다).
+      const cappedPageCount = Math.max(0, totalPageCount - maxPages);
+      if (cappedPageCount) notePdfOverlayDrop('pdfJsPageCapExceeded', 'p' + (maxPages + 1) + '+ x' + cappedPageCount);
       // ── 패스 1: 괘선만 모아 본문 상한을 확정한다 ────────────────────────────
       // 상한은 문서 전체의 괘선을 봐야 정해진다. 예전에는 줄 묶기가 그 쪽 후보값을 쓰고
       // 확정은 파싱이 다 끝난 뒤에 나서, **같은 판정이 두 값으로 갈라져 있었다.**
@@ -8280,7 +8315,9 @@
         pages,
         pdfAnnotations,
         pdfExtractionSignals: pdfSignals,
-        warning: ''
+        warning: cappedPageCount
+          ? 'PDF page cap reached: parsed ' + maxPages + ' of ' + totalPageCount + ' pages; ' + cappedPageCount + ' pages were not read.'
+          : ''
       };
       } finally {
         // pdf.js keeps per-document caches (fonts, decoded images, page structures) alive in its
@@ -8446,7 +8483,11 @@
 
     async function readPdfLogicalPagesFromBuffer(buffer) {
       try {
-        if (typeof DecompressionStream === 'undefined') return [];
+        if (typeof DecompressionStream === 'undefined') {
+          // 자체 파서가 통째로 꺼진다 — pdf.js 가 CMap 을 못 읽는 문서에서는 이쪽이 유일한 본문이라 그 문서가 통째로 빈다.
+          notePdfOverlayDrop('logicalParserUnavailable', 'DecompressionStream');
+          return [];
+        }
         const streams = await extractPdfStreams(buffer);
         const pdfSource = new TextDecoder('latin1').decode(buffer);
         const decodeContext = buildPdfDecodeContext(streams, pdfSource);
@@ -9547,10 +9588,14 @@
         } else if (op === OPS.closePath) {
           if (current && subpathStart) segments.push(pdfJsPathSegment(current, subpathStart));
           current = subpathStart;
-        } else if (op === OPS.curveTo) {
-          coordIndex += 6;
-        } else if (op === OPS.curveTo2 || op === OPS.curveTo3) {
-          coordIndex += 4;
+        } else if (op === OPS.curveTo || op === OPS.curveTo2 || op === OPS.curveTo3) {
+          // 곡선의 **마지막** 좌표쌍이 새 현재점이다(curveTo 는 6 개, curveTo2/3 은 4 개).
+          // 건너뛰기만 하면 current 가 곡선 **시작점**에 멈춰, 뒤따르는 lineTo·closePath 가
+          // 그리지 않은 선을 만든다 — 그 가짜 선분이 가로로 길고 얇으면 괘선 필터를
+          // 통과해 본문 상한이 된다. 좌표가 잘려 못 읽으면 current 는 null 이 되어
+          // 그 자리에서 선을 잇지 않는다 — lineTo 갈래가 이미 같은 규칙이다.
+          coordIndex += (op === OPS.curveTo ? 4 : 2);
+          current = readPoint();
         }
       });
       return segments.filter(Boolean);
@@ -11045,7 +11090,13 @@
       const pageObjectIds = [];
       if (pagesRootObjectId) collectPdfPageObjectIdsInTreeOrder(pagesRootObjectId, objectMap, pageObjectIds, Object.create(null));
       if (!pageObjectIds.length) {
-        pageObjectIds.push(...recoverPdfPageObjectIdsInLikelyPageOrder(objectMap));
+        // 쪽 트리를 못 탔다 = 이 아래 pageNo 가 문서가 적어 둔 순서가 아니라 짐작이라는 뜻이고,
+        // 그 짐작이 화면 쪽번호까지 그대로 간다. 조용히 넘기지 않는다.
+        // 실측(이 코퍼스 18 문서): 8 문서가 이 갈래로 온다 — /Pages 뿌리가 객체 스트림 안에 있어
+        // buildPdfObjectMap(원문 정규식)이 그 객체를 아예 못 본다.
+        const recovered = recoverPdfPageObjectIdsInLikelyPageOrder(objectMap);
+        notePdfOverlayDrop('pageOrderGuessed', 'p\u00d7' + recovered.length);
+        pageObjectIds.push(...recovered);
       }
       return pageObjectIds.map((pageObjectId, index) => ({
         pageNo: index + 1,
@@ -11701,6 +11752,11 @@
       item.centerXPct = (item.left + item.width / 2) / pageSize.width * 100;
       item.centerYPct = (item.top + item.height / 2) / pageSize.height * 100;
       item.glyphWidthPct = item.glyphWidth / pageSize.width * 100;
+      // 판형 종횡비. pdf.js 경로는 viewport 로 같은 필드를 싣는데 이쪽에만 없어서,
+      // % 임계를 다른 축으로 옮겨 쓰는 자리가 폴백 아이템에서만 조용히 1 로 떨어졌다.
+      // 이 아이템의 좌표가 전부 이 pageSize 로 나뉘므로 종횡비도 같은 판형에서 와야 한다.
+      // 두 변은 pdfPageSizeFromMediaBox 가 양수로 보장한다(못 읽으면 기본 판형 + 기록).
+      item.pageAspect = pageSize.width / pageSize.height;
       return item;
     }
 
@@ -12438,6 +12494,7 @@
         .map(entry => entry.item);
     }
 
+    // 호출자는 sourceIndex 나 index 가 수인 아이템만 넘긴다 — 문자열 id 를 심는 합성 아이템은 orderPdfVerticalOverlayMatchingItems 가 정렬 없이 그대로 돌려준다.
     // 쓰는 곳: 클리핑 · 줄묶기 · 매칭 · PDF파싱 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfItemSourceOrder(item, fallbackIndex) {
       const sourceIndex = Number(item && item.sourceIndex);
@@ -13197,6 +13254,8 @@
     }
 
     // 쓰는 곳: 렌더 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
+    // 폴백(normalizeSpeakerName)이 낸 이름은 화면에 쓰는 표시명이라 upsertEntity 가 다시
+    // 거부할 수 있다 — 호출자는 이 이름마다 인물 엔티티가 생긴다고 가정하면 안 된다.
     function dialogSpeakerNamesForBlock(block) {
       if (!block) return [];
       const names = Array.isArray(block.speakerNames) && block.speakerNames.length
@@ -13478,13 +13537,17 @@
         .replace(/^[：:]/, '')
         .trim();
       const names = extractCastNames(text);
-      return names.map((name) => {
+      return names.map((name, index) => {
         const profile = parseCharacterProfileFromCastText(text, name);
-        let description = raw
+        // 소개문은 줄 머리의 이름을 뗀 나머지다 — 그래서 앵커가 맞는 것은 첫 이름뿐이다.
+        // 한 줄에 이름이 여럿이면 둘째부터는 아무것도 안 지워져 줄 전체(앞사람 이름까지)가
+        // 그 사람의 소개문이 되고 그대로 클레임에 실린다. 꼬리가 누구 것인지 이 층에서
+        // 못 가르므로 첫 이름만 소개문을 갖는다 — 이름이 여럿인 줄은 흔한 꼴이라 따로 안 알린다.
+        let description = index === 0 ? raw
           .replace(new RegExp('^' + escapeRegExp(name)), '')
           .replace(/^[（(][0-9０-９?？一二三四五六七八九十]{1,4}[）)]/, '')
           .replace(/^[①-⑳\s：:、，・\-]+/, '')
-          .trim();
+          .trim() : '';
         description = removeCharacterProfileFragments(description);
         if (description === name || description.length > 120) description = '';
         return { name, description, gender: profile.gender, age: profile.age, profile };
@@ -13912,13 +13975,16 @@
       if (!menu) return;
       const parentId = contextTargetParentId();
       state.documentContextMenu = null;
+      // 메뉴 DOM 도 상태와 같이 지운다 — 아래 액션에는 확인창 취소·조건 불충족으로 재렌더
+      // 전에 돌아가는 길이 여럿이라(작품·문서·폴더 삭제), 상태만 지우면 화면에 남은 메뉴가
+      // 눌러도 아무 일이 안 나는 죽은 메뉴가 된다.
+      renderDocumentPanel();
       if (action === 'add-document') addSubDocument(parentId);
       else if (action === 'add-folder') addDocumentFolder(parentId);
       else if (action === 'rename') {
         state.renamingTreeNode = { type: menu.type, id: menu.id };
         syncAll(false);
       } else if (action === 'properties' && menu.type === 'document') {
-        renderDocumentPanel(); // opening a modal doesn't re-render the tree — clear the menu DOM
         openDocumentPropertiesModal(menu.id);
       } else if (action === 'delete') {
         if (menu.type === 'document') deleteDocumentById(menu.id);
@@ -14071,7 +14137,15 @@
       const doc = documentById(documentId);
       const docs = state.project.documents || [];
       // 삭제 성공 여부를 반환한다 — 폴더 삭제가 이 값을 보고 멈춘다.
-      if (!doc || doc.id === 'project-common' || docs.length <= 1) return false;
+      if (!doc || doc.id === 'project-common') return false;
+      // 문서가 하나뿐이면 지우지 않는다. 옛 형식 프로젝트는 project-common 없이 문서 하나로
+      // 승격되므로(ensureProjectShape) 그 하나가 곧 전부다. 조용히 돌아가면 메뉴가 안 먹은 것과
+      // 구별되지 않으므로 사유를 낸다. project-common 이 있는 프로젝트는 여기 안 걸린다 —
+      // 마지막 편집 문서를 지우고 공통 문서만 남기는 것은 아래 nextDoc 이 받는 정상 경로다.
+      if (docs.length <= 1) {
+        toast(t('lastDocumentDeleteBlockedToast'));
+        return false;
+      }
       if (!(options && options.skipConfirm)
         && !confirm(t('confirmDeleteDocument', { title: doc.title || doc.id }))) return false;
       const removedBlockIds = new Set((state.project.sourceBlocks || []).filter(b => b.sourceDocumentId === doc.id).map(b => b.id));
@@ -14905,6 +14979,8 @@
         .flatMap(col => sortPdfJsVerticalItemsTopToBottom(col.items));
     }
 
+    // 호출자는 이미 그 쪽 본문 범위로 거른 아이템을 넘긴다 — 그래서 아래에서 만드는 페이지에
+    // doc·쪽번호가 없어도 다시 걸릴 클립이 없고, 범위 위로 떨어진 씬 번호는 이 풀에 애초에 없다.
     function orderedPdfItemsForMatching(items, pageNo) {
       const source = (items || []).filter(item => item && item.text);
       if (!source.length) return [];
@@ -15227,6 +15303,8 @@
     // 세로 칸의 괘선 사각형도 글자 단위로 자른다. **이것을 안 자르면 글자로 좁힌 것이
     // 그대로 되돌아간다** — rectForPdfMatchedItems 는 세로 갈래에서 union 을 버리고
     // 이 괘선 사각형으로 통째로 갈아치우기 때문이다(그 함수 주석에 적혀 있다).
+    // 자르는 축은 높이 하나뿐이다(세로 전제). 가로 줄의 괘선 사각형도 여기까지 오지만 소비처가
+    // 세로 갈래에서만 이 사각형을 쓴다 — 축을 가로로 바꿔 다시 임포트해도 좌표 지문이 같았다.
     function pdfGuideLineRectForCharSlot(rect, index, total) {
       const slot = rect && Number(total) > 1 ? glyphSlotSpan(rect.height, index, total) : null;
       if (!slot) return rect;
@@ -15788,7 +15866,7 @@
     // 확인한 것 둘: 이 병합이 만드는 pageSpans 를 소비하는 곳은 PDF 경로뿐이고
     // (attachSourceReviewPageSpans · attachPdfOverlayRectsToReviewItems), 짝인 대사 쪽경계
     // 병합은 닫는 따옴표라는 종료 조건이 있어 문서 종류를 안 가린다.
-    // 실측(표본 18개): 아래 조건들까지 온 쪽 짝은 4개, 실제 병합은 0건이었다.
+    // 실측(표본 19개): 병합 53건. 그중 두 아이템의 span 쪽이 겹친 것은 0건이었다.
     function mergeSourceReviewActionPageContinuations(items, pages, profile, doc) {
       if (!doc || doc.draftSourceType !== 'pdf') return items || [];
       if (!Array.isArray(items) || items.length < 2 || !Array.isArray(pages) || pages.length < 2) return items || [];
@@ -16578,6 +16656,7 @@
     // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function cloneSourceReviewItem(item) {
       const cloned = makeSourceReviewItem(item && item.type, item && item.pageNo, sourceReviewItemText(item), item && item.order);
+      // 아래에서 안 옮기는 speaker·modifier·dialog·dialogOpenEnded 는 이 재파싱이 정본이다.
       if (!item) return cloned;
       cloned.id = item.id || cloned.id;
       cloned.section = item.section || cloned.section || '';
@@ -16667,11 +16746,20 @@
         pageNo,
         text: items.map(sourceReviewItemText).join('\n')
       }))).slice();
-      return pageTexts.map(page => ({
+      const entries = pageTexts.map(page => ({
         pageNo: page.pageNo || 1,
         text: page.text || '',
         items: grouped.get(page.pageNo || 1) || []
       }));
+      // 이 목록의 축은 pageTexts 하나뿐이다 — 두 축의 쪽 번호가 갈리면 그 쪽 아이템은 어느 칸에도
+      // 안 그려진다(빈 쪽이 낀 원문에서 갈린다). 조용히 빠지지 않도록 안 그린 것을 기록한다.
+      const shownPages = new Set(entries.map(entry => entry.pageNo));
+      const orphanPages = Array.from(grouped.keys()).filter(pageNo => !shownPages.has(pageNo));
+      if (orphanPages.length) {
+        const orphanItems = orphanPages.reduce((count, pageNo) => count + (grouped.get(pageNo) || []).length, 0);
+        notePdfOverlayDrop('reviewPageNotRendered', 'p' + orphanPages.join(',') + '×' + orphanItems);
+      }
+      return entries;
     }
 
     // 쓰는 곳: 리뷰UI · 저장 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -17306,6 +17394,8 @@
       renderSourceReviewModalBody();
     }
 
+    // 호출자는 초안이 활성 문서의 것임을 보장한다 — 여는 두 호출부가 모두 활성 문서를 넘기고,
+    // 모달이 떠 있는 동안 활성 문서가 바뀌는 경로가 없다(아래 syncSourceReviewDraftFromDom 도 같다).
     function updateSourceReviewDraftPageText(el) {
       const draft = state.sourceReviewDraft;
       if (!draft) return;
@@ -18937,6 +19027,9 @@
       return span;
     }
 
+    // 호출자는 block 이 pageNo 쪽에 걸쳐 있음을 보장한다 — blockHasOverlayPage 로 거르거나
+    // pdfOverlayBlockForPage 프록시로 넘긴다. 안 거르고 부르면 안 걸친 쪽에도 주 쪽 사각형이
+    // 나오므로, 그 대답은 「이미 있다」 판정에만 쓴다.
     // 쓰는 곳: 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function overlayRectForBlockPage(block, pageNo) {
       if (!block) return null;
@@ -19203,9 +19296,13 @@
       };
       const startSceneGroup = (sceneBlock, continued) => {
         flush();
+        // 이어진 묶음인데 앞 씬을 못 찾으면(이 쪽 앞에 씬 머리가 하나도 없는 문서)
+        // 새 씬으로 적지 않는다 — 쪽 번호 없는 이어짐으로 적어 화면에 드러낸다.
+        // 실측: 표본 18문서 847묶음에서 0건이라 평소 화면은 그대로다.
+        const continuedLabel = previousScene ? '###SCENE_CONTINUED_FROM_P' + previousScene.pageNo : '###SCENE_CONTINUED';
         current = {
           kind: 'scene',
-          label: continued && previousScene ? '###SCENE_CONTINUED_FROM_P' + previousScene.pageNo : '###SCENE',
+          label: continued ? continuedLabel : '###SCENE',
           title: sceneBlock ? sourceBlockText(sceneBlock).split(/\n/)[0] : (previousScene && previousScene.title || ''),
           continuedFromPage: continued && previousScene ? previousScene.pageNo : 0,
           blocks: []
@@ -21443,6 +21540,15 @@
 
     function extractPdfTextInOverlayRect(blockId, requestedMode) {
       const doc = activeDocument();
+      // 선택은 화면의 상자만이 아니라 블록 목록에서도 온다(state.selectedBlockId). 그 블록이 다른 쪽이면
+      // currentOverlayRectForBlock 이 그 쪽 좌표를 주고, 뽑는 줄은 항상 활성 쪽 것이라 남의 쪽 글자가
+      // 이 블록의 원문처럼 상자에 찍힌다. 틀린 답을 내느니 안 뽑고 기록한다.
+      const activePageNo = Number(state.activeScriptPageNo || 1);
+      const block = (state.project.sourceBlocks || []).find(item => item.id === blockId);
+      if (block && !blockHasOverlayPage(block, activePageNo)) {
+        notePdfOverlayDrop('extractOffActivePage', 'p' + activePageNo);
+        return '';
+      }
       const rect = currentOverlayRectForBlock(blockId);
       if (!rect) return '';
       const mode = requestedMode === 'auto'
@@ -21451,6 +21557,8 @@
       return extractPdfGuideLineTextInOverlayRect(doc, rect, mode);
     }
 
+    // 호출자는 rect 가 활성 쪽(state.activeScriptPageNo) 의 좌표임을 보장한다 — 여기서 읽는 줄은
+    // 그 쪽 것뿐이라, 다른 쪽 사각형을 넘기면 같은 자리에 놓인 이 쪽 글자가 그 블록의 답으로 나간다.
     function extractPdfGuideLineTextInOverlayRect(doc, rect, mode) {
       const pageNo = state.activeScriptPageNo || 1;
       const page = pdfLogicalPageForDocument(doc, pageNo);
@@ -22399,6 +22507,7 @@
       };
       const onUp = () => {
         document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointercancel', onCancel);
         const rect = box.dataset.currentRect ? JSON.parse(box.dataset.currentRect) : {
           left: parseFloat(box.style.left) || start.left,
           top: parseFloat(box.style.top) || start.top,
@@ -22433,9 +22542,20 @@
         updatePdfRangeExtractionFromSelection(false);
         markProjectChanged(mode === 'resize' ? 'resize_body_overlay_box' : 'move_body_overlay_box');
       };
+      // 터치·펜에서 브라우저가 제스처를 가져가면 pointerup 이 오지 않는다 — 안 떼면 onMove 가
+      // 남아 상자가 계속 포인터를 따라다니고, 다음 무관한 pointerup 이 onUp 을 깨워 그 자리를
+      // manual 로 굳힌다(그 블록은 자동 재계산에서 영구히 빠진다). 사용자가 끝내지 않은 편집이라
+      // 저장하지 않고 화면만 시작 사각형으로 되돌린다 — 겹쳐서 튕길 때와 같은 처리다.
+      const onCancel = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        delete box.dataset.currentRect;
+        applyOverlayRectToElement(box, startRect, overlayPageNo);
+      };
       selectPdfOverlayBox(box);
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp, { once: true });
+      document.addEventListener('pointercancel', onCancel, { once: true });
     }
 
     // 쓰는 곳: 매칭 · 렌더 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -22488,6 +22608,8 @@
       const body = blocks.filter(isBodyTabBlock).length;
       const characters = (p.entities || []).filter(e => e.type === 'character' && entityVisibleInActiveDocument(e, p)).length;
       const places = (p.entities || []).filter(e => e.type === 'place' && entityVisibleInActiveDocument(e, p)).length;
+      // 호출자는 모든 블록에 meta 를 보장한다 — 블록이 들어오는 문은 normalizeImportedBlocks ·
+      // 수동 블록 추가 · 버전 스냅샷 복원 셋뿐이고 셋 다 meta 를 채운다.
       const low = blocks.filter(b => b.zone === 'low_confidence' || b.meta.confidence < LOW_CONFIDENCE_THRESHOLD).length;
       const blockTabCounts = { body, character: characters, place: places, low };
       const blockTabLabels = { body: t('tabBody'), character: t('tabCharacter'), place: t('tabPlace'), low: t('tabLow') };
@@ -23065,6 +23187,9 @@
           fn(tx.objectStore(storeName));
           tx.oncomplete = resolve;
           tx.onerror = () => reject(tx.error);
+          // 커밋에서 죽는 쓰기(용량 초과·저장소 축출)는 요청이 이미 끝난 뒤라 error 가 안 온다 —
+          // abort 를 안 받으면 이 프라미스가 영영 안 풀려 db.close() 도 자동저장 실패 표시도 못 간다.
+          tx.onabort = () => reject(tx.error || new Error('indexeddb transaction aborted'));
         });
       } finally {
         db.close();
@@ -23193,7 +23318,11 @@
         state.settings.activeWorkId = activeWork && activeWork.workspace.workId || '';
         return true;
       } catch (err) {
+        // 스냅샷이 없는 것과 못 읽는 것은 다르다 — 없으면 위에서 false 로 조용히 끝나고,
+        // 여기로 오면 반드시 실패다. 콘솔만 찍으면 사용자는 작업이 사라진 빈 화면을
+        // 정상으로 보고 그 위에 쓴다.
         console.warn('settings autosave restore failed', err);
+        alert(t('autosaveRestoreFailed', { message: err && err.message ? err.message : String(err) }));
         return false;
       }
     }
@@ -23510,7 +23639,10 @@
       let dragDepth = 0;
       window.addEventListener('dragenter', (e) => { if (!hasFiles(e) || ownZone(e)) return; dragDepth += 1; if (overlay) overlay.classList.add('show'); });
       window.addEventListener('dragover', (e) => { if (!hasFiles(e) || ownZone(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-      window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth && overlay) overlay.classList.remove('show'); });
+      // dragenter 가 안 세는 요소는 dragleave 도 세면 안 된다 — #dropZone 만 빼고 세던 탓에
+      // 전용 존을 지나 캔버스로 나가는 순간 깊이가 0 으로 떨어져, 파일이 아직 앱 위에 있는데
+      // 오버레이가 사라졌다. 여기서 걸러도 drop 이 깊이를 0 으로 되돌리므로 갇히지 않는다.
+      window.addEventListener('dragleave', (e) => { if (!hasFiles(e) || ownZone(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth && overlay) overlay.classList.remove('show'); });
       window.addEventListener('drop', (e) => {
         if (!hasFiles(e)) return;
         dragDepth = 0;
@@ -24057,7 +24189,10 @@
       const work = ensureProjectShape(state.project);
       // Compact first (strips the huge re-derivable fields) THEN clone — a full work can
       // exceed JSON.stringify's string-length limit, which is what made slots slow/fail.
-      try { return JSON.parse(JSON.stringify(compactWorkForStorage(work))); } catch (e) { return null; }
+      // 위 한계에 실제로 걸리면 복원 지점이 통째로 안 만들어진다 — 부르는 쪽은 null 을 false 로
+      // 바꿔 돌려줄 뿐이라, 여기서 적지 않으면 어디서 끊겼는지 남는 기록이 없다.
+      try { return JSON.parse(JSON.stringify(compactWorkForStorage(work))); }
+      catch (e) { console.warn('restore point serialize failed', e); return null; }
     }
 
     function projectSlotSummary(work) {
@@ -24069,6 +24204,9 @@
       return { title, blocks, notes, entities };
     }
 
+    // 호출자는 슬롯으로 남길 만한 변경이 markProjectChanged 를 지나왔음을 보장한다 —
+    // workspace.updatedAt 을 움직이는 곳이 거기 하나뿐이라, 문서만 고치는 경로
+    // (saveActiveInputToDocument)는 이 지문에 안 잡힌다. 그런 자리는 force 로 부른다.
     function slotSignature(summary, work) {
       return [summary.blocks, summary.notes, summary.entities, work && work.workspace && work.workspace.updatedAt || ''].join('|');
     }
@@ -24283,13 +24421,19 @@
     }
 
     function copyText(value) {
-      navigator.clipboard.writeText(value).catch(() => {
+      navigator.clipboard.writeText(value).catch((err) => {
         const ta = document.createElement('textarea');
         ta.value = value;
         document.body.appendChild(ta);
         ta.select();
-        document.execCommand('copy');
+        // execCommand 는 사양에서 빠진 폴백이라 복사 없이 false 로 끝날 수 있다. 부르는 쪽은 결과를
+        // 안 기다리고 버튼을 「완료」로 바꾸므로, 여기서 말하지 않으면 실패가 성공으로 보인다.
+        const copied = document.execCommand('copy');
         ta.remove();
+        if (!copied) {
+          console.warn('clipboard copy failed', err);
+          toast(t('copyFailed'));
+        }
       });
     }
 
@@ -24336,7 +24480,11 @@
         <div class="row"><button id="saveEntityModalBtn" class="primary">${esc(t('saveButton'))}</button></div>
       `;
       $('saveEntityModalBtn').addEventListener('click', () => {
-        entity.name = norm($('modalEntityName').value);
+        // 이름이 곧 열쇠다 — 비우면 콘티 패키지의 conteMergeNamed 가 norm 결과가 비었다고 그 소재를
+        // 통째로 버린다(지운 적 없는데 사라진다). 작품 추가와 같은 자리에서 막는다.
+        const nextName = norm($('modalEntityName').value);
+        if (!nextName) { alert(t('entityNameRequired')); return; }
+        entity.name = nextName;
         entity.type = $('modalEntityType').value;
         entity.aliases = $('modalEntityAliases').value.split(',').map(v => norm(v)).filter(Boolean);
         setEntityScope(entity, $('modalEntityScope').value, activeDocument().id);
@@ -24376,6 +24524,10 @@
         <button id="saveBlockNoteBtn" class="primary">${esc(t('addButton'))}</button>
       `;
       $('saveBlockNoteBtn').addEventListener('click', () => {
+        // 본문이 비면 addRevisionNote 가 null 을 내고 markProjectChanged 까지 건너뛴다 — 그 앞에서
+        // linkedEntityIds 를 먼저 고쳐 두면 저장되지 않는 편집만 남고 모달은 성공한 얼굴로 닫혔다.
+        // 노트와 연결을 한 덩어리로 묶어 둘 다 하거나 둘 다 안 한다.
+        if (!norm($('newBlockNoteText').value)) { alert(t('textRequired')); return; }
         const selected = Array.from($('newBlockNoteEntities').selectedOptions).map(o => o.value);
         block.linkedEntityIds = uniq((block.linkedEntityIds || []).concat(selected));
         addRevisionNote('block', block.id, noteType || 'retake', $('newBlockNoteText').value, selected);
@@ -24396,9 +24548,13 @@
       `;
       $('saveSettingBlockBtn').addEventListener('click', () => {
         const text = norm($('newSettingText').value);
-        if (!text) return;
+        if (!text) { alert(t('textRequired')); return; }
+        // addClaim 의 id 는 (소재 + 본문) 해시라 같은 소재에 같은 문장을 다시 넣으면 null 이 온다.
+        // 여기서 걸러진 것은 중복뿐이다(소재도 본문도 위에서 이미 확인했다). 그대로 닫으면
+        // 아무것도 안 늘었는데 변경 표시만 서던 자리다.
         const claim = addClaim(state.project, entity, 'canonical_setting', text, $('newSettingAuthority').value, []);
-        if (claim) entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
+        if (!claim) { alert(t('settingDuplicate')); return; }
+        entity.fixedFactIds = uniq((entity.fixedFactIds || []).concat(claim.id));
         closeModal();
         markProjectChanged('add_entity_setting_block');
         syncAll(false);
@@ -24415,6 +24571,8 @@
         <button id="saveEntityNoteBtn" class="primary">${esc(t('addButton'))}</button>
       `;
       $('saveEntityNoteBtn').addEventListener('click', () => {
+        // 빈 본문은 addRevisionNote 가 null 로 돌려보낸다 — 그대로 닫으면 노트가 생긴 줄 안다.
+        if (!norm($('newEntityNoteText').value)) { alert(t('textRequired')); return; }
         addRevisionNote('entity', entity.id, 'retake', $('newEntityNoteText').value, [entity.id]);
         closeModal();
         syncAll(false);
