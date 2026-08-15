@@ -2777,7 +2777,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v190';
+    const APP_VERSION = 'v191';
     const APP_BUILD_DATE = '2026-08-15';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -6807,9 +6807,13 @@
     // classifyBody 에도 전환 규칙이 있지만 **같은 자가 아니다** — 그쪽은 ××× 셋이고 ✕ 는 안 받는다.
     // 그래서 '××' 와 '✕✕' 는 여기서 걸려도 classifyBody 의 전환 규칙에는 안 걸린다.
     // 근거 불명 — 두 자리 그리고 세 자리, ✕ 를 받고 안 받고를 갈라 둔 근거는 커밋·문서에 없다.
+    // 세로쓰기 낱자 묶기(pdfGlyphSplitClusterRuns)도 이 글자 집합으로 전환 표시만 이어 붙인다
+    // — 판정과 묶기가 다른 집합을 쓰면 묶어 놓고도 여기 안 걸리는 줄이 생긴다.
+    const PDF_TRANSITION_MARK_CLASS = '[×✕]';
+
     // 쓰는 곳: 매칭 · 리뷰UI — 한 층에서 고치면 나머지도 따라 바뀐다.
     function isPdfTransitionMarkerLeadLine(raw) {
-      return /^[×✕]{2,}/.test(norm(raw));
+      return new RegExp('^' + PDF_TRANSITION_MARK_CLASS + '{2,}').test(norm(raw));
     }
 
     // 쓰는 곳: 줄묶기 · 매칭 · PDF파싱 · 리뷰UI · 텍스트분류 — 한 층에서 고치면 나머지도 따라 바뀐다.
@@ -9937,14 +9941,20 @@
     }
 
     // 한 줄은 **끊기지 않고 이어지는** 글리프의 연속이다. 끊는 자리는 글자 간격의 몇 배다.
+    // 전환 표시(× ✕)만 이어질 때는 간격을 안 본다 — 지면에서 그 표시는 본문 글자 간격의
+    // 4배로 벌어져 있어 매번 끊겼고, 끊긴 낱자는 어느 판정에도 안 걸려 전환이 인식되지
+    // 않았다(scene_transition_marker_2026-08-11.md q1=A). 좁은 조건(양옆 다 전환 표시)이라
+    // 본문 줄의 끊는 자리는 그대로다.
     // 쓰는 곳: 줄묶기 · 렌더 — 한 층에서 고치면 나머지도 따라 바뀐다.
     function pdfGlyphSplitClusterRuns(clusters, along, step) {
+      const transitionMarkRe = new RegExp('^' + PDF_TRANSITION_MARK_CLASS + '$');
       const runs = [];
       (clusters || []).forEach((cluster) => {
         let current = [];
         cluster.items.forEach((item, i) => {
           const prev = cluster.items[i - 1];
-          if (prev && (Number(item[along]) || 0) - (Number(prev[along]) || 0) > step * PDF_GLYPH_RUN_BREAK_STEPS) {
+          const bothTransitionMarks = prev && transitionMarkRe.test(prev.text) && transitionMarkRe.test(item.text);
+          if (prev && !bothTransitionMarks && (Number(item[along]) || 0) - (Number(prev[along]) || 0) > step * PDF_GLYPH_RUN_BREAK_STEPS) {
             if (current.length) runs.push(current);
             current = [];
           }
@@ -15856,7 +15866,7 @@
             // action beats on either side of ××× become distinct items/overlay boxes instead
             // of one merged item spanning the wrong rect.
             flushText();
-            const hasTrailingContent = Boolean(norm(raw).replace(/^[×✕]{2,}\s*/, '').trim());
+            const hasTrailingContent = Boolean(norm(raw).replace(new RegExp('^' + PDF_TRANSITION_MARK_CLASS + '{2,}\\s*'), '').trim());
             pushSourceReviewItem(items, hasTrailingContent && bodyStarted ? 'action' : 'text', page.pageNo, raw, orderRef);
             continue;
           }
