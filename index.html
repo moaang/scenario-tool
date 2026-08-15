@@ -2777,7 +2777,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v187';
+    const APP_VERSION = 'v188';
     const APP_BUILD_DATE = '2026-08-15';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -13660,10 +13660,15 @@
       return (state.project.documents || []).find(doc => doc.id === id);
     }
 
+    // 부모 사슬을 거슬러 오르므로 순환이 들면 멈추지 않는다. 순환을 막으려는 것이 이 함수인데
+    // 이미 순환이 든 저장본을 열면 그 장치 자신이 화면을 세운다 — 임포트 정규화는 부모 id 가
+    // 목록에 없는 경우만 보고 순환은 안 본다. 정상 트리는 같은 id 를 두 번 지나지 않는다.
     function isFolderDescendant(folderId, possibleParentId) {
+      const seen = new Set();
       let cursor = folderById(possibleParentId);
-      while (cursor) {
+      while (cursor && !seen.has(cursor.id)) {
         if (cursor.id === folderId) return true;
+        seen.add(cursor.id);
         cursor = cursor.parentId && cursor.parentId !== 'root' ? folderById(cursor.parentId) : null;
       }
       return false;
@@ -14162,9 +14167,13 @@
       syncAll(false);
     }
 
+    // 순환이 들면 무한 재귀다 — isFolderDescendant 와 같은 이유로 방문한 id 를 기억한다.
     function childFolderIds(folderId) {
       const ids = [];
+      const seen = new Set();
       const visit = (id) => {
+        if (seen.has(id)) return;
+        seen.add(id);
         documentTreeFolders(state.project).filter(folder => folder.parentId === id).forEach((folder) => {
           ids.push(folder.id);
           visit(folder.id);
