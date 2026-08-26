@@ -11495,9 +11495,11 @@
         itemBudget -= items.length;
         // 인쇄된 쪽번호는 본문이 아니다. 어느 글자가 그것인지를 한 번만 정하고
         // 쪽번호 값과 본문 조립이 그 판정을 함께 쓴다 — 따로 재면 둘이 갈라진다.
+        // 쪽번호를 감싼 대시 장식(—3—)도 함께 뺀다(2026-08-11 판정 a1) — 안 빼면 낱자 줄로 남는다.
         const printedPageNoItems = pdfPrintedPageNoItems(items);
-        const printedPageNoItemSet = new Set(printedPageNoItems);
-        const bodySourceItems = printedPageNoItems.length
+        const pageNoDecorationItems = pdfPageNoDashDecorationItems(items, printedPageNoItems);
+        const printedPageNoItemSet = new Set(printedPageNoItems.concat(pageNoDecorationItems));
+        const bodySourceItems = printedPageNoItemSet.size
           ? items.filter(item => !printedPageNoItemSet.has(item))
           : items;
         const grouped = splitPdfItemsIntoBodyAndAnnotations(bodySourceItems);
@@ -11836,9 +11838,18 @@
       if (!bodyItems.length) return { bodyLines: [], annotations: colorAnnotations.concat(detachedAnnotations) };
       const bodyTextItems = stripPdfLineGuideNumberItems(bodyItems);
       if (!bodyTextItems.length) return { bodyLines: [], annotations: colorAnnotations.concat(detachedAnnotations) };
-      const contentOrderLines = groupPdfItemsByContentOrder(bodyTextItems);
-      const horizontalRows = tryGroupPdfHorizontalRows(bodyTextItems);
-      const verticalResult = groupPdfVerticalColumns(bodyTextItems, majorityBlue);
+      // horizontal_header_and_page_dash_2026-08-11.md §3-A(q1=C) — 세로 각본에 가로로 이어
+      // 적힌 줄(란외 머리글 등)은 열로 묶기 전에 통째로 뗀다. 세로 열 그루퍼는 x 가 다르면
+      // 별개 열로 보므로, 안 떼면 가로줄이 낱자로 부서진다(실측 한 예: 머리글 35자 → 35줄).
+      // 뗀 글자는 되살리지 않고 본문에서 버린다 — 같은 정보가 표지에 이미 있다(q1=C).
+      const horizontalHeaderItems = pdfHorizontalHeaderRunItems(bodyTextItems);
+      const horizontalHeaderItemSet = new Set(horizontalHeaderItems);
+      const groupableItems = horizontalHeaderItemSet.size
+        ? bodyTextItems.filter(item => !horizontalHeaderItemSet.has(item))
+        : bodyTextItems;
+      const contentOrderLines = groupPdfItemsByContentOrder(groupableItems);
+      const horizontalRows = tryGroupPdfHorizontalRows(groupableItems);
+      const verticalResult = groupPdfVerticalColumns(groupableItems, majorityBlue);
       const verticalColumns = verticalResult.bodyLines || [];
       const horizontalScore = pdfGroupedTextScore(horizontalRows);
       const verticalScore = pdfGroupedTextScore(verticalColumns);
@@ -11849,6 +11860,75 @@
       const useContentOrder = shouldPreferPdfContentOrderLines(geometryResult.bodyLines || [], contentOrderLines);
       const bodyLines = repairPdfDetachedDialogPunctuationLines(useContentOrder ? contentOrderLines : (geometryResult.bodyLines || []));
       return { bodyLines, annotations: filterPdfAnnotationsAlreadyInBody(annotations, bodyLines) };
+    }
+
+    // 페이지의 「글자폭」 추정 — pdf-logical-fallback 좌표(자체 파서 경로)는 item.width·height·
+    // glyphWidth 가 전부 하한 2 로 뭉개진다(실측: 폴백 경로 표본 각본 p5, 566개 아이템 전부 width=height=
+    // glyphWidth=2 — 폴백은 x/y 만 보장하고 박스 크기는 안 잰다). 그래서 폭을 직접 못 읽고,
+    // 같은 세로 열(x 반올림 일치) 안의 인접 y 간격으로 대신 잰다 — 세로쓰기 글자는 대체로
+    // 정사각이라 그 간격이 곧 글자 크기다(실측: 그 열 y간격 11.28~12.24pt, 같은 문서 조사값
+    // 10.0pt 와 같은 자릿수). 60pt 넘는 간격은 문단이 갈린 자리라 빼고 잰다.
+    function pdfPageCharacterPitch(pool) {
+      const byX = new Map();
+      pool.forEach((item) => {
+        const key = Math.round(Number(item.x) || 0);
+        if (!byX.has(key)) byX.set(key, []);
+        byX.get(key).push(item);
+      });
+      const gaps = [];
+      byX.forEach((group) => {
+        if (group.length < 2) return;
+        const sorted = group.slice().sort((a, b) => (Number(b.y) || 0) - (Number(a.y) || 0));
+        for (let i = 1; i < sorted.length; i += 1) {
+          const gap = Math.abs((Number(sorted[i - 1].y) || 0) - (Number(sorted[i].y) || 0));
+          if (gap > 0 && gap < 60) gaps.push(gap);
+        }
+      });
+      if (!gaps.length) return 0;
+      gaps.sort((a, b) => a - b);
+      return gaps[Math.floor(gaps.length / 2)];
+    }
+
+    // horizontal_header_and_page_dash_2026-08-11.md §3-A·§3-C(q2=A) — 세로 각본에서 「같은 y에
+    // 늘어선 글자」는 두 갈래뿐이고 이웃 x 간격이 가른다: 가로로 이어 쓴 줄은 글자폭 ≈1.0배,
+    // 세로 열들의 같은 행은 1.5~2.1배(열 피치)다. 문턱은 그 페이지 글자폭 중앙값 × 1.25 —
+    // 실측(각본 17개)에서 어떤 세로 행도 1.5배 미만이 없어 이 문턱은 오검출 0이다.
+    // 같은 y(±2pt)에 8자 미만이면 후보에서 뺀다(우연히 나란한 낱자를 줄로 오인하지 않도록).
+    //
+    // 문서 자체의 「다른 16개 문서는 불변」 검증은 틀렸었다 — 각본이 아니라 산문(플롯 개고안·
+    // 시리즈 구성)인 두 문서는 페이지 전체가 이 조건에 걸려 본문이 통째로 잘렸다(실측: 산문
+    // 표본 플롯 개고안이 454→416줄로 깨짐). 가로쓰기 산문은 한 아이템에 여러 글자가
+    // 배칭되고 세로 각본은 거의 매 글자가 별개 아이템이라, 「1~2글자 아이템 비율」이 둘을 가른다
+    // — 전 코퍼스 실측: 각본 15편 0.993~1.000, 산문 2편 0.054·0.632. 문턱 0.9 는 그 사이 어디를
+    // 잡아도 같다.
+    function pdfHorizontalHeaderRunItems(items) {
+      const pool = (items || []).filter(item => item && item.text);
+      if (pool.length < 8) return [];
+      const shortItems = pool.filter(item => charLen(item.text) <= 2).length;
+      if (shortItems / pool.length < 0.9) return [];
+      const charWidth = pdfPageCharacterPitch(pool);
+      if (!charWidth) return [];
+      const limit = charWidth * 1.25;
+      const rows = [];
+      pool.forEach((item) => {
+        let row = rows.find(r => Math.abs(r.y - item.y) <= 2);
+        if (!row) { row = { y: item.y, items: [] }; rows.push(row); }
+        row.items.push(item);
+      });
+      const out = [];
+      rows.forEach((row) => {
+        if (row.items.length < 8) return;
+        const sorted = row.items.slice().sort((a, b) => (Number(a.x) || 0) - (Number(b.x) || 0));
+        const gaps = [];
+        for (let i = 1; i < sorted.length; i += 1) {
+          gaps.push(Math.abs((Number(sorted[i].x) || 0) - (Number(sorted[i - 1].x) || 0)));
+        }
+        if (!gaps.length) return;
+        const sortedGaps = gaps.slice().sort((a, b) => a - b);
+        const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)];
+        if (medianGap <= limit) out.push(...sorted);
+      });
+      return out;
     }
 
     // 앞줄(말줄임만인 줄)을 뒷줄 뒤에 붙여 원문 순서를 뒤집는다.
@@ -12661,6 +12741,36 @@
         .sort((a, b) => (Number(a.x) || 0) - (Number(b.x) || 0))
         // 세 자리까지 — 후보 자체가 한 자리에서 세 자리 숫자로 걸러진 값이다.
         .slice(0, 3);
+    }
+
+    // horizontal_header_and_page_dash_2026-08-11.md §3-B(a1, 승인) — 쪽번호를 감싼 대시 장식
+    // (—3— 의 좌우 —)을 쪽번호와 함께 본문에서 뺀다. 판정: 쪽번호와 같은 행(y ±2pt)에서
+    // 좌우로 글자폭 2배 이내이고, 글자가 대시류(—―─－‐-)만인 것.
+    // 실측(NGOD): 대시 x=407.2 / 쪽번호 x=418.3 / 대시 x=423.8, 간격 11.0·5.5, 글자폭 10.0 → 2배 안.
+    const PDF_PAGE_NO_DASH_RE = /^[—―─－‐-]+$/;
+    function pdfPageNoDashDecorationItems(items, pageNoItems) {
+      if (!pageNoItems || !pageNoItems.length) return [];
+      // glyphWidth 는 pdf-logical-fallback 좌표에서 하한 2 로 뭉개진다(위 pdfPageCharacterPitch
+      // 주석 참고) — NGOD 실측(대시 x=407.2/쪽번호 418.3/대시 423.8, 간격 5.5·11.0)에서 glyphWidth
+      // 기준 limit=4 는 둘 다 못 잡는다. 열 y간격 기반 페이지 공통 글자폭을 대신 쓴다.
+      const pageNoSet = new Set(pageNoItems);
+      const out = [];
+      const outSet = new Set();
+      const charWidth = pdfPageCharacterPitch((items || []).filter(item => item && item.text));
+      pageNoItems.forEach((pageNoItem) => {
+        const limit = charWidth * 2 || (Number(pageNoItem.glyphWidth) || 0) * 2;
+        if (!limit) return;
+        (items || []).forEach((item) => {
+          if (!item || pageNoSet.has(item) || outSet.has(item)) return;
+          const text = String(item.text || '').trim();
+          if (!text || !PDF_PAGE_NO_DASH_RE.test(text)) return;
+          if (Math.abs((Number(item.y) || 0) - (Number(pageNoItem.y) || 0)) > 2) return;
+          if (Math.abs((Number(item.x) || 0) - (Number(pageNoItem.x) || 0)) > limit) return;
+          out.push(item);
+          outSet.add(item);
+        });
+      });
+      return out;
     }
 
     function pdfOperatorNumbers(op) {
