@@ -57,7 +57,7 @@
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v198';
+    const APP_VERSION = 'v199';
     const APP_BUILD_DATE = '2026-09-16';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -19569,11 +19569,7 @@
       return block.zone === 'body' || Boolean(block.assignableToCut);
     }
 
-    // 블록 하나가 내보내는 근거·경고 목록의 상한. 받는 쪽은 meta 를 통째로 복사하므로 이것은
-    // 보내는 쪽 방어값이다. evidence 는 한 줄씩 쌓인다 — 분류·등장인물 목록 보강·씬머리/지문
-    // 분리가 각자 한 줄을 더하고, 마지막 분리는 내보내기가 부르는 ensureProjectShape 안에서 돌아
-    // 임포트 경로만 재는 장치에는 안 보인다. 근거 불명 — 8 이라는 값의 근거는 못 찾았다
-    // (2026-08-08 히스토리 재작성 이전 커밋이 없다).
+    // 내보내는 진단 근거·경고만 8개로 제한한다. 본문과 의미 필드는 줄이지 않는다.
     const CONTE_META_LIST_LIMIT = 8;
 
     function conteExportBlockMeta(block) {
@@ -19653,11 +19649,9 @@
     // 이름으로 묶어 한 항목에 합친다: 별칭은 쌓고, 스칼라는 먼저 들어온 값이 이기고,
     // 세는 값은 더하고, confidence 는 큰 쪽을 남긴다. shape 가 항목의 필드 구성을 정하며
     // 그 차례가 곧 내보내는 JSON 의 키 차례다. 등장인물과 장소가 함께 쓰는 유일본이다.
-    function conteMergeNamed(map, name, patch, shape, entityType) {
-      // 합칠 열쇠는 소재 카드와 같은 normalizeEntityName 을 쓴다 — 그 값이 그대로 내보내는
-      // name 이 된다. normalizeEntityName 이 그 종류(인물·장소)답지 않다고 보아 빈 문자열을
-      // 내는 경우엔 norm() 으로 물러난다 — 소재를 조용히 잃지 않기 위해서다.
-      const clean = normalizeEntityName(name, entityType) || norm(name);
+    function conteMergeNamed(map, name, patch, shape) {
+      // 확정 이름은 전달할 때 다시 해석하지 않는다.
+      const clean = String(name || '').trim();
       if (!clean) return null;
       const key = clean;
       if (!map.has(key)) {
@@ -19686,7 +19680,7 @@
     const CONTE_PLACE_SHAPE = { scalars: ['sourceDocumentId', 'scope', 'status', 'authority'], lists: ['timeOfDayCandidates'], counter: 'sceneCount' };
 
     function conteMergeCharacter(map, name, patch) {
-      return conteMergeNamed(map, name, patch, CONTE_CHARACTER_SHAPE, 'character');
+      return conteMergeNamed(map, name, patch, CONTE_CHARACTER_SHAPE);
     }
 
     function conteExportCharacters(project, blocks) {
@@ -19719,11 +19713,11 @@
       });
       (blocks || []).forEach((block) => {
         if (!conteExportIsDialogueType(block.type)) return;
-        const names = uniq((block.speakerNames || []).concat(block.characterName || block.speaker || '').map(norm));
+        const names = uniq((block.speakerNames && block.speakerNames.length ? block.speakerNames : [block.characterName || block.speaker || '']).map(norm).filter(Boolean));
         names.forEach((name) => {
           conteMergeCharacter(map, name, {
-            gender: block.characterProfileHint && block.characterProfileHint.gender || '',
-            age: block.characterProfileHint && block.characterProfileHint.age || '',
+            gender: names.length === 1 && block.characterProfileHint && block.characterProfileHint.gender || '',
+            age: names.length === 1 && block.characterProfileHint && block.characterProfileHint.age || '',
             sourceDocumentId: block.sourceDocumentId || '',
             sourceRefs: [block.sourceBlockId || block.id],
             pages: [block.pageNo],
@@ -19744,7 +19738,7 @@
     }
 
     function conteMergePlace(map, name, patch) {
-      return conteMergeNamed(map, name, patch, CONTE_PLACE_SHAPE, 'place');
+      return conteMergeNamed(map, name, patch, CONTE_PLACE_SHAPE);
     }
 
     function conteExportPlaces(project, blocks) {
