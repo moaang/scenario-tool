@@ -2024,6 +2024,26 @@
     @keyframes modalPop { from { transform: translateY(8px) scale(.99); opacity: .6; } to { transform: none; opacity: 1; } }
     .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); background: var(--panel); }
     .modal-body { padding: 14px; display: grid; gap: 11px; }
+    .modal.settings-modal { width: min(900px, 94vw); }
+    .dictionary-settings { display: grid; gap: 14px; min-width: 0; }
+    .dictionary-help { margin: 0; color: var(--ink-soft); line-height: 1.6; }
+    .dictionary-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+    .dictionary-presets, .dictionary-editor { display: grid; gap: 10px; align-content: start; min-width: 0; }
+    .dictionary-presets { border-right: 1px solid var(--line); padding-right: 16px; }
+    .dictionary-preset-list, .dictionary-entry-list { display: grid; gap: 6px; }
+    .dictionary-preset-row { display: flex; align-items: center; gap: 8px; }
+    .dictionary-preset-row input { width: auto; }
+    .dictionary-preset-row button { flex: 1; overflow-wrap: anywhere; min-width: 0; text-align: left; }
+    .dictionary-editor label { display: grid; gap: 6px; }
+    .dictionary-entry { display: grid; grid-template-columns: minmax(0, 1fr) 110px 32px; gap: 6px; }
+    .dictionary-entry input, .dictionary-entry select { width: 100%; min-width: 0; }
+    .dictionary-tools, .dictionary-footer { display: flex; gap: 8px; justify-content: flex-end; }
+    .dictionary-status { margin: 0; color: var(--danger); }
+    @media (max-width: 650px) {
+      .dictionary-layout { grid-template-columns: minmax(0, 1fr); }
+      .dictionary-presets { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 14px; }
+    }
+
     .modal.source-review-modal {
       width: min(1280px, calc(100vw - 24px));
       max-height: calc(100vh - 24px);
@@ -2632,6 +2652,7 @@
           <button id="restoreBtn" class="small" data-requires-project="" data-i18n="loadMenuBtn">불러오기</button>
           <div id="restorePopover" class="restore-popover hidden"></div>
         </div>
+        <button id="appSettingsBtn" class="small" data-i18n="appSettings">설정</button>
         <select id="languageSelect" class="language-select" aria-label="Language">
           <option value="ja">日本語</option>
           <option value="ko">한국어</option>

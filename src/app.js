@@ -54,23 +54,10 @@
     // 줄 전체가 이 낱말 하나뿐 — 인물도 화자도 아니고 표지의 항목이다.
     const CREDIT_ROLE_RE = new RegExp(CREDIT_ROLE_ALT, 'i');
     const FRONT_MATTER_WORD_ONLY_RE = new RegExp('^(?:' + DRAFT_STATUS_ALT + '|' + CREDIT_ROLE_ALT + ')$', 'i');
-    // 표지·등장인물 목록이 놓이는 앞머리 쪽수. 실측(표본 18개 문서): 목록이 있는 14개는 전부 1쪽에서
-    // 시작하고 본문은 2쪽(14개)·3쪽(2개)에서 시작한다 — 앞 2쪽 창이면 목록을 전부 덮는다.
-    // 이 창을 하드 게이트로 쓰는 자리가 이 값을 함께 본다.
-    const FRONT_MATTER_MAX_PAGE_NO = 2;
-    // 표지 경계가 **안 선** 자리에서만 보는 느슨한 창 — 위 창보다 한 쪽 넓다.
-    // 실측(하네스, 같은 표본 18개)으로 위 수치를 재현했다: 각본 16개의 본문 시작은 2쪽 14개·
-    // 3쪽 2개고, 나머지 2개는 각본이 아니라 앞머리 판정에 들어가지도 않는다.
-    // 이 창이 실제로 무는 자리도 쟀다 — 닿는 쪽은 둘뿐이었고 둘 다 **문서의 마지막 쪽**(본문
-    // 항목 없이 텍스트만 남은 꼬리 쪽)이라 둘 다 막혔다. 즉 하는 일은 꼬리 쪽이 표지로
-    // 그려지는 것을 막는 것이다. 근거 불명 — 3 이라는 값 자체의 출처는 못 찾았다
-    // (2026-08-08 에 히스토리를 재작성해 그 이전 커밋이 없다).
-    const FRONT_MATTER_FALLBACK_MAX_PAGE_NO = 3;
-
     // 이 빌드의 식별자. **여기가 정본이다** — <title>·하단 스트립·패키지 머리·디버그 덤프가
     // 전부 이 값을 읽는다. 손으로 세지 않는다: `python tools/bump_version.py` 가 커밋 수와
     // 오늘 날짜로 이 두 줄을 갱신한다(커밋 직전에 돌린다).
-    const APP_VERSION = 'v197';
+    const APP_VERSION = 'v198';
     const APP_BUILD_DATE = '2026-09-16';
     // 이름의 정본. <title> 에도 같은 문자열이 있지만 그것은 **JS 가 돌기 전까지만 보이는
     // 사본**이다 — 로드되면 document.title 을 이 값 + APP_VERSION 으로 덮는다.
@@ -81,32 +68,6 @@
     // editableAuthorityValue() folds 'draft' into 'soft' on the way to the picker so the UI
     // never has to show a third state — the raw value stays in the data untouched.
     const AUTHORITY = ['hard', 'soft'];
-    // 작품 고유명사 사전. **소스에는 비워 둔다.**
-    // 특정 작품의 인물·조직·용어를 코드에 박으면 그 작품 전용 도구가 되고, 저장소가
-    // 공개된 이상 클라이언트 자료가 그대로 실린다. 작품별 값은 작업 중인 설정 데이터
-    // 쪽에서 채우고, 비어 있으면 아래 사용처는 일반 규칙만으로 동작한다.
-    // technology 만 문자열 포함 검사(includes)로 쓰이고, 나머지는 전부 **정규식 조각**이다
-    // — organizationAliases 는 각 쌍의 첫 원소가 패턴이다. 그대로 OR 로 이어 붙어 new RegExp 에
-    // 들어가므로 이스케이프는 넣는 쪽 책임이다.
-    const WORK_TERMS = {
-      organizations: [],        // 조직 고유명
-      organizationSuffixed: [], // 장소 후보에서 걸러낼 조직명 꼬리
-      organizationAliases: [],  // [정규식, 정본] — 표기 흔들림 정규화
-      technology: [],           // 기술·용어 고유명
-      nonPersonNames: [],       // 인물명이 아닌 고유명(작품명·지명 등)
-      actionSignals: [],        // 지문 판정을 돕는 인물명·소도구
-      frontTitles: [],          // 표지/전付에 나오는 제목·부제
-      nonSpeakerHeads: [],      // 「…」 앞에 서지만 화자가 아닌 사물명(병기·기체 따위의 고유명)
-    };
-    // 작품을 가리지 않는 일반 SF/제작 용어는 코드에 남는다.
-    const GENERIC_TECH_TERMS = ['AI', 'ドローン', 'ハッカー', 'ハッカールーム', 'ネットワーク', 'セーフハウス', 'サイボーグ'];
-
-    // 빈 목록이면 null 을 돌려준다. 빈 문자열을 그대로 OR 에 끼우면 빈 대안이 되어
-    // 정규식이 모든 입력에 매치된다 — 호출부는 null 을 보고 그 검사를 통째로 건너뛴다.
-    function workTermAlternation(list) {
-      return (list && list.length) ? list.join('|') : null;
-    }
-
     const ENTITY_TYPES = ['character', 'organization', 'place', 'technology'];
     // 편집 모달의 종류 목록은 소재 목록·필터의 것과 같아야 한다 — 목록에 없는 종류를 고르는
     // 순간 그 소재가 모든 목록에서 사라지고 UI 로는 되돌릴 길이 없다.
@@ -128,6 +89,28 @@
     const UI_LANGUAGE_STORAGE_KEY = 'scenarioMaterialControlUiLanguage';
     const UI_I18N = {
       ja: {
+        appSettings: "設定",
+        userDictionary: "ユーザー辞書",
+        dictionaryHelp: "有効なプリセットの単語をすべての作品の素材抽出に使います。既存の文書は変更せず、次の解析から適用します。",
+        dictionaryEnabled: "使用",
+        dictionaryAddPreset: "プリセットを追加",
+        dictionaryImport: "読み込み",
+        dictionaryExportAll: "すべて書き出し",
+        dictionaryPresetName: "プリセット名",
+        dictionaryExport: "プリセットを書き出し",
+        dictionaryDeletePreset: "プリセットを削除",
+        dictionaryTerm: "単語",
+        dictionaryType: "種類",
+        dictionaryDeleteEntry: "項目を削除",
+        dictionaryAddEntry: "項目を追加",
+        dictionaryEmpty: "プリセットを追加または読み込んでください。",
+        dictionarySave: "保存",
+        dictionaryNewPreset: "新しいプリセット",
+        dictionaryInvalidFile: "有効なユーザー辞書ファイルではありません。",
+        dictionaryImportFailed: "読み込み失敗: {message}",
+        dictionaryStorageUnavailable: "この環境では設定を保存できません。",
+        dictionarySaveFailed: "保存失敗: {message}",
+        dictionarySaved: "ユーザー辞書を保存しました。",
         qualityWarningTitle: '認識の注意:',
         qualityVerticalSuspect: '縦書きPDFの抽出、または文字単位の分解が疑われます。自動判定は補助にとどめてください。',
         qualityFallbackPages: '{n}/{total}ページが代替パーサで処理されました（pdf.js の結果を使えませんでした）。',
@@ -418,6 +401,28 @@
         episodeNumber: '話数',
       },
       ko: {
+        appSettings: "설정",
+        userDictionary: "사용자 사전",
+        dictionaryHelp: "켠 프리셋의 단어를 모든 작품의 소재 추출에 적용합니다. 기존 문서는 바뀌지 않으며 다음 분석부터 적용됩니다.",
+        dictionaryEnabled: "사용",
+        dictionaryAddPreset: "프리셋 추가",
+        dictionaryImport: "불러오기",
+        dictionaryExportAll: "전체 내보내기",
+        dictionaryPresetName: "프리셋 이름",
+        dictionaryExport: "프리셋 내보내기",
+        dictionaryDeletePreset: "프리셋 삭제",
+        dictionaryTerm: "단어",
+        dictionaryType: "종류",
+        dictionaryDeleteEntry: "항목 삭제",
+        dictionaryAddEntry: "항목 추가",
+        dictionaryEmpty: "프리셋을 추가하거나 불러오세요.",
+        dictionarySave: "저장",
+        dictionaryNewPreset: "새 프리셋",
+        dictionaryInvalidFile: "올바른 사용자 사전 파일이 아닙니다.",
+        dictionaryImportFailed: "불러오기 실패: {message}",
+        dictionaryStorageUnavailable: "이 환경에서는 설정을 저장할 수 없습니다.",
+        dictionarySaveFailed: "저장 실패: {message}",
+        dictionarySaved: "사용자 사전을 저장했습니다.",
         qualityWarningTitle: '인식 주의:',
         qualityVerticalSuspect: '세로쓰기 PDF 추출 또는 글자 단위 분해가 의심됩니다. 자동 판단은 보조 수준으로만 쓰세요.',
         qualityFallbackPages: '{n}/{total}페이지가 대체 파서로 처리됐습니다(pdf.js 결과를 쓰지 못했습니다).',
@@ -707,6 +712,28 @@
         episodeNumber: '화수',
       },
       en: {
+        appSettings: "Settings",
+        userDictionary: "User dictionary",
+        dictionaryHelp: "Enabled presets apply to material extraction in all works. Changes take effect on the next analysis; existing documents stay as they are.",
+        dictionaryEnabled: "Enabled",
+        dictionaryAddPreset: "Add preset",
+        dictionaryImport: "Import",
+        dictionaryExportAll: "Export all",
+        dictionaryPresetName: "Preset name",
+        dictionaryExport: "Export preset",
+        dictionaryDeletePreset: "Delete preset",
+        dictionaryTerm: "Term",
+        dictionaryType: "Type",
+        dictionaryDeleteEntry: "Delete entry",
+        dictionaryAddEntry: "Add entry",
+        dictionaryEmpty: "Add or import a preset.",
+        dictionarySave: "Save",
+        dictionaryNewPreset: "New preset",
+        dictionaryInvalidFile: "Invalid user dictionary file.",
+        dictionaryImportFailed: "Import failed: {message}",
+        dictionaryStorageUnavailable: "Settings storage is unavailable in this environment.",
+        dictionarySaveFailed: "Save failed: {message}",
+        dictionarySaved: "User dictionary saved.",
         qualityWarningTitle: 'Recognition warnings:',
         qualityVerticalSuspect: 'Vertical-script extraction or per-character splitting suspected. Treat the automatic classification as assistive only.',
         qualityFallbackPages: '{n} of {total} pages were handled by the fallback parser (pdf.js output was unusable).',
@@ -1242,7 +1269,8 @@
           generatedAt: new Date().toISOString()
         },
         activeWorkId: '',
-        works: []
+        works: [],
+        userDictionary: defaultUserDictionary()
       };
     }
 
@@ -1835,6 +1863,7 @@
 
     function ensureSettingsShape(raw) {
       const settings = blankSettings();
+      if (raw && raw.userDictionary) settings.userDictionary = normalizeUserDictionary(raw.userDictionary);
       if (raw && Array.isArray(raw.works)) {
         settings.schemaVersion = raw.schemaVersion || settings.schemaVersion;
         settings.generator = Object.assign(settings.generator, raw.generator || {});
@@ -2976,11 +3005,13 @@
     function normalizeDialogHeadParts(head, modifierRaw) {
       let cleanHead = norm(head);
       let cleanModifier = norm(modifierRaw || '');
-      // 수식자는 한 값이다(normalizeDialogModifier 가 {modifier, mode} 하나를 돌려준다) —
-      // 그래서 아래 세 벗김 중 먼저 걸린 하나만 적용한다. 겹쳐 온 표기라도 이름 쪽은 손해를
-      // 보지 않는다: ☎ 와 끝의 声 는 cleanDialogSpeakerNameCore 가 이름에서 한 번 더 턴다.
-      // 실측(표본 18문서): 두 표기가 겹친 머리는 한 건도 없었다.
-      // 근거 불명 — .{1,38} 의 38 은 못 찾았다(호출부의 머리 상한 42 와 화자 상한 32 사이의 값이다).
+      // Voice-first notation puts the speaker in parentheses, rather than a delivery modifier.
+      if (cleanHead === '声' && cleanModifier && normalizeDialogModifier(cleanModifier).mode === 'spoken'
+          && isDirectDialogSpeakerName(cleanModifier)) {
+        cleanHead = cleanModifier;
+        cleanModifier = '声';
+      }
+      // Only explicit voice syntax is detached; a name may itself end in 声.
       if (!cleanModifier) {
         const phoneMarkMatch = cleanHead.match(/^(.{1,38}?)[☎☏]$/u);
         if (phoneMarkMatch) {
@@ -2989,7 +3020,7 @@
         }
       }
       if (!cleanModifier) {
-        const voiceMatch = cleanHead.match(/^(.{1,38}?)(?:の声|声)$/u);
+        const voiceMatch = cleanHead.match(/^(.{1,38}?)の声$/u);
         if (voiceMatch) {
           cleanHead = voiceMatch[1];
           cleanModifier = '声';
@@ -3034,12 +3065,6 @@
     function isInvalidDialogHeadShape(head) {
       const raw = norm(head);
       if (!raw) return true;
-      // 글자가 적히는 것·무언가 표시되는 것 — 작품을 가리지 않는 일반명사만 둔다.
-      if (/^(?:テロップ|字幕|文字|記事|見出し|題字|画面|モニター|看板|通帳|壁|血痕)$/.test(raw)) return true;
-      // 작품 전용 사물명은 여기서 읽는다. 저장소가 공개라 그런 낟말을 코드에 못 둔다.
-      // 빈 목록이면 workTermAlternation 이 null 을 내서 이 검사를 통째로 건너뛴다.
-      const workHeads = workTermAlternation(WORK_TERMS.nonSpeakerHeads);
-      if (workHeads && new RegExp('^(?:' + workHeads + ')$').test(raw)) return true;
       if (/(?:フキダシ|吹き出し|吹出し|吹出)$/.test(raw)) return true;
       if (/[、，。！？!?「」『』]/.test(raw)) return true;
       if (/(?:が|は|を|に|へ|で|と|から|まで|には|では|も|の|しながら|見つつ|弄りながら)$/.test(raw)) return true;
@@ -3258,11 +3283,6 @@
       if (lineIsScriptBlockBoundary(raw, profile, { end: false, strongBody: false, cast: true })) return false;
       if (/^(###|##|#)/.test(raw)) return false;
       if (/[。！？!?]$/.test(raw) && /(が|は|を|に|へ|で|と|から|まで|いる|くる|する|した|放つ|飛ばす|触れる|対峙|制圧|交換|詰まって)/.test(raw)) return true;
-      if (/(犯人|大型バイク|視界|背後|格闘戦|サイボーグ)/.test(raw) && /[。！？!?]$/.test(raw)) return true;
-      // 이 분기는 WORK_TERMS.actionSignals 가 채워졌을 때만 도는데, 그 목록을 채우는 코드가
-      // 없다 — 소스에서 빈 목록 그대로라 workTermAlternation 이 null 을 돌려 검사가 통째로 넘어간다.
-      const actionSignals = workTermAlternation(WORK_TERMS.actionSignals);
-      if (actionSignals && new RegExp('(' + actionSignals + ')').test(raw) && /[。！？!?]$/.test(raw)) return true;
       return false;
     }
 
@@ -3869,7 +3889,7 @@
           return classifyBody(raw, quality, ['dialog before scene heading; body assumed'], profile);
         }
         const fs = frontScore(raw, pageNo, lineIndex, profile);
-        if (fs >= 6 || pageNo <= FRONT_MATTER_MAX_PAGE_NO) return classifyFront(raw, fs);
+        if (fs >= 6) return classifyFront(raw, fs);
         return classification('front_summary', 'front_matter', false, 'none', 0.55, ['front matter before body']);
       }
       if (isCastSectionLine(raw)) {
@@ -3952,12 +3972,8 @@
 
     function frontScore(raw, pageNo, lineIndex, profile) {
       let score = 0;
-      // 점수를 임계로 쓰는 두 곳(looksLikeFrontMatterPage · classifyLine)은 6 으로 같고, 나머지 한
-      // 곳(sourceReviewItemsToBlocks)은 임계 없이 점수를 classifyFront 의 신뢰도 입력으로만 쓴다.
-      // 앞 두 쪽의 +5 는 혼자서는 임계를 못 넘지만, 머리 8줄 안의 38자 미만 줄이면 +2 가 붙어 7 이
-      // 된다 — 그래서 앞 두 쪽에서는 짧은 머리줄이 거의 다 통과한다.
-      // 근거 불명 — 가중치 아홉과 6·8·38 이 어느 표본에서 나왔는지는 첫 커밋 이전이라 복원되지 않는다.
-      if (pageNo <= 2) score += 5;
+      // Position is a prior only; repeated dialogue and body signals take precedence.
+      if (pageNo >= 1 && pageNo <= 3) score += 5;
       if (new RegExp(DRAFT_STATUS_ALT + '|[2２]稿').test(raw)) score += 4;
       if (new RegExp(CREDIT_ROLE_ALT + '|Writer').test(raw)) score += 4;
       if (/第\s*[0-9０-９一二三四五六七八九十]+\s*話|#\s*[0-9０-９]+|「.+」/.test(raw) && lineIndex < 8) score += 3;
@@ -4240,7 +4256,7 @@
         .replace(/\s+/g, '')
         .replace(/[☎☏]+$/g, '')
         .replace(/[・･]+$/g, '');
-      clean = clean.replace(/(?:の声|声)$/u, '');
+      clean = clean.replace(/の声$/u, '');
       clean = clean.replace(/^(?:セリフ|台詞|声)[：:]/, '');
       return clean;
     }
@@ -4357,47 +4373,6 @@
       return trailingSceneTimeExpression(raw);
     }
 
-    // 긴 접미사가 먼저다 — 정규식 대안은 왼쪽부터 시도되므로 '広場' 을 '駅前広場' 앞에 두면
-    // 「駅前広場…」이 장소 '駅前' 로 갈린다. 항목을 더할 때 이 순서를 지킨다.
-    const SCENE_ACTION_TAIL_PLACE_SUFFIXES = [
-      '駅前広場', 'バルコニー', '天井裏', '市街地', '大聖堂', '建築現場',
-      '広場', '個室', '広間', '外観', '聖堂', '駅前', 'ホーム', '現場',
-      '入口', '出口', '城壁', '部屋', '廊下', '室内', '室', '駅', '森',
-      '山', '道', '街', '庭'
-    ];
-
-    function splitSceneHeadingActionTail(raw) {
-      const source = norm(raw);
-      if (!source) return null;
-      // ○·□·△ 세 계열을 다 본다 — 형제 함수 splitSceneHeadingDashLeader 와 같은
-      // SCENE_MARKER_CLASS 를 쓴다(예전에는 ○ 계열만 봐서 □ 문서에서 줄을 놓쳤다).
-      const match = source.match(new RegExp('^([0-9０-９]*\\s*' + SCENE_MARKER_CLASS + '\\s*)(.+)$', 'u'));
-      if (!match) return null;
-      const bodySplit = splitSceneHeadingBodyActionTail(match[2]);
-      if (!bodySplit) return null;
-      return {
-        sceneText: (match[1] + bodySplit.location).trim(),
-        actionText: bodySplit.action
-      };
-    }
-
-    function splitSceneHeadingBodyActionTail(body) {
-      const source = norm(body);
-      if (!/[。！？]/u.test(source)) return null;
-      const suffixPattern = SCENE_ACTION_TAIL_PLACE_SUFFIXES.map(escapeRegExp).join('|');
-      // 장소는 1~48자(아래 가드가 2자 이상으로 다시 좁힌다) · 뒤따르는 괄호문은 16자 이내,
-      // 지문은 4자 이상이다 — 정규식의 {3,}+종결부호와 아래 charLen 가드가 같은 규칙을 두 벌로 적는다.
-      // 근거 불명 — 48·16 이라는 폭은 코드·표본·이력에서 복원하지 못했다.
-      const match = source.match(new RegExp('^(.{1,48}?(?:' + suffixPattern + ')(?:[（(][^）)]{1,16}[）)])?)(.{3,}[。！？].*)$', 'u'));
-      if (!match) return null;
-      const location = norm(match[1]);
-      const action = norm(match[2]);
-      if (!location || charLen(location) < 2 || !action || charLen(action) < 4) return null;
-      if (!/[\u3040-\u30ff\u3400-\u9fff]/u.test(action)) return null;
-      if (parseDialog(action, null) || isSceneHeading(action, null) || isCastSectionLine(action)) return null;
-      return { location, action };
-    }
-
     function splitSceneHeadingDashLeader(raw) {
       const source = norm(raw);
       if (!source) return null;
@@ -4418,8 +4393,7 @@
 
     function parseSceneMeta(raw, previousLocation) {
       const normalizedRaw = normalizeSceneHeadingText(raw);
-      const split = splitSceneHeadingActionTail(normalizedRaw);
-      let clean = norm(split ? split.sceneText : normalizedRaw)
+      let clean = norm(normalizedRaw)
         .replace(/^\[[^\]]+\]\s*/, '')
         .replace(new RegExp('^\\[?\\s*(?:八百字換算|二百字換算|ペラ|ページ)[^\\]' + SCENE_MARKER_CHARS + ']*\\]?\\s*'), '')
         .replace(/^[0-9０-９]+\s*/, '')
@@ -4460,8 +4434,6 @@
       let inCast = false;
       let beforeFirstScene = true;
       let seenCastSection = false;
-      let castSectionPage = 0;
-      let frontCastCount = 0;
       const frontCharacterRunIndexes = detectFrontCharacterRunIndexes(blocks);
       (blocks || []).forEach((block, index) => {
         const text = norm(block.text || block.rawText || '');
@@ -4469,7 +4441,6 @@
         if (isCastSectionLine(text)) {
           inCast = true;
           seenCastSection = true;
-          castSectionPage = Number(block.pageNo || 0);
           block.zone = 'cast_list';
           block.type = block.type === 'cast_section' ? block.type : 'cast_section';
           block.assignableToCut = false;
@@ -4503,15 +4474,13 @@
           const names = extractCastNames(text);
           if (names.length) {
             applyFrontCastEntry(block, text, names, 0.90);
-            frontCastCount += 1;
             return;
           }
         }
-        if (beforeFirstScene && seenCastSection && Number(block.pageNo || 0) === castSectionPage && frontCastCount < 48 && isFrontCastLine(text, index, block.pageNo)) {
+        if (beforeFirstScene && seenCastSection && isFrontCastLine(text)) {
           const names = extractCastNames(text);
           if (names.length) {
             applyFrontCastEntry(block, text, names, 0.66);
-            frontCastCount += 1;
           }
         }
         if (block.type === 'scene_heading' || block.type === 'dialog' || block.zone === 'body') beforeFirstScene = false;
@@ -4534,6 +4503,7 @@
 
     function detectFrontCharacterRunIndexes(blocks) {
       const result = new Set();
+      let beforeBody = true;
       let run = [];
       const flush = () => {
         if (run.length >= 2) run.forEach(index => result.add(index));
@@ -4541,20 +4511,21 @@
       };
       (blocks || []).forEach((block, index) => {
         const text = norm(block.text || block.rawText || '');
-        if (!text || Number(block.pageNo || 0) > 3 || block.type === 'scene_heading' || block.type === 'dialog' || block.zone === 'body') {
+        if (block.type === 'scene_heading' || block.type === 'dialog' || block.zone === 'body') beforeBody = false;
+        if (!text || !beforeBody) {
           flush();
           return;
         }
-        if (isBareFrontCharacterLine(text, index, block.pageNo)) run.push(index);
+        if (isBareFrontCharacterLine(text)) run.push(index);
         else flush();
       });
       flush();
       return result;
     }
 
-    function isBareFrontCharacterLine(text, index, pageNo) {
+    function isBareFrontCharacterLine(text) {
       const raw = norm(text);
-      if (!isFrontCastLine(raw, index, pageNo)) return false;
+      if (!isFrontCastLine(raw)) return false;
       // 구두점·구역표시·개고표시는 바로 위 isFrontCastLine 이 같은 줄로 이미 걸러낸다 —
       // 여기서 다시 보면 참이 될 수 없는 가지가 된다. 아래 두 줄은 그쪽에 없는 조건이라 같이 안 묶는다.
       if (isCastSectionLine(raw) || parseDialog(raw)) return false;
@@ -4565,10 +4536,9 @@
       return names.length === 1 && charLen(raw) <= 42;
     }
 
-    function isFrontCastLine(text, index, pageNo) {
+    function isFrontCastLine(text) {
       const raw = norm(text);
       if (!raw || charLen(raw) < 2) return false;
-      if (index > 120 && Number(pageNo || 0) > 2) return false;
       if (isFrontMatterMetaLine(raw)) return false;
       if (/[、，。！？!?「」『』]|──|…/.test(raw)) return false;
       if (isSceneHeading(raw) || isSectionMarkerLine(raw) || isRevisionLine(raw)) return false;
@@ -4693,93 +4663,6 @@
 
 
     // Scene/action splitting belongs to import normalization. Stored blocks are already interpreted.
-    function expandSceneHeadingActionTailBlocks(blocks) {
-      const expanded = [];
-      (blocks || []).forEach((block) => {
-        expandSceneHeadingActionTailBlock(block).forEach(next => expanded.push(next));
-      });
-      return expanded;
-    }
-
-    function expandSceneHeadingActionTailBlock(block) {
-      if (!block || block.type !== 'scene_heading') return [block];
-      const sourceText = block.rawText || block.text || '';
-      const split = splitSceneHeadingActionTail(sourceText);
-      if (!split) return [block];
-      // 분할은 norm(원문) 위에서 난 것이라, 정규화 때 접히는 공백이 원문에 있으면 indexOf 가 -1 이 된다 —
-      // 그때는 아래 Math.max 가 정규화 길이로 되돌린다.
-      const actionStart = sourceText.indexOf(split.actionText, split.sceneText.length);
-      const sceneRuns = sliceMarkdownRuns(block.inlineRuns, 0, split.sceneText.length);
-      const actionRuns = sliceMarkdownRuns(block.inlineRuns, Math.max(split.sceneText.length, actionStart), sourceText.length);
-      const meta = parseSceneMeta(split.sceneText, block.locationName || '');
-      const sceneBlock = Object.assign({}, block, {
-        rawText: split.sceneText,
-        text: split.sceneText,
-        normalizedText: norm(split.sceneText),
-        locationName: meta.locationName || block.locationName || '',
-        timeOfDay: meta.timeOfDay || block.timeOfDay || '',
-        scenePart: meta.scenePart || block.scenePart || '',
-        currentScene: split.sceneText,
-        inlineRuns: normalizeMarkdownRuns(sceneRuns, split.sceneText),
-        markdownSourceLine: markdownRunsToSource(sceneRuns),
-        markdownLineIndex: -1,
-        overlayRect: null,
-        pageSpans: [],
-        meta: Object.assign({}, block.meta || {}, {
-          evidence: uniq((block.meta && block.meta.evidence || []).concat(['scene heading action tail split'])),
-          warnings: block.meta && block.meta.warnings || []
-        })
-      });
-      const actionBlock = Object.assign({}, block, {
-        id: block.id + '-action-tail',
-        // 리뷰 아이템은 씬 머리와 이 지문을 **한 줄로** 담고 있다. 그 id 를 물려받으면 두
-        // 블록이 같은 아이템을 찾아 같은 사각형을 받고, 좌표를 되돌려 쓸 때도 서로 덮는다.
-        // 떼어 낸 쪽은 아이템을 대표하지 않으므로 id 를 비우고 자기 텍스트로 자리를 찾는다.
-        reviewItemId: '',
-        rawText: split.actionText,
-        text: split.actionText,
-        normalizedText: norm(split.actionText),
-        type: 'action',
-        zone: 'body',
-        locationName: sceneBlock.locationName || block.locationName || '',
-        timeOfDay: sceneBlock.timeOfDay || block.timeOfDay || '',
-        scenePart: sceneBlock.scenePart || block.scenePart || '',
-        currentScene: sceneBlock.rawText,
-        inlineRuns: normalizeMarkdownRuns(actionRuns, split.actionText),
-        markdownSourceLine: markdownRunsToSource(actionRuns),
-        markdownLineIndex: -1,
-        order: Number(block.order || 0) + 0.1,
-        globalOrder: Number(block.globalOrder || 0) + 0.1,
-        overlayRect: null,
-        pageSpans: [],
-        assignableToCut: true,
-        assignDefault: 'action',
-        meta: Object.assign({}, block.meta || {}, {
-          // 떼어 낸 지문은 원 블록보다 낮게 잡는다(상한 0.9). 기본값 0.92 는 이 파일이 확신 있는
-          // 분류에 쓰는 값이지만 바로 그 상한에 깎여 결과로는 나오지 않는다.
-          confidence: Math.min(Number(block.meta && block.meta.confidence) || 0.92, 0.9),
-          evidence: uniq((block.meta && block.meta.evidence || []).concat(['action tail split from scene heading'])),
-          warnings: block.meta && block.meta.warnings || []
-        })
-      });
-      return [sceneBlock, actionBlock];
-    }
-
-    function sliceMarkdownRuns(runs, start, end) {
-      const result = [];
-      let offset = 0;
-      normalizeMarkdownRuns(runs).forEach((run) => {
-        const runStart = offset;
-        const runEnd = offset + run.text.length;
-        offset = runEnd;
-        const from = Math.max(runStart, Number(start) || 0);
-        const to = Math.min(runEnd, Number.isFinite(Number(end)) ? Number(end) : runEnd);
-        if (to <= from) return;
-        appendMarkdownRun(result, run.text.slice(from - runStart, to - runStart), run);
-      });
-      return result;
-    }
-
     // 블록×엔티티 전수 대조다 — 상한도 조기 탈출도 없다. blockMatchesEntity 가 첫 일치에서 빠지지만
     // 마지막 칸(entityNameAppearsInText)은 블록 본문 전체를 훑는다.
     // 근거 불명 — 상한을 안 둔 이유도, 이 자리의 비용을 잴 기록도 못 찾았다
@@ -9972,8 +9855,8 @@
       return entity;
     }
 
-    function upsertEntity(project, name, type, sourceBlockId, confidence, status) {
-      const clean = normalizeEntityName(name, type);
+    function upsertEntity(project, name, type, sourceBlockId, confidence, status, options) {
+      const clean = options && options.literalName ? norm(name) : normalizeEntityName(name, type);
       if (!clean) return null;
       const id = seededId(type.slice(0, 4), clean);
       let entity = project.entities.find(e => e.id === id || e.name === clean || (e.aliases || []).includes(clean));
@@ -10006,7 +9889,7 @@
           .replace(/^[…・\s]*[0-9０-９]{1,3}(?=[一-龠々ぁ-んァ-ヴ])/, '')
           .replace(/[（(](?:[0-9０-９?？一二三四五六七八九十]{1,4}|男|女|男性|女性|CV[^）)]*|声[^）)]*)[）)]/g, '')
           .replace(/[（(].*?[）)]/g, '')
-          .replace(/(?:男性|女性|主人公|貴族|軍人|故人|隊長|老人|若者|研究者|旅人|リーダー|巫女|職員|記者|ほか|セリフあり|セリフなし|二〇代|三〇代|四〇代|五〇代|六〇代|七〇代|CV|声).*$/, '')
+          .replace(/(?:男性|女性|主人公|貴族|軍人|故人|隊長|老人|若者|研究者|旅人|リーダー|巫女|職員|記者|ほか|セリフあり|セリフなし|二〇代|三〇代|四〇代|五〇代|六〇代|七〇代|CV).*$/, '')
           .trim();
         if (!clean) return '';
         if (charLen(clean) > 28) return '';
@@ -10014,9 +9897,6 @@
       }
       if (type === 'organization') {
         clean = clean.replace(/\s+/g, '');
-        WORK_TERMS.organizationAliases.forEach(([pattern, canonical]) => {
-          clean = clean.replace(new RegExp(pattern), canonical);
-        });
       }
       if (type === 'place') {
         if (isLikelyNonPlaceName(clean)) return '';
@@ -10084,8 +9964,6 @@
       const clean = normalizeEntityName(name, 'character');
       if (!clean || charLen(clean) < 2 || charLen(clean) > 12) return false;
       if (/^(コンテ|シーン|カット|ページ|アップ|ロング|モブ|セリフ|オフ|ナレーション|テロップ|ＢＧＭ|BGM|ＳＥ|SE)$/i.test(clean)) return false;
-      const nonPersonNames = workTermAlternation(WORK_TERMS.nonPersonNames);
-      if (nonPersonNames && new RegExp('^(' + nonPersonNames + ')$', 'i').test(clean)) return false;
       if (/([ァ-ヴー])\1{2,}/.test(clean)) return false;
       return /^[ァ-ヴー・]+$/.test(clean);
     }
@@ -10171,10 +10049,8 @@
     }
 
     function extractEntities(project) {
-      const orgSpecific = workTermAlternation(WORK_TERMS.organizations);
-      const orgRegex = new RegExp('(' + (orgSpecific ? orgSpecific + '|' : '')
-        + '民間軍事会社|[一-龠々ァ-ヴーA-Za-z0-9・]+(?:' + ORG_NAME_SUFFIX_ALT + '))', 'g');
-      const techTerms = GENERIC_TECH_TERMS.concat(WORK_TERMS.technology);
+      const orgRegex = new RegExp('(民間軍事会社|[一-龠々ァ-ヴーA-Za-z0-9・]+(?:' + ORG_NAME_SUFFIX_ALT + '))', 'g');
+      const dictionaryEntries = activeUserDictionaryEntries(state.settings.userDictionary);
       const dialogSpeakers = uniq((project.sourceBlocks || []).flatMap(b => dialogSpeakerNamesForBlock(b)).filter(Boolean));
       let previousSceneLocation = '';
       project.sourceBlocks.forEach((b, blockIndex) => {
@@ -10226,7 +10102,9 @@
         Array.from(text.matchAll(orgRegex))
           .filter(m => isPlausibleOrganizationName(m[1]))
           .forEach(m => upsertEntity(project, m[1], 'organization', b.id, 0.70, 'candidate'));
-        techTerms.forEach(term => { if (text.includes(term)) upsertEntity(project, term, 'technology', b.id, 0.72, 'observed'); });
+        dictionaryEntries.forEach(entry => {
+          if (text.includes(entry.term)) upsertEntity(project, entry.term, entry.type, b.id, 0.72, 'observed', { literalName: true });
+        });
       });
 
       attachCastNotesToCharacters(project);
@@ -10452,7 +10330,7 @@
     function frontCharacterDescription(project, block, blockIndex) {
       if (!block || block.type !== 'cast_entry') return '';
       const evidence = block.meta && block.meta.evidence || [];
-      const fromFront = evidence.includes('front cast') || Number(block.pageNo || 0) <= FRONT_MATTER_MAX_PAGE_NO;
+      const fromFront = evidence.includes('front cast') || block.zone === 'front_matter' || block.zone === 'cast_list';
       if (!fromFront) return '';
       const next = (project.sourceBlocks || [])[blockIndex + 1];
       if (!next || next.pageNo !== block.pageNo || next.type === 'cast_entry' || next.zone === 'body') return '';
@@ -10468,7 +10346,7 @@
           lastEntity = name ? upsertEntity(project, name, 'character', block.id, 0.9, 'confirmed') : null;
           if (lastEntity) {
             applyCharacterProfileToEntity(lastEntity, parseCharacterProfileFromCastText(block.text || '', name));
-            promoteEntity(lastEntity, 'confirmed', Number(block.pageNo || 0) <= FRONT_MATTER_MAX_PAGE_NO ? 'soft' : 'draft', ['source:cast-list']);
+            promoteEntity(lastEntity, 'confirmed', block.zone === 'cast_list' ? 'soft' : 'draft', ['source:cast-list']);
           }
           return;
         }
@@ -10513,9 +10391,7 @@
       if (raw && !isLikelyNonPlaceName(raw)) candidates.push(raw);
       String(raw || text || '').split(new RegExp('[' + SCENE_MARKER_CHARS + '／/]')).forEach((part) => {
         const place = resolveRelativeLocationName(cleanPlaceName(part), previous);
-        const orgTail = workTermAlternation(WORK_TERMS.organizationSuffixed);
-        const isOrgName = Boolean(orgTail) && new RegExp('(' + orgTail + ')$').test(place);
-        if (place && !isLikelyNonPlaceName(place) && !isOrgName) candidates.push(place);
+        if (place && !isLikelyNonPlaceName(place)) candidates.push(place);
       });
       return uniq(candidates).filter(place => charLen(place) >= 2 && charLen(place) <= 60);
     }
@@ -10903,11 +10779,7 @@
       state.selectedBlockId = '';
       state.activeBlockTab = '';
       loadActiveDocumentToInput();
-      // works 가 비면 putSettingsAutosaveSnapshot 은 **아무것도 쓰지 않는다**(빈 목록 거부).
-      // 옛 스냅샷이 남아 다음 부팅에 지운 작품이 되살아나므로, 그때는 스냅샷을 지운다.
-      const persisted = (state.settings.works || []).length
-        ? putSettingsAutosaveSnapshot('delete_work')
-        : clearSettingsAutosaveSnapshot();
+      const persisted = putSettingsAutosaveSnapshot('delete_work');
       persisted.catch((err) => {
         console.warn('settings autosave failed', err);
         toast(t('saveFailedToast'));
@@ -12528,18 +12400,6 @@
       });
     }
 
-    // 앞쪽만 보는 이유: 본문이 이 낱말들을 지나가듯 쓸 때 문서 전체가 뒤집히지 않게 한다
-    // (실측에서 한 문서가 본문 13쪽에서 같은 낱말을 썼다). 근거 불명 — 3쪽이라는 폭의 출처는
-    // 못 찾았다. 실측(표본 18개): 걸리는 문서는 둘뿐이고 둘 다 1쪽에서 걸린다.
-    // 목록의 긴 두 대안은 이 표본에서 잉여다 — 하나는 붙은 꼴로 아예 안 나오고(칸 제목 셋이
-    // 각각 낱줄로 떨어진다), 다른 하나는 같은 쪽에서 짧은 대안이 이미 걸린다.
-    function looksLikeNonScriptSourceDocument(pages) {
-      const head = (pages || []).slice(0, 3).flatMap(page => page.lines || []).map(line => norm(line)).filter(Boolean).join('\n');
-      if (!head) return false;
-      if (/シリーズ構成|プロット|改稿案|構成案|設定資料|設定メモ|話数内容原作|■前回の改稿案/.test(head)) return true;
-      return false;
-    }
-
     function sourceReviewLinesForPage(page, logicalLines, reviewFrontOpen, profile) {
       const rawLines = (page && page.lines || []).map(line => norm(line)).filter(Boolean);
       if (!reviewFrontOpen || !rawLines.length || !looksLikeFrontMatterPage(rawLines, page.pageNo || 1, profile)) return logicalLines || [];
@@ -12566,8 +12426,6 @@
       if (/^(?:ロゴタイトル|タイトルロゴ|サブタイトル|アイキャッチ)[：:「『]/.test(source)) return true;
       if (/^[#＃]\s*[0-9０-９]+(?:\s+|「|『).{1,80}$/.test(source)) return true;
       if (/^(?:第\s*[0-9０-９一二三四五六七八九十]+話|EP(?:ISODE)?\.?\s*[0-9０-９]+)[「『]/i.test(source)) return true;
-      const frontTitles = workTermAlternation(WORK_TERMS.frontTitles);
-      if (frontTitles && new RegExp('^(?:' + frontTitles + ')\\b', 'i').test(source) && !parseDialog(source, null)) return true;
       return false;
     }
 
@@ -12584,7 +12442,7 @@
       return false;
     }
 
-    function detectFrontCharacterLineRuns(lines, pageNo) {
+    function detectFrontCharacterLineRuns(lines) {
       const runs = [];
       let run = [];
       let start = -1;
@@ -12598,7 +12456,7 @@
       };
       (lines || []).forEach((line, index) => {
         const raw = norm(line);
-        if (isBareFrontCharacterLine(raw, index, pageNo)) {
+        if (isBareFrontCharacterLine(raw)) {
           if (!run.length) start = index;
           run.push(raw);
         } else {
@@ -12757,7 +12615,7 @@
 
     function splitFrontTextReviewItems(out, text, pageNo, orderRef) {
       const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
-      const runs = detectFrontCharacterLineRuns(lines, pageNo);
+      const runs = detectFrontCharacterLineRuns(lines);
       if (!runs.length) {
         pushFrontTextLines(out, pageNo, lines, orderRef);
         return;
@@ -12871,12 +12729,7 @@
       const firstBody = (allItems || []).filter(isBodyReviewItem).sort((a, b) => Number(a.pageNo || 0) - Number(b.pageNo || 0) || Number(a.order || 0) - Number(b.order || 0))[0];
       if (!firstBody) return (pageItems || []).some(item => item.type === 'character' || item.type === 'text');
       if (firstBody && Number(pageNo || 0) < Number(firstBody.pageNo || 0)) return true;
-      // 본문이 시작된 뒤의 쪽인데 본문 항목이 하나도 없는 자리다 — 경계가 안 서는 그 자리에서만
-      // 느슨한 창을 본다. 실측(표본 18개): 여기에 닿는 쪽은 둘, 둘 다 문서의 마지막 쪽이었고
-      // 이 줄이 둘 다 막았다(꼬리 쪽이 표지로 그려지지 않는다).
-      if (Number(pageNo || 0) > FRONT_MATTER_FALLBACK_MAX_PAGE_NO) return false;
-      return (pageItems || []).some(item => item.type === 'character' || item.type === 'text')
-        && !(pageItems || []).some(item => item.type === 'dialog' || item.type === 'action' || item.type === 'scene');
+      return false;
     }
 
     function formatSourceReviewMarkdownPage(pageNo, pageItems, allItems) {
@@ -18976,6 +18829,7 @@
         schemaVersion: s.schemaVersion,
         generator: s.generator,
         activeWorkId: s.activeWorkId,
+        userDictionary: normalizeUserDictionary(s.userDictionary),
         works: (s.works || []).map(compactWorkForStorage)
       };
     }
@@ -19115,7 +18969,6 @@
     async function putSettingsAutosaveSnapshot(reason) {
       if (!settingsAutosaveSupported()) return false;
       const snapshot = compactSettingsForStorage(ensureSettingsShape(settingsSnapshot()));
-      if (!snapshot.works.length) return false;
       await writeSettingsStore(SETTINGS_AUTOSAVE_STORE, store => store.put({
         schemaVersion: 'scenario_material_control_settings_autosave_v1',
         savedAt: nowIso(),
@@ -19157,8 +19010,8 @@
     async function restoreSettingsAutosaveSnapshot() {
       try {
         const payload = await getSettingsAutosaveSnapshot();
-        const settings = ensureSettingsShape(payload && payload.settings);
-        if (!settings.works.length) return false;
+        if (!payload || !payload.settings) return false;
+        const settings = ensureSettingsShape(payload.settings);
         state.settings = settings;
         const activeWork = settings.works.find(work => work.workspace.workId === settings.activeWorkId) || settings.works[0];
         state.project = activeWork ? ensureProjectShape(activeWork) : blankProject();
@@ -20348,7 +20201,7 @@
       // 모달 셸은 #editModal 하나를 모두가 돌려 쓴다 — 지금 열린 것이 원문 검토 모달인지 알려 주는
       // 표식이 여는 쪽이 붙인 이 클래스뿐이라, 초안 폐기도 여기에 걸려 있다(바로 아래에서 뗀다).
       if (dialog && dialog.classList.contains('source-review-modal')) state.sourceReviewDraft = null;
-      if (dialog) dialog.classList.remove('source-review-modal');
+      if (dialog) dialog.classList.remove('source-review-modal', 'settings-modal');
       if (backdrop) backdrop.classList.remove('active');
     }
 
@@ -20619,6 +20472,7 @@
     }
 
     function wire() {
+      $('appSettingsBtn').addEventListener('click', openAppSettings);
       $('languageSelect').addEventListener('change', () => setUiLanguage($('languageSelect').value));
       $('createProjectBtn').addEventListener('click', openCreateProjectModal);
       $('saveSettingsBtn').addEventListener('click', manualSaveProject);

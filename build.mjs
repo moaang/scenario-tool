@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 if (args.length > 1 || args.length === 1 && args[0] !== '--check') throw new Error('Usage: node build.mjs [--check]');
 const root = path.dirname(fileURLToPath(import.meta.url));
-const sources = ['import-docx.js', 'import-pdf.js', 'interpretation.js', 'reader.js', 'app.js'];
+const sources = ['import-docx.js', 'import-pdf.js', 'interpretation.js', 'reader.js', 'dictionary.js', 'app.js'];
 const read = name => {
   const text = fs.readFileSync(path.join(root, 'src', name), 'utf8');
   if (text.includes('\r')) throw new Error(`${name}: source must use LF line endings`);

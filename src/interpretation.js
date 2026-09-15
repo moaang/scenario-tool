@@ -118,7 +118,7 @@
         };
         normalized.push(shaped);
       });
-      return expandSceneHeadingActionTailBlocks(normalized);
+      return normalized;
     }
 
     function buildSourceReviewItemsForDocument(text, doc, options) {
@@ -139,41 +139,28 @@
       return reviewItems;
     }
 
-    // A dialogue item ending in ANY closing bracket/quote (the endsWithCloseQuote set below:
-    // 」』）)】〕〉》”") immediately followed by lone sentence punctuation (…「…」。)
-    // proves the quote was a mid-sentence term — a device/title name in a stage direction — not
-    // spoken dialogue: real dialogue never has text after its closing mark. (This note used to
-    // justify the rule with 「」 alone; the code has always taken the wider set, so the note now
-    // states the code.) Column-grouped PDFs wrap that
-    // trailing "。" into its own line, so it surfaces as a separate punctuation-only review item
-    // right after a mis-read "dialogue". Demote the carrier to description and absorb the shard
-    // (which otherwise dangles as a rect-less fragment). Runs before page-span/rect attachment.
+    // A quoted noun continues unfinished action only when it is not an established speaker.
+    // Punctuation after a genuine dialogue does not change its semantic type.
     function foldTrailingPunctuationAfterQuotedDialogItems(items) {
-      if (!Array.isArray(items) || items.length < 2) return items;
+      if (!Array.isArray(items) || items.length < 3) return items;
       const dialogFamily = new Set(['dialog', 'monologue', 'narration']);
-      const isPunctuationOnlyShard = (value) => {
-        const clean = norm(value).trim();
-        // 근거 불명 — 4 의 출처를 못 찾았다. 이 함수의 정규식(구두점만 남는 조각)과 이웃한
-        // 좌표 허용치들, 그리고 이 줄을 건드린 커밋을 봤지만 길이를 정한 실측이 없다.
-        if (!clean || charLen(clean) > 4) return false;
-        return /^[。、．，！？!?」』）)】〕〉》・…‥ー―─－]+$/u.test(clean);
-      };
-      const endsWithCloseQuote = (value) => /[」』）)】〕〉》”"]$/u.test(String(value || '').trim());
-      for (let i = items.length - 1; i >= 1; i -= 1) {
-        const cur = items[i];
-        const prev = items[i - 1];
-        if (!cur || !prev || !dialogFamily.has(prev.type)) continue;
-        if (Number(cur.pageNo) !== Number(prev.pageNo)) continue;
-        if (!isPunctuationOnlyShard(sourceReviewItemText(cur))) continue;
+      const speakers = new Map();
+      const cast = new Set();
+      for (const item of items) {
+        if (dialogFamily.has(item.type) && item.speaker) speakers.set(item.speaker, (speakers.get(item.speaker) || 0) + 1);
+        if (item.type === 'character') extractCastNames(sourceReviewItemText(item)).forEach(name => cast.add(name));
+      }
+      for (let i = items.length - 1; i >= 2; i -= 1) {
+        const cur = items[i], prev = items[i - 1], before = items[i - 2];
+        if (!dialogFamily.has(prev.type) || before.type !== 'action') continue;
+        if (cur.pageNo !== prev.pageNo || before.pageNo !== prev.pageNo) continue;
+        if (cast.has(prev.speaker) || speakers.get(prev.speaker) > 1) continue;
+        const punctuation = norm(sourceReviewItemText(cur)).trim();
+        if (!/^[。、．，！？!?」』）)】〕〉》・…‥ー―─－]+$/u.test(punctuation)) continue;
         const prevText = sourceReviewItemText(prev);
-        if (!prevText || !endsWithCloseQuote(prevText)) continue;
-        prev.type = 'action';
-        prev.speaker = '';
-        prev.modifier = '';
-        prev.modifierRaw = '';
-        prev.dialogMode = '';
-        prev.dialog = '';
-        prev.text = prevText + norm(sourceReviewItemText(cur)).trim();
+        if (!/[」』）)】〕〉》”"]$/u.test(prevText.trim())) continue;
+        if (sourceReviewActionEndsWithCompleteSentence(sourceReviewItemText(before))) continue;
+        Object.assign(prev, { type: 'action', speaker: '', modifier: '', modifierRaw: '', dialogMode: '', dialog: '', text: prevText + punctuation });
         items.splice(i, 1);
       }
       return items;
@@ -203,14 +190,6 @@
       const pages = sourceReviewPagesFromText(text);
       const profile = createScenarioParserProfile(pages);
       const orderRef = { value: 0 };
-      if (looksLikeNonScriptSourceDocument(pages)) {
-        pages.forEach((page) => {
-          const pageText = (page.lines || []).map(line => norm(line)).filter(Boolean).join('\n');
-          if (pageText) pushFrontSourceReviewItem(items, 'text', page.pageNo, pageText, orderRef);
-        });
-        if (!items.length) pushSourceReviewItem(items, 'text', 1, doc && doc.originalText || text || '', orderRef);
-        return items;
-      }
       const logicalPages = buildScenarioLogicalPageLines(pages, profile);
       // 표지와 본문의 경계는 **문서 전체를 보고 한 번** 정한다 — 그 장과 뒤 세 장이 모두 본문답게
       // 이어지는 자리다. 예전에는 페이지마다 다시 묻고(잠금) 줄마다 또 뒤집어서, 셋이 서로를
@@ -248,12 +227,9 @@
         let bufferType = 'text';
         let bufferSection = '';
         let inCast = false;
-        // 버퍼의 기본 종류를 정할 때만 쓴다 — 경계 판정과는 무관하다.
-        // 쪽수 조건은 앞머리 창 그대로다(그 상수에 실측 근거가 있다) — 창 밖이면 본문으로 보고,
-        // 안이면 본문 신호가 있어야 본문으로 본다.
-        const pageBodyLikely = Number(page.pageNo || 0) > FRONT_MATTER_MAX_PAGE_NO || pageHasBodySignal(lines, profile);
+        const pageBodyLikely = pageHasBodySignal(lines, profile);
         let bodyStarted = !reviewFrontOpen;
-        const candidateRuns = detectFrontCharacterLineRuns(lines, page.pageNo);
+        const candidateRuns = detectFrontCharacterLineRuns(lines);
         const candidateStarts = new Map(candidateRuns.map(run => [run.start, run]));
         let bufferFrontKind = '';
         const flushText = () => {
@@ -312,10 +288,7 @@
               pushFrontSourceReviewItem(items, 'text', page.pageNo, raw, orderRef);
               continue;
             }
-            // 여기는 이미 표지로 열린 쪽이다 — 이 쪽수 조건은 경계가 **안 섰을 때**(본문 시작을
-            // 못 찾아 전 쪽이 표지로 열린 경우)만 문다. 그래서 위의 좁은 창이 아니라 느슨한 쪽이다.
-            // 실측(표본 18개): 각본 문서의 표지는 1~2쪽뿐이라 이 조건이 자른 줄은 0 이었다.
-            if ((inCast || page.pageNo <= FRONT_MATTER_FALLBACK_MAX_PAGE_NO) && isLikelyCastEntryLine(raw, profile) && !isCastGroupMarkerLine(raw)) {
+            if (isLikelyCastEntryLine(raw, profile) && !isCastGroupMarkerLine(raw)) {
               flushText();
               const collected = collectCastEntryLines(lines, index, profile, { frontContinuation: reviewFrontOpen });
               index = collected.endIndex;
@@ -340,9 +313,7 @@
             pushSourceReviewItem(items, 'character', page.pageNo, raw, orderRef);
             continue;
           }
-          // 본문으로 열린 쪽이어도 앞머리 창 안이면 인물 목록이 이어질 수 있다 — 여기는 경계가
-          // 선 자리라 좁은 창을 쓴다. 실측(표본 18개): 이 조건이 막은 줄도 통과시킨 줄도 0 이었다.
-          if ((inCast || page.pageNo <= FRONT_MATTER_MAX_PAGE_NO) && isLikelyCastEntryLine(raw, profile) && !isCastGroupMarkerLine(raw)) {
+          if (inCast && isLikelyCastEntryLine(raw, profile) && !isCastGroupMarkerLine(raw)) {
             flushText();
             const collected = collectCastEntryLines(lines, index, profile, {});
             index = collected.endIndex;
@@ -762,7 +733,7 @@
         // 코드는 cast_list 라고 적혀 있는데 실제 블록은 front_matter 로 나왔다.
         const frontZone = frontClass.zone === 'cast_list'
           ? 'cast_list'
-          : (Number(item.pageNo || 0) <= FRONT_MATTER_MAX_PAGE_NO ? 'front_matter' : 'manual_text');
+          : (textIsFront ? 'front_matter' : 'manual_text');
         pushBlock(item, reviewText, Object.assign({}, frontClass, {
           zone: frontZone,
           assignableToCut: false,
