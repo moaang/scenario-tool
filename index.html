@@ -24745,8 +24745,8 @@
         <div class="row"><button id="saveEntityModalBtn" class="primary">${esc(t('saveButton'))}</button></div>
       `;
       $('saveEntityModalBtn').addEventListener('click', () => {
-        // 이름이 곧 열쇠다 — 비우면 콘티 패키지의 conteMergeNamed 가 빈 문자열을 그 소재의 키로 보고
-        // 통째로 버린다(지운 적 없는데 사라진다). 작품 추가와 같은 자리에서 막는다.
+        // 이름이 곧 열쇠다 — 비우면 콘티 패키지의 conteMergeNamed 가 그 소재를 통째로 버린다
+        // (지운 적 없는데 사라진다). 작품 추가와 같은 자리에서 막는다.
         const nextName = norm($('modalEntityName').value);
         if (!nextName) { alert(t('entityNameRequired')); return; }
         entity.name = nextName;
