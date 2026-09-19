@@ -4662,7 +4662,6 @@
     }
 
 
-    // Scene/action splitting belongs to import normalization. Stored blocks are already interpreted.
     // 블록×엔티티 전수 대조다 — 상한도 조기 탈출도 없다. blockMatchesEntity 가 첫 일치에서 빠지지만
     // 마지막 칸(entityNameAppearsInText)은 블록 본문 전체를 훑는다.
     // 근거 불명 — 상한을 안 둔 이유도, 이 자리의 비용을 잴 기록도 못 찾았다
@@ -20169,7 +20168,7 @@
         <div class="row"><button id="saveEntityModalBtn" class="primary">${esc(t('saveButton'))}</button></div>
       `;
       $('saveEntityModalBtn').addEventListener('click', () => {
-        // 이름이 곧 열쇠다 — 비우면 콘티 패키지의 conteMergeNamed 가 norm 결과가 비었다고 그 소재를
+        // 이름이 곧 열쇠다 — 비우면 콘티 패키지의 conteMergeNamed 가 빈 문자열을 그 소재의 키로 보고
         // 통째로 버린다(지운 적 없는데 사라진다). 작품 추가와 같은 자리에서 막는다.
         const nextName = norm($('modalEntityName').value);
         if (!nextName) { alert(t('entityNameRequired')); return; }
